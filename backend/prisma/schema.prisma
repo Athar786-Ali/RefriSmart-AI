@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  role      Role     @default(CUSTOMER)
+  products  Product[]
+  bookings  ServiceBooking[]
+  createdAt DateTime @default(now())
+}
+
+model Product {
+  id             String   @id @default(uuid())
+  title          String
+  description    String
+  price          Float
+  isUsed         Boolean  @default(false)
+  conditionScore Int?     // 1-10 for refurbished items
+  images         String[]
+  status         ProductStatus @default(AVAILABLE)
+  sellerId       String
+  seller         User     @relation(fields: [sellerId], references: [id])
+}
+
+model ServiceBooking {
+  id           String   @id @default(uuid())
+  customerId   String
+  customer     User     @relation(fields: [customerId], references: [id])
+  appliance    String   // AC, Fridge, Washing Machine, etc.
+  issue        String   
+  aiDiagnosis  String?  // Gemini AI analysis will go here
+  status       Status   @default(PENDING)
+  scheduledAt  DateTime
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+  TECHNICIAN
+}
+
+enum ProductStatus {
+  AVAILABLE
+  SOLD
+}
+
+enum Status {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
