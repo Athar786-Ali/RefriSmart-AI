@@ -6,7 +6,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Prisma 7 Driver Adapter Setup
 const pool = new pg.Pool({ 
@@ -39,7 +39,11 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Server initialization
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Server is permanently running on http://localhost:${PORT}`);
+app.listen(PORT, () => {
+  console.log(`✅ Server is ACTIVE on http://localhost:${PORT}`);
 });
+
+
+process.stdin.resume();
+
 
