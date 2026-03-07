@@ -17,13 +17,16 @@ export default function Login() {
     const data = await res.json();
 
     if (res.ok) {
-      // Token aur User info save karna
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      alert("Welcome back, " + data.user.name);
-      router.push("/"); // Home par bhej do
-      router.refresh();
-    } else {
+  localStorage.setItem("token", data.token);
+  localStorage.setItem("user", JSON.stringify(data.user));
+  
+  // 🔥 Ye line add karo: Ye signal bhejega ki storage change hua hai
+  window.dispatchEvent(new Event("storage")); 
+
+  alert("Welcome back, " + data.user.name);
+  router.push("/");
+  router.refresh();
+}else {
       alert(data.error || "Login failed!");
     }
   };
