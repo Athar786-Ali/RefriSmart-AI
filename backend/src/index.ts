@@ -12,6 +12,7 @@ const PORT = process.env.PORT || 5001;
 const pool = new pg.Pool({ 
   connectionString: process.env.DATABASE_URL 
 });
+
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
@@ -33,6 +34,18 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
+// Route: All Products get karne ke liye
+app.get('/api/products', async (req, res) => {
+  try {
+    const products = await prisma.product.findMany(); // Database se data lana
+    res.json(products); // Browser ko data bhejna
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Database se products lane mein dikkat hui." });
+  }
+});
+
+
 // Error handling to prevent sudden exits
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
@@ -42,7 +55,6 @@ process.on('unhandledRejection', (reason, promise) => {
 app.listen(PORT, () => {
   console.log(`✅ Server is ACTIVE on http://localhost:${PORT}`);
 });
-
 
 process.stdin.resume();
 
