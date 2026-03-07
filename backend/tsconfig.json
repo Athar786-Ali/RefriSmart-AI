@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "types": ["node"],
     "target": "ESNext",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
@@ -8,7 +7,10 @@
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": false
   },
   "include": ["src/**/*"]
 }

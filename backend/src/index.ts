@@ -65,42 +65,4 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-// Gemini Setup
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-// --- AI DIAGNOSIS ROUTE ---
-app.post('/api/ai/diagnose', async (req, res) => {
-  try {
-    const { appliance, issue } = req.body;
-
-    if (!appliance || !issue) {
-      return res.status(400).json({ error: "Appliance aur issue batana zaroori hai bhai!" });
-    }
-
-    // AI ko context dena ki wo ek expert technician hai
-    const prompt = `You are an expert home appliance technician for 'Golden Refrigeration'. 
-    A customer is reporting an issue with their ${appliance}.
-    Issue: ${issue}.
-    Provide a professional diagnosis in simple Hinglish (Hindi + English). 
-    Tell them:
-    1. Possible cause of the problem.
-    2. Can they fix it themselves? (Safety first!)
-    3. Estimated repair difficulty.
-    Keep it concise and helpful.`;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-
-    res.json({ diagnosis: text });
-  } catch (error) {
-    console.error("AI Error:", error);
-    res.status(500).json({ error: "AI ne jawab dene se mana kar diya, baad mein try karo." });
-  }
-});
-
-
 app.listen(PORT, () => console.log(`✅ Server on http://localhost:${PORT}`));
