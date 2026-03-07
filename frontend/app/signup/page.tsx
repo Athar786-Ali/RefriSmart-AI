@@ -14,12 +14,15 @@ export default function Signup() {
       body: JSON.stringify(formData),
     });
 
-    if (res.ok) {
-      alert("Signup Success! Now Login.");
-      router.push("/login");
-    } else {
-      alert("Signup failed!");
-    }
+    // frontend/app/signup/page.tsx (Inside handleSubmit)
+const data = await res.json();
+if (res.ok) {
+  alert("Signup Success! Now Login.");
+  router.push("/login");
+} else {
+  alert(data.error || "Signup failed!");
+}
+
   };
 
   return (

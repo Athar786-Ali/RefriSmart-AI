@@ -32,16 +32,11 @@ export default function Navbar() {
           </>
         ) : (
           <>
-            // frontend/app/components/Navbar.tsx mein change kar:
-<Link href="/login" className="px-5 py-2 rounded-full font-medium text-slate-700 hover:bg-slate-100 transition">
-  Login
-</Link>
-<Link href="/signup" className="px-5 py-2 bg-blue-600 text-white rounded-full font-medium hover:bg-blue-700 shadow-lg shadow-blue-200 transition">
-  Get Started
-</Link>
+            <Link href="/login" className="px-5 py-2 rounded-full font-medium text-slate-700 hover:bg-slate-100 transition">Login</Link>
+            <Link href="/signup" className="px-5 py-2 bg-blue-600 text-white rounded-full font-medium hover:bg-blue-700 shadow-lg shadow-blue-200 transition">Get Started</Link>
           </>
         )}
       </div>
     </nav>
   );
-}   
+}

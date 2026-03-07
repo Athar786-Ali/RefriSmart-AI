@@ -1,22 +1,25 @@
+// backend/prisma/schema.prisma
+
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../src/generated/client"
 }
 
 datasource db {
   provider = "postgresql"
+  // URL yahan se hata di gayi hai, ye prisma.config.ts mein jayegi
 }
 
 model User {
   id        String   @id @default(uuid())
   name      String
   email     String   @unique
-  password  String?  // Ye line add karo password store karne ke liye
+  password  String?  
   role      Role     @default(CUSTOMER)
   products  Product[]
   bookings  ServiceBooking[]
   createdAt DateTime @default(now())
 }
-
 
 model Product {
   id             String   @id @default(uuid())
@@ -24,7 +27,7 @@ model Product {
   description    String
   price          Float
   isUsed         Boolean  @default(false)
-  conditionScore Int?     // 1-10 for refurbished items
+  conditionScore Int?
   images         String[]
   status         ProductStatus @default(AVAILABLE)
   sellerId       String
@@ -35,27 +38,28 @@ model ServiceBooking {
   id           String   @id @default(uuid())
   customerId   String
   customer     User     @relation(fields: [customerId], references: [id])
-  appliance    String   // AC, Fridge, Washing Machine, etc.
-  issue        String   
-  aiDiagnosis  String?  // Gemini AI analysis will go here
+  appliance    String
+  issue        String
+  aiDiagnosis  String?
   status       Status   @default(PENDING)
   scheduledAt  DateTime
 }
 
-enum Role {
-  ADMIN
-  CUSTOMER
-  TECHNICIAN
+// Semicolons (;) hata kar space ya new line use karo
+enum Role { 
+  ADMIN 
+  CUSTOMER 
+  TECHNICIAN 
 }
 
-enum ProductStatus {
-  AVAILABLE
-  SOLD
+enum ProductStatus { 
+  AVAILABLE 
+  SOLD 
 }
 
-enum Status {
-  PENDING
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
+enum Status { 
+  PENDING 
+  IN_PROGRESS 
+  COMPLETED 
+  CANCELLED 
 }
