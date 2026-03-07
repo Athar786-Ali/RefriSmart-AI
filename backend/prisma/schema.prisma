@@ -10,11 +10,13 @@ model User {
   id        String   @id @default(uuid())
   name      String
   email     String   @unique
+  password  String?  // Ye line add karo password store karne ke liye
   role      Role     @default(CUSTOMER)
   products  Product[]
   bookings  ServiceBooking[]
   createdAt DateTime @default(now())
 }
+
 
 model Product {
   id             String   @id @default(uuid())

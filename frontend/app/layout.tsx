@@ -1,15 +1,22 @@
 // frontend/app/layout.tsx
-import "./globals.css"; // Ye line top par honi chahiye
+import "./globals.css";
 import Navbar from "./components/Navbar";
-// ... baaki imports same
+import Footer from "./components/Footer";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
-      <body className="antialiased bg-zinc-50">
+      <body className="antialiased bg-[#f8fafc]">
         <Navbar />
-        {children}
-        {/* Footer yahan add kar sakte hain */}
+        {/* Is children ke andar aapka page.tsx ka content aayega */}
+        <div className="min-h-[80vh]">
+          {children}
+        </div>
+        <Footer />
       </body>
     </html>
   );
