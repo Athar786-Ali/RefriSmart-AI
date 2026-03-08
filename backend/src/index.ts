@@ -1,91 +1,4 @@
 
-// import 'dotenv/config'; 
-// import express from 'express';
-// import cors from 'cors';
-// import bcrypt from 'bcryptjs';
-// import jwt from 'jsonwebtoken';
-// import pg from 'pg';
-// import { PrismaPg } from '@prisma/adapter-pg';
-// import { GoogleGenAI } from "@google/genai"; // Latest SDK
-
-// // Prisma v7 Import Fix: Extension lagana zaroori hai
-//  import { PrismaClient } from '@prisma/client';
-
-// const app = express();
-// const PORT = 5001;
-// const JWT_SECRET = process.env.JWT_SECRET || 'golden_ref_secret_123';
-
-// // 1. Prisma Connection Setup
-// const pool = new pg.Pool({ 
-//   connectionString: process.env.DATABASE_URL,
-//   ssl: { rejectUnauthorized: false } 
-// });
-// const adapter = new PrismaPg(pool);
-// const prisma = new PrismaClient({ adapter });
-
-// // 2. Latest Gemini AI Client
-// // Documentation ke hisaab se apiKey property pass karni hai
-// const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-// app.use(cors());
-// app.use(express.json());
-
-// // --- 3. AI DIAGNOSIS ROUTE (Gemini 3.1 Flash-Lite) ---
-// app.post('/api/ai/diagnose', async (req, res) => {
-//   try {
-//     const { appliance, issue } = req.body;
-//     if (!appliance || !issue) return res.status(400).json({ error: "Details missing!" });
-
-//     // Documentation wala naya syntax
-//     const response = await ai.models.generateContent({
-//       model: "gemini-3.1-flash-lite-preview", 
-//       contents: `You are an expert technician for 'Golden Refrigeration'. Diagnose: ${appliance}, Issue: ${issue}. Hinglish reply under 80 words.`,
-//     });
-
-//     res.json({ diagnosis: response.text }); 
-//   } catch (error: any) {
-//     console.error("AI Error:", error.message);
-//     res.status(500).json({ error: "AI diagnosis fail ho gaya.", details: error.message });
-//   }
-// });
-
-// // --- AUTH & PRODUCTS ROUTES ---
-// app.post('/api/auth/register', async (req, res) => {
-//   try {
-//     const { name, email, password } = req.body;
-//     const hashedPassword = await bcrypt.hash(password, 10);
-//     await prisma.user.create({ data: { name, email, password: hashedPassword } });
-//     res.status(201).json({ message: "User created!" });
-//   } catch (error) { res.status(500).json({ error: "Signup failed" }); }
-// });
-
-// app.post('/api/auth/login', async (req, res) => {
-//   try {
-//     const { email, password } = req.body;
-//     const user = await prisma.user.findUnique({ where: { email } });
-//     if (!user || !user.password || !(await bcrypt.compare(password, user.password))) {
-//       return res.status(401).json({ error: "Invalid Credentials" });
-//     }
-//     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-//     res.json({ token, user: { id: user.id, name: user.name } });
-//   } catch (error) { res.status(500).json({ error: "Login failed" }); }
-// });
-
-// app.get('/api/products', async (req, res) => {
-//   try {
-//     const products = await prisma.product.findMany();
-//     res.json(products);
-//   } catch (error) { res.status(500).json({ error: "Database error" }); }
-// });
-
-// // 4. Start Server
-// app.listen(PORT, '0.0.0.0', () => {
-//   console.log(`✅ Server is ACTIVE on http://localhost:${PORT}`);
-// });
-
-
-
-
 
 import 'dotenv/config'; 
 import express from 'express';
@@ -325,4 +238,5 @@ app.post('/api/admin/add-product', async (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server is ACTIVE on http://localhost:${PORT}`);
 });
+
 
