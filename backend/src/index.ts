@@ -176,17 +176,32 @@ app.post('/api/auth/register', async (req, res) => {
   } catch (error) { res.status(500).json({ error: "Registration failed" }); }
 });
 
+
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await prisma.user.findUnique({ where: { email } });
+
     if (!user || !user.password || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: "Invalid Credentials" });
     }
+
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, name: user.name } });
+
+    // 🔥 Fix: 'role' aur 'email' dono bhej rahe hain taaki security check fail na ho
+    res.json({ 
+      token, 
+      user: { 
+        id: user.id, 
+        name: user.name, 
+        email: user.email, 
+        role: user.role 
+      } 
+    });
   } catch (error) { res.status(500).json({ error: "Login failed" }); }
 });
+
+
 
 app.get('/api/products', async (req, res) => {
   try {

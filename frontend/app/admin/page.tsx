@@ -9,17 +9,23 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [selectedLog, setSelectedLog] = useState<any>(null);
 
+
+
   useEffect(() => {
-    const checkAdmin = () => {
-      const savedUser = localStorage.getItem("user");
-      const user = savedUser ? JSON.parse(savedUser) : null;
-      //Security: Sirf Admin email allow karega
-      if (!user || user.email !== "ma24mcf1r27@student.nitw.ac.in") {
-        router.push("/");
-        return false;
-      }
-      return true;
-    };
+  const checkAdmin = () => {
+    const savedUser = localStorage.getItem("user");
+    const user = savedUser ? JSON.parse(savedUser) : null;
+    
+    // 🔥 Fix 1: Email exact match karo
+    // 🔥 Fix 2: Role: ADMIN bhi check karo (Double Security)
+    if (!user || (user.email !== "mdatharsbr@gmail.com" && user.role !== "ADMIN")) {
+      console.log("Access Denied for:", user?.email);
+      router.push("/");
+      return false;
+    }
+    return true;
+  };
+
 
     const fetchAdminData = async () => {
       if (!checkAdmin()) return;
