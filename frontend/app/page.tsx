@@ -10,9 +10,7 @@ export default function Home() {
       try {
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products`);
         const data = await res.json();
-        if (Array.isArray(data)) {
-          setProducts(data);
-        }
+        if (Array.isArray(data)) setProducts(data);
       } catch (err) {
         console.error("Fetch error:", err);
       } finally {
@@ -22,11 +20,11 @@ export default function Home() {
     fetchData();
   }, []);
 
-  if (loading) return <div className="text-center py-20 font-bold">Loading Golden Ref... ❄️</div>;
+  if (loading) return <div className="text-center py-20 font-bold text-slate-900">Loading Golden Ref... ❄️</div>;
 
   return (
     <main className="min-h-screen bg-[#f8fafc]">
-      <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-blue-50/50 to-transparent -z-10" />
+      <div className="absolute top-0 left-0 w-full h-500px bg-gradient-to from-blue-50/50 to-transparent -z-10" />
       
       <div className="max-w-7xl mx-auto px-6 py-16">
         <section className="text-center mb-24">
@@ -41,16 +39,21 @@ export default function Home() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
           {products.length > 0 ? products.map((p) => {
-            // 🔥 WhatsApp Link Logic
-            const phoneNumber = "919060877595"; // Bhaiya ka number
+            const phoneNumber = "919060877595"; 
             const message = `Hello Golden Refrigeration, mujhe aapka product "${p.title}" kharidna hai jo ₹${p.price.toLocaleString()} ka hai. Kya ye available hai?`;
             const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 
             return (
               <div key={p.id} className="group bg-white border border-slate-100 rounded-[2.5rem] p-4 shadow-xl shadow-slate-200/40 hover:shadow-blue-200/50 transition-all duration-500">
-                <div className="aspect-video bg-slate-50 rounded-[2rem] flex items-center justify-center text-4xl group-hover:scale-105 transition-transform">
-                  ❄️
+                {/* 🔥 Updated Image Section */}
+                <div className="aspect-video bg-slate-50 rounded-2rem overflow-hidden flex items-center justify-center text-4xl group-hover:scale-105 transition-transform duration-500">
+                  {p.images && p.images[0] ? (
+                    <img src={p.images[0]} alt={p.title} className="w-full h-full object-cover" />
+                  ) : (
+                    "❄️"
+                  )}
                 </div>
+                
                 <div className="p-6">
                   <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full">Available</span>
                   <h2 className="text-2xl font-bold text-slate-900 mt-3">{p.title}</h2>
@@ -58,7 +61,6 @@ export default function Home() {
                   <div className="mt-8 flex justify-between items-center">
                     <span className="text-3xl font-black text-slate-950">₹{p.price.toLocaleString()}</span>
                     
-                    {/* 🔥 New WhatsApp Button */}
                     <a 
                       href={whatsappUrl} 
                       target="_blank" 

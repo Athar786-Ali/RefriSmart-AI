@@ -291,6 +291,35 @@ app.post('/api/admin/add-product', async (req, res) => {
   }
 });
 
+// --- 1. Product Delete Route (Add this in backend/src/index.ts) ---
+app.delete('/api/admin/delete-product/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.product.delete({ where: { id } });
+    res.json({ message: "Bhai, product nikaal diya gaya! 🗑️" });
+  } catch (error) {
+    res.status(500).json({ error: "Delete nahi ho paya bhai." });
+  }
+});
+
+// --- 2. Update existing Add Product Route to include Image ---
+app.post('/api/admin/add-product', async (req, res) => {
+  try {
+    const { title, description, price, sellerId, imageUrl } = req.body; // 🔥 Added imageUrl
+    const newProduct = await prisma.product.create({
+      data: {
+        title,
+        description,
+        price: parseFloat(price),
+        sellerId,
+        images: imageUrl ? [imageUrl] : [], // Prisma schema mein images array hai
+        status: 'AVAILABLE'
+      }
+    });
+    res.status(201).json({ message: "Product listed!", product: newProduct });
+  } catch (error) { res.status(500).json({ error: "Save fail!" }); }
+});
+
 
 
 app.listen(PORT, '0.0.0.0', () => {
