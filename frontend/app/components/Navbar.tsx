@@ -29,17 +29,35 @@ export default function Navbar() {
       <Link href="/" className="text-2xl font-black tracking-tighter text-blue-600">
         GOLDEN <span className="text-slate-800">REF.</span>
       </Link>
+
+      {/* Center Links (Optional: Desktop only) */}
+      <div className="hidden md:flex gap-8 font-medium text-slate-600">
+        <Link href="/ai-diagnosis" className="hover:text-blue-600 transition">AI Diagnosis</Link>
+        <Link href="#" className="hover:text-blue-600 transition">Buy Products</Link>
+      </div>
+
       <div className="flex gap-4 items-center">
         {!loading && (
           user ? (
             <>
-              <span className="text-slate-900 font-bold text-sm bg-slate-100 px-4 py-2 rounded-full">Bhai, {user.name} 👋</span>
-              <button onClick={handleLogout} className="text-red-500 font-bold text-sm cursor-pointer">Logout</button>
+              <span className="text-slate-900 font-bold text-sm bg-slate-100 px-4 py-2 rounded-full">
+                Bhai, {user.name} 👋
+              </span>
+              <button onClick={handleLogout} className="text-red-500 font-bold text-sm cursor-pointer">
+                Logout
+              </button>
             </>
           ) : (
             <>
-              <Link href="/login" className="px-5 py-2 rounded-full font-medium text-slate-700 hover:bg-zinc-100">Login</Link>
-              <Link href="/signup" className="px-5 py-2 bg-blue-600 text-white rounded-full font-medium hover:bg-blue-700 shadow-lg shadow-blue-200 transition">Get Started</Link>
+              <Link href="/ai-diagnosis" className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 transition md:hidden">
+                AI Diagnosis
+              </Link>
+              <Link href="/login" className="px-5 py-2 rounded-full font-medium text-slate-700 hover:bg-zinc-100 transition">
+                Login
+              </Link>
+              <Link href="/signup" className="px-5 py-2 bg-blue-600 text-white rounded-full font-medium hover:bg-blue-700 shadow-lg shadow-blue-200 transition">
+                Get Started
+              </Link>
             </>
           )
         )}
