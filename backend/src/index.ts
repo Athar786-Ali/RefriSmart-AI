@@ -195,6 +195,61 @@ app.get('/api/products', async (req, res) => {
   } catch (error) { res.status(500).json({ error: "Database error" }); }
 });
 
+// --- ADMIN ROUTES ---
+
+// 1. Saare customers ki AI history aur details laane ke liye
+app.get('/api/admin/all-diagnoses', async (req, res) => {
+  try {
+    const allData = await prisma.serviceBooking.findMany({
+      include: {
+        customer: {
+          select: { name: true, email: true } // Sirf zaroori details le rahe hain
+        }
+      },
+      orderBy: { scheduledAt: 'desc' }
+    });
+    res.json(allData);
+  } catch (error) {
+    console.error("Admin Fetch Error:", error);
+    res.status(500).json({ error: "Data laane mein dikkat hui bhai!" });
+  }
+});
+
+// 2. Dashboard ke upar summary cards ke liye data (Optional but cool)
+app.get('/api/admin/stats', async (req, res) => {
+  try {
+    const totalBookings = await prisma.serviceBooking.count();
+    const totalUsers = await prisma.user.count();
+    const totalProducts = await prisma.product.count();
+    res.json({ totalBookings, totalUsers, totalProducts });
+  } catch (error) {
+    res.status(500).json({ error: "Stats fetch failed" });
+  }
+});
+
+// backend/src/index.ts mein existing stats route ko upgrade karo
+app.get('/api/admin/stats', async (req, res) => {
+  try {
+    const [totalBookings, totalUsers, totalProducts, latestUsers] = await Promise.all([
+      prisma.serviceBooking.count(),
+      prisma.user.count(),
+      prisma.product.count(),
+      prisma.user.findMany({ take: 5, orderBy: { createdAt: 'desc' } })
+    ]);
+
+    // Appliance wise breakdown (Luxury analytic logic)
+    const applianceStats = await prisma.serviceBooking.groupBy({
+      by: ['appliance'],
+      _count: { _all: true }
+    });
+
+    res.json({ totalBookings, totalUsers, totalProducts, latestUsers, applianceStats });
+  } catch (error) {
+    res.status(500).json({ error: "Stats fetch failed" });
+  }
+});
+
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server is ACTIVE on http://localhost:${PORT}`);
 });
