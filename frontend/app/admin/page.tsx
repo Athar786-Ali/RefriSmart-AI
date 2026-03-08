@@ -9,23 +9,22 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [selectedLog, setSelectedLog] = useState<any>(null);
 
-
+  // 🔥 Naya State: Product add karne ke liye
+  const [newProd, setNewProd] = useState({ title: "", description: "", price: "" });
 
   useEffect(() => {
-  const checkAdmin = () => {
-    const savedUser = localStorage.getItem("user");
-    const user = savedUser ? JSON.parse(savedUser) : null;
-    
-    // 🔥 Fix 1: Email exact match karo
-    // 🔥 Fix 2: Role: ADMIN bhi check karo (Double Security)
-    if (!user || (user.email !== "mdatharsbr@gmail.com" && user.role !== "ADMIN")) {
-      console.log("Access Denied for:", user?.email);
-      router.push("/");
-      return false;
-    }
-    return true;
-  };
-
+    const checkAdmin = () => {
+      const savedUser = localStorage.getItem("user");
+      const user = savedUser ? JSON.parse(savedUser) : null;
+      
+      // Fix: Email exact match aur Role check logic
+      if (!user || (user.email !== "mdatharsbr@gmail.com" && user.role !== "ADMIN")) {
+        console.log("Access Denied for:", user?.email);
+        router.push("/");
+        return false;
+      }
+      return true;
+    };
 
     const fetchAdminData = async () => {
       if (!checkAdmin()) return;
@@ -42,13 +41,36 @@ export default function AdminDashboard() {
     fetchAdminData();
   }, [router]);
 
+  // 🔥 Product Add karne ka function
+  const handleAddProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const savedUser = localStorage.getItem("user");
+    const user = savedUser ? JSON.parse(savedUser) : null;
+
+    if (!user) return alert("Login required!");
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/add-product`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newProd, sellerId: user.id }),
+      });
+
+      if (res.ok) {
+        alert("Bhai, Product list ho gaya! 🎉");
+        setNewProd({ title: "", description: "", price: "" });
+        window.location.reload();
+      }
+    } catch (err) { console.error(err); }
+  };
+
   if (loading) return <div className="h-screen flex items-center justify-center bg-[#f8fafc]">Loading Admin...</div>;
 
   return (
     <main className="min-h-screen bg-[#f8fafc] p-4 md:p-10">
       <div className="max-w-7xl mx-auto">
         
-        {/* --- Metrics Section (Chamkte huye Cards) --- */}
+        {/* --- Metrics Section --- */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Leads</p>
@@ -69,7 +91,6 @@ export default function AdminDashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* --- Table Section --- */}
           <div className="lg:col-span-2 bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -111,8 +132,38 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* --- Side Panels (Right Side) --- */}
           <div className="space-y-8">
+            {/* 🔥 QUICK-ADD FORM */}
+            <div className="bg-white p-8 rounded-[3rem] shadow-2xl border border-slate-100">
+              <h3 className="text-xl font-black text-slate-900 mb-6 italic">Quick Add Product</h3>
+              <form onSubmit={handleAddProduct} className="space-y-4">
+                <input 
+                  type="text" placeholder="Product Title (e.g. LG Fridge)"
+                  className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none text-sm font-bold"
+                  value={newProd.title}
+                  onChange={(e) => setNewProd({...newProd, title: e.target.value})}
+                  required
+                />
+                <textarea 
+                  placeholder="Short Description..."
+                  className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none text-sm min-h-[100px]"
+                  value={newProd.description}
+                  onChange={(e) => setNewProd({...newProd, description: e.target.value})}
+                />
+                <input 
+                  type="number" placeholder="Price (₹)"
+                  className="w-full p-4 rounded-2xl bg-slate-50 border-none outline-none text-sm font-bold text-blue-600"
+                  value={newProd.price}
+                  onChange={(e) => setNewProd({...newProd, price: e.target.value})}
+                  required
+                />
+                <button className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl hover:bg-slate-950 transition-all shadow-lg shadow-blue-100 cursor-pointer">
+                  LIST PRODUCT 📦
+                </button>
+              </form>
+            </div>
+
+            {/* Appliance Pulse */}
             <div className="bg-slate-950 text-white p-10 rounded-[3rem] shadow-2xl">
                <h3 className="text-xl font-black mb-6 italic">Appliance Pulse</h3>
                <div className="space-y-6">
@@ -133,7 +184,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* 🔥 Modal Logic */}
+      {/* VIEW LOGS Modal */}
       {selectedLog && (
         <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-6">
           <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl p-8 relative">
@@ -158,5 +209,3 @@ export default function AdminDashboard() {
     </main>
   );
 }
-
-

@@ -257,12 +257,40 @@ app.get('/api/admin/stats', async (req, res) => {
       by: ['appliance'],
       _count: { _all: true }
     });
-
+   
     res.json({ totalBookings, totalUsers, totalProducts, latestUsers, applianceStats });
   } catch (error) {
     res.status(500).json({ error: "Stats fetch failed" });
   }
 });
+
+
+// --- ADMIN: Add New Product Route ---
+app.post('/api/admin/add-product', async (req, res) => {
+  try {
+    const { title, description, price, sellerId } = req.body;
+
+    if (!title || !price || !sellerId) {
+      return res.status(400).json({ error: "Bhai, details adhuri hain!" });
+    }
+
+    const newProduct = await prisma.product.create({
+      data: {
+        title,
+        description,
+        price: parseFloat(price),
+        sellerId, // Admin ki ID yahan jayegi
+        status: 'AVAILABLE'
+      }
+    });
+
+    res.status(201).json({ message: "Product added successfully!", product: newProduct });
+  } catch (error: any) {
+    console.error("Product Add Error:", error);
+    res.status(500).json({ error: "Product save nahi ho paya." });
+  }
+});
+
 
 
 app.listen(PORT, '0.0.0.0', () => {
