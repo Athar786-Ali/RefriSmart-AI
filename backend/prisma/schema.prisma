@@ -22,17 +22,19 @@ model User {
 }
 
 model Product {
-  id             String   @id @default(uuid())
+  id             String        @id @default(uuid())
   title          String
   description    String
   price          Float
-  isUsed         Boolean  @default(false)
+  isUsed         Boolean       @default(false)
   conditionScore Int?
   images         String[]
   status         ProductStatus @default(AVAILABLE)
   sellerId       String
-  seller         User     @relation(fields: [sellerId], references: [id])
+  seller         User          @relation(fields: [sellerId], references: [id])
+  createdAt      DateTime      @default(now()) // 🔥 Add this line
 }
+
 
 model ServiceBooking {
   id           String   @id @default(uuid())

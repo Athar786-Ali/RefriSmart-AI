@@ -1,5 +1,3 @@
-
-
 import 'dotenv/config'; 
 import express from 'express';
 import cors from 'cors';
@@ -8,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { GoogleGenAI } from "@google/genai";
+import { v2 as cloudinary } from 'cloudinary'; // 🔥 Added Cloudinary
 
 import { PrismaClient } from '@prisma/client';
 
@@ -26,6 +25,13 @@ const prisma = new PrismaClient({ adapter });
 // 2. Gemini 3.1 Setup
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+// 🔥 Cloudinary Config
+cloudinary.config({ 
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME, 
+  api_key: process.env.CLOUDINARY_API_KEY, 
+  api_secret: process.env.CLOUDINARY_API_SECRET 
+});
+
 app.use(cors());
 app.use(express.json());
 
@@ -35,7 +41,6 @@ app.post('/api/ai/diagnose', async (req, res) => {
     const { appliance, issue, userId } = req.body;
     if (!appliance || !issue) return res.status(400).json({ error: "Details dalo bhai!" });
 
-    // Latest Gemini 3 syntax
     const response = await ai.models.generateContent({
       model: "gemini-3.1-flash-lite-preview", 
       contents: `You are an expert technician for 'Golden Refrigeration'. 
@@ -45,7 +50,6 @@ app.post('/api/ai/diagnose', async (req, res) => {
 
     const aiDiagnosis = response.text;
 
-    // 🔥 Save to DB if user is logged in
     if (userId) {
       await prisma.serviceBooking.create({
         data: {
@@ -89,7 +93,6 @@ app.post('/api/auth/register', async (req, res) => {
   } catch (error) { res.status(500).json({ error: "Registration failed" }); }
 });
 
-
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -101,7 +104,6 @@ app.post('/api/auth/login', async (req, res) => {
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
-    // 🔥 Fix: 'role' aur 'email' dono bhej rahe hain taaki security check fail na ho
     res.json({ 
       token, 
       user: { 
@@ -114,37 +116,36 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (error) { res.status(500).json({ error: "Login failed" }); }
 });
 
-
-
+// 🔥 Fixed Get Products Route
 app.get('/api/products', async (req, res) => {
   try {
-    const products = await prisma.product.findMany();
+    // Note: Schema update ke baad hi 'createdAt' chalega
+    const products = await prisma.product.findMany({
+      orderBy: { id: 'desc' } // Temporary fallback if schema not updated
+    });
     res.json(products);
   } catch (error) { res.status(500).json({ error: "Database error" }); }
 });
 
 // --- ADMIN ROUTES ---
 
-// 1. Saare customers ki AI history aur details laane ke liye
+// 1. Saare customers ki AI history
 app.get('/api/admin/all-diagnoses', async (req, res) => {
   try {
     const allData = await prisma.serviceBooking.findMany({
       include: {
-        customer: {
-          select: { name: true, email: true } // Sirf zaroori details le rahe hain
-        }
+        customer: { select: { name: true, email: true } }
       },
       orderBy: { scheduledAt: 'desc' }
     });
     res.json(allData);
   } catch (error) {
-    console.error("Admin Fetch Error:", error);
     res.status(500).json({ error: "Data laane mein dikkat hui bhai!" });
   }
 });
 
-// 2. Dashboard ke upar summary cards ke liye data (Optional but cool)
-app.get('/api/admin/stats', async (req, res) => {
+// 2. Dashboard Stats (Original Version)
+app.get('/api/admin/stats-basic', async (req, res) => {
   try {
     const totalBookings = await prisma.serviceBooking.count();
     const totalUsers = await prisma.user.count();
@@ -155,56 +156,51 @@ app.get('/api/admin/stats', async (req, res) => {
   }
 });
 
-// backend/src/index.ts mein existing stats route ko upgrade karo
+// 3. Upgrade Stats with Latest Products & Appliance Pulse
 app.get('/api/admin/stats', async (req, res) => {
   try {
-    const [totalBookings, totalUsers, totalProducts, latestUsers] = await Promise.all([
+    const [totalBookings, totalUsers, totalProducts, latestUsers, latestProducts] = await Promise.all([
       prisma.serviceBooking.count(),
       prisma.user.count(),
       prisma.product.count(),
-      prisma.user.findMany({ take: 5, orderBy: { createdAt: 'desc' } })
+      prisma.user.findMany({ take: 5, orderBy: { createdAt: 'desc' } }),
+      prisma.product.findMany({ take: 10, orderBy: { id: 'desc' } }) // 🔥 For Delete List
     ]);
 
-    // Appliance wise breakdown (Luxury analytic logic)
     const applianceStats = await prisma.serviceBooking.groupBy({
       by: ['appliance'],
       _count: { _all: true }
     });
    
-    res.json({ totalBookings, totalUsers, totalProducts, latestUsers, applianceStats });
+    res.json({ totalBookings, totalUsers, totalProducts, latestUsers, latestProducts, applianceStats });
   } catch (error) {
     res.status(500).json({ error: "Stats fetch failed" });
   }
 });
 
+// --- ADMIN: Inventory Actions ---
 
-// --- ADMIN: Add New Product Route ---
 app.post('/api/admin/add-product', async (req, res) => {
   try {
-    const { title, description, price, sellerId } = req.body;
-
-    if (!title || !price || !sellerId) {
-      return res.status(400).json({ error: "Bhai, details adhuri hain!" });
-    }
+    const { title, description, price, sellerId, imageUrl } = req.body;
+    if (!title || !price || !sellerId) return res.status(400).json({ error: "Missing details!" });
 
     const newProduct = await prisma.product.create({
       data: {
         title,
         description,
         price: parseFloat(price),
-        sellerId, // Admin ki ID yahan jayegi
+        sellerId, 
+        images: imageUrl ? [imageUrl] : [],
         status: 'AVAILABLE'
       }
     });
-
-    res.status(201).json({ message: "Product added successfully!", product: newProduct });
+    res.status(201).json({ message: "Product added!", product: newProduct });
   } catch (error: any) {
-    console.error("Product Add Error:", error);
-    res.status(500).json({ error: "Product save nahi ho paya." });
+    res.status(500).json({ error: "Product save fail" });
   }
 });
 
-// --- 1. Product Delete Route (Add this in backend/src/index.ts) ---
 app.delete('/api/admin/delete-product/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -215,28 +211,6 @@ app.delete('/api/admin/delete-product/:id', async (req, res) => {
   }
 });
 
-// --- 2. Update existing Add Product Route to include Image ---
-app.post('/api/admin/add-product', async (req, res) => {
-  try {
-    const { title, description, price, sellerId, imageUrl } = req.body; // 🔥 Added imageUrl
-    const newProduct = await prisma.product.create({
-      data: {
-        title,
-        description,
-        price: parseFloat(price),
-        sellerId,
-        images: imageUrl ? [imageUrl] : [], // Prisma schema mein images array hai
-        status: 'AVAILABLE'
-      }
-    });
-    res.status(201).json({ message: "Product listed!", product: newProduct });
-  } catch (error) { res.status(500).json({ error: "Save fail!" }); }
-});
-
-
-
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server is ACTIVE on http://localhost:${PORT}`);
 });
-
-
