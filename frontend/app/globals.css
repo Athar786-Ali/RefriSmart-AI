@@ -1,13 +1,39 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc; /* Premium Light Gray */
-  --foreground: #0f172a; /* Deep Slate for text */
+  --background: #eef3ff;
+  --foreground: #0f172a;
+  --surface: #ffffff;
+  --surface-muted: #f8fafc;
+  --primary: #0f4cde;
+  --primary-strong: #0a3aa9;
+  --accent: #06b6d4;
+  --border: #dbe4f0;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "Satoshi", "Manrope", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  transition: all 160ms ease;
+}
+
+.grid-pattern {
+  background-image:
+    linear-gradient(to right, rgba(15, 76, 222, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 76, 222, 0.08) 1px, transparent 1px);
+  background-size: 28px 28px;
 }

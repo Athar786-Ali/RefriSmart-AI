@@ -1,21 +1,31 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import BrandLogo from "./BrandLogo";
+
+type UserSession = {
+  name: string;
+} | null;
 
 export default function Navbar() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<UserSession>(null);
 
   const checkUser = () => {
     const savedUser = localStorage.getItem("user");
-    setUser(savedUser ? JSON.parse(savedUser) : null);
-    setLoading(false);
+    try {
+      setUser(savedUser ? JSON.parse(savedUser) : null);
+    } catch {
+      setUser(null);
+    }
   };
 
   useEffect(() => {
-    checkUser();
+    const timer = window.setTimeout(checkUser, 0);
     window.addEventListener("storage", checkUser);
-    return () => window.removeEventListener("storage", checkUser);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("storage", checkUser);
+    };
   }, []);
 
   const handleLogout = () => {
@@ -25,42 +35,44 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="flex justify-between items-center px-10 py-5 bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm min-h-[80px]">
-      <Link href="/" className="text-2xl font-black tracking-tighter text-blue-600">
-        GOLDEN <span className="text-slate-800">REF.</span>
-      </Link>
+    <nav className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
+        <Link href="/" className="whitespace-nowrap">
+          <BrandLogo compact />
+        </Link>
 
-      {/* Center Links (Optional: Desktop only) */}
-      <div className="hidden md:flex gap-8 font-medium text-slate-600">
-        <Link href="/ai-diagnosis" className="hover:text-blue-600 transition">AI Diagnosis</Link>
-        <Link href="#" className="hover:text-blue-600 transition">Buy Products</Link>
-      </div>
+        <div className="hidden md:flex items-center gap-7 text-sm font-semibold text-slate-600">
+          <Link href="/" className="hover:text-blue-700">Products</Link>
+          <Link href="/ai-diagnosis" className="hover:text-blue-700">AI Diagnosis</Link>
+        </div>
 
-      <div className="flex gap-4 items-center">
-        {!loading && (
-          user ? (
+        <div className="flex items-center gap-2 sm:gap-3">
+          {user ? (
             <>
-              <span className="text-slate-900 font-bold text-sm bg-slate-100 px-4 py-2 rounded-full">
-                Bhai, {user.name} 👋
+              <span className="hidden sm:inline-flex rounded-full bg-slate-100 border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                Welcome, {user.name}
               </span>
-              <button onClick={handleLogout} className="text-red-500 font-bold text-sm cursor-pointer">
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 rounded-full text-sm font-semibold text-red-600 hover:bg-red-50"
+              >
                 Logout
               </button>
             </>
           ) : (
             <>
-              <Link href="/ai-diagnosis" className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 transition md:hidden">
-                AI Diagnosis
+              <Link href="/ai-diagnosis" className="md:hidden px-3 py-2 rounded-full text-sm font-medium text-slate-700 hover:bg-slate-100">
+                AI
               </Link>
-              <Link href="/login" className="px-5 py-2 rounded-full font-medium text-slate-700 hover:bg-zinc-100 transition">
+              <Link href="/login" className="px-4 py-2 rounded-full text-sm font-semibold text-slate-700 hover:bg-slate-100">
                 Login
               </Link>
-              <Link href="/signup" className="px-5 py-2 bg-blue-600 text-white rounded-full font-medium hover:bg-blue-700 shadow-lg shadow-blue-200 transition">
+              <Link href="/signup" className="px-4 py-2 rounded-full text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-200">
                 Get Started
               </Link>
             </>
-          )
-        )}
+          )}
+        </div>
       </div>
     </nav>
   );

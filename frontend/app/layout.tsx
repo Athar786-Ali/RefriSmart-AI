@@ -10,9 +10,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="antialiased bg-[#f8fafc]">
+      <body className="antialiased bg-[radial-gradient(circle_at_top_left,#dbeafe_0%,#eef3ff_45%,#f8fbff_100%)]">
         <Navbar />
-        {/* Is children ke andar aapka page.tsx ka content aayega */}
         <div className="min-h-[80vh]">
           {children}
         </div>

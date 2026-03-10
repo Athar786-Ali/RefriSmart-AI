@@ -1,34 +1,52 @@
- 
-
 "use client";
-import { useState, useEffect } from "react";
+
+import { useEffect, useState } from "react";
+import { useCallback } from "react";
+
+type HistoryItem = {
+  id: string;
+  appliance: string;
+  issue: string;
+  aiDiagnosis: string;
+  scheduledAt: string;
+};
 
 export default function AIDiagnosis() {
   const [appliance, setAppliance] = useState("Refrigerator");
   const [issue, setIssue] = useState("");
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState<any[]>([]); 
-
-  // 🔥 Naya State: Sirf poora diagnosis dikhane ke liye (Puraana code disturb nahi hoga)
-  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [selectedItem, setSelectedItem] = useState<HistoryItem | null>(null);
 
   const getUserId = () => {
     const savedUser = localStorage.getItem("user");
-    return savedUser ? JSON.parse(savedUser).id : null;
+    if (!savedUser) return null;
+    try {
+      return JSON.parse(savedUser).id as string;
+    } catch {
+      return null;
+    }
   };
 
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     const userId = getUserId();
     if (!userId) return;
+
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/history/${userId}`);
       const data = await res.json();
-      setHistory(data);
-    } catch (err) { console.error("History error", err); }
-  };
+      if (Array.isArray(data)) {
+        setHistory(data);
+      }
+    } catch (err) {
+      console.error("History error", err);
+    }
+  }, []);
 
-  useEffect(() => { fetchHistory(); }, []);
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
   const handleDiagnose = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,135 +63,131 @@ export default function AIDiagnosis() {
       const data = await res.json();
       if (res.ok) {
         setResult(data.diagnosis);
-        fetchHistory(); 
+        fetchHistory();
       } else {
-        setResult("Bhai, AI thoda busy hai. Baad mein try kar!");
+        setResult(data?.error || data?.details || "AI service is currently unavailable. Please try again.");
       }
-    } catch (err) {
-      setResult("Connection error! Backend check kar bhai.");
+    } catch {
+      setResult("Connection error. Please check the backend service.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-[#f8fafc] py-20 px-6">
-      <div className="max-w-3xl mx-auto">
-        <h1 className="text-5xl font-black text-slate-950 mb-4 tracking-tighter italic">
-          AI <span className="text-blue-600">Expert.</span>
-        </h1>
-        <p className="text-slate-500 mb-12 font-medium">Appliance ki problem batao, hum solution denge.</p>
+    <main className="min-h-screen px-4 sm:px-6 py-10 bg-[radial-gradient(circle_at_top_right,#0f172a_0%,#020617_45%,#000814_100%)]">
+      <div className="max-w-6xl mx-auto grid lg:grid-cols-[1.2fr_0.8fr] gap-8">
+        <section className="rounded-[2rem] border border-cyan-400/20 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-cyan-900/20 p-6 sm:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">AI Assistant</p>
+          <h1 className="text-3xl sm:text-4xl font-black text-white mt-3">Smart appliance diagnosis</h1>
+          <p className="text-slate-300 mt-3 mb-8">
+            Describe the problem and get technician-style guidance in seconds.
+          </p>
 
-        <form onSubmit={handleDiagnose} className="bg-white p-8 rounded-[2.5rem] shadow-2xl shadow-slate-200 border border-slate-100 space-y-6">
-          <div>
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-2">Select Appliance</label>
-            <select 
-              value={appliance}
-              onChange={(e) => setAppliance(e.target.value)}
-              className="w-full p-4 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 font-bold"
+          <form onSubmit={handleDiagnose} className="space-y-5">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wide mb-2">
+                Appliance type
+              </label>
+              <select
+                value={appliance}
+                onChange={(e) => setAppliance(e.target.value)}
+                className="w-full p-4 rounded-xl bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-cyan-400 outline-none text-slate-100 font-medium"
+              >
+                <option>Refrigerator</option>
+                <option>Air Conditioner</option>
+                <option>Washing Machine</option>
+                <option>Microwave Oven</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wide mb-2">
+                Issue details
+              </label>
+              <textarea
+                placeholder="Example: Cooling is inconsistent and there is noise near the compressor."
+                className="w-full p-4 rounded-xl bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-cyan-400 outline-none min-h-[150px] text-slate-100 placeholder:text-slate-400"
+                value={issue}
+                onChange={(e) => setIssue(e.target.value)}
+                required
+              />
+            </div>
+
+            <button
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-900 font-semibold py-4 rounded-xl hover:from-cyan-300 hover:to-blue-400 disabled:opacity-60 shadow-lg shadow-cyan-900/30"
             >
-              <option>Refrigerator</option>
-              <option>Air Conditioner</option>
-              <option>Washing Machine</option>
-              <option>Microwave Oven</option>
-            </select>
-          </div>
+              {loading ? "Analyzing..." : "Get AI Diagnosis"}
+            </button>
+          </form>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-2">Describe the Issue</label>
-            <textarea 
-              placeholder="Bhai, kya dikkat aa rahi hai? (e.g. Fridge cooling nahi kar raha)"
-              className="w-full p-6 rounded-[2rem] bg-slate-50 border-none focus:ring-2 focus:ring-blue-500 outline-none min-h-[150px] text-slate-900"
-              onChange={(e) => setIssue(e.target.value)}
-              required
-            />
-          </div>
+          {result && (
+            <div className="mt-8 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 p-6 text-white shadow-2xl shadow-cyan-900/30 border border-cyan-300/40">
+              <h3 className="text-lg font-bold mb-2">Golden Refrigeration Technician Advice</h3>
+              <p className="leading-relaxed text-cyan-50 whitespace-pre-wrap">{result}</p>
+            </div>
+          )}
+        </section>
 
-          <button 
-            disabled={loading}
-            className="w-full bg-slate-950 text-white font-black py-5 rounded-2xl hover:bg-blue-600 transition-all shadow-xl shadow-slate-300 disabled:opacity-50"
-          >
-            {loading ? "Analysing Problem... ❄️" : "Get AI Diagnosis"}
-          </button>
-        </form>
+        <section className="rounded-[2rem] border border-cyan-400/20 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-cyan-900/20 p-6 sm:p-8 h-fit">
+          <h2 className="text-2xl font-black text-white">Consultation history</h2>
+          <p className="text-slate-300 text-sm mt-2 mb-6">Review your previous diagnosis records.</p>
 
-        {result && (
-          <div className="mt-12 p-8 bg-blue-600 text-white rounded-[2.5rem] shadow-2xl shadow-blue-200 animate-in fade-in slide-in-from-bottom-5 duration-500">
-            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <span>👨‍🔧</span> Golden Ref. Expert Advice:
-            </h3>
-            <p className="leading-relaxed font-medium text-blue-50 whitespace-pre-wrap">{result}</p>
-          </div>
-        )}
-
-        {/* 🔥 Updated History Section: Ab card clickable hai */}
-        <div className="mt-20">
-          <h2 className="text-2xl font-black text-slate-900 mb-6">Past Consultations</h2>
           {history.length > 0 ? (
-            <div className="space-y-4">
+            <div className="space-y-3 max-h-[28rem] overflow-auto pr-1">
               {history.map((item) => (
-                <div 
-                  key={item.id} 
-                  onClick={() => setSelectedItem(item)} // Card click pe naya state set hoga
-                  className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group"
+                <button
+                  key={item.id}
+                  onClick={() => setSelectedItem(item)}
+                  className="w-full text-left bg-slate-800 border border-slate-700 p-4 rounded-xl hover:border-cyan-400/60 hover:bg-cyan-500/10"
                 >
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-blue-600 font-bold text-sm uppercase">{item.appliance}</span>
+                  <div className="flex justify-between items-start gap-2 mb-1">
+                    <span className="text-cyan-300 font-semibold text-sm uppercase">{item.appliance}</span>
                     <span className="text-slate-400 text-xs">{new Date(item.scheduledAt).toLocaleDateString()}</span>
                   </div>
-                  <p className="text-slate-900 font-bold text-sm mb-2 italic">"{item.issue}"</p>
-                  <p className="text-slate-500 text-xs line-clamp-2">{item.aiDiagnosis}</p>
-                  <p className="mt-3 text-[10px] font-bold text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">Click to read full diagnosis →</p>
-                </div>
+                  <p className="text-slate-100 text-sm font-medium line-clamp-2">{item.issue}</p>
+                </button>
               ))}
             </div>
           ) : (
-            <p className="text-slate-400 text-sm italic">No history found. First diagnosis karke dekho bhai!</p>
+            <p className="text-slate-400 text-sm">No consultations yet. Submit your first diagnosis request.</p>
           )}
-        </div>
-
-        {/* 🔥 Modal Popup Logic (Jab selectedItem null nahi hoga tab dikhega) */}
-        {selectedItem && (
-          <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
-            <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl p-8 relative animate-in zoom-in duration-300">
-              <button 
-                onClick={() => setSelectedItem(null)}
-                className="absolute top-6 right-6 text-slate-400 hover:text-slate-950 text-2xl font-bold"
-              >✕</button>
-              
-              <div className="mb-6">
-                <span className="text-blue-600 font-black text-xs uppercase tracking-widest">{selectedItem.appliance}</span>
-                <h3 className="text-2xl font-black text-slate-950 mt-1">Diagnosis Details</h3>
-              </div>
-
-              <div className="space-y-6">
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Your Issue:</p>
-                  <p className="text-slate-800 font-medium italic">"{selectedItem.issue}"</p>
-                </div>
-
-                <div>
-                  <p className="text-[10px] font-bold text-blue-600 uppercase mb-2 flex items-center gap-1">
-                    <span>👨‍🔧</span> Expert Solution:
-                  </p>
-                  <p className="text-slate-600 leading-relaxed font-medium whitespace-pre-wrap">
-                    {selectedItem.aiDiagnosis}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-                <button 
-                  onClick={() => setSelectedItem(null)}
-                  className="bg-blue-600 text-white px-10 py-3 rounded-2xl font-bold hover:bg-slate-950 transition-colors"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        </section>
       </div>
+
+      {selectedItem && (
+        <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-xl rounded-3xl shadow-2xl p-6 sm:p-8 relative">
+            <button
+              onClick={() => setSelectedItem(null)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-white text-2xl font-semibold"
+            >
+              ×
+            </button>
+
+            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300 font-semibold">{selectedItem.appliance}</p>
+            <h3 className="text-2xl font-black text-white mt-2">Diagnosis details</h3>
+
+            <div className="mt-6 rounded-xl bg-slate-800 border border-slate-700 p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-300 font-semibold mb-1">Issue</p>
+              <p className="text-slate-100">{selectedItem.issue}</p>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-xs uppercase tracking-wide text-cyan-300 font-semibold mb-2">Recommendation</p>
+              <p className="text-slate-300 whitespace-pre-wrap leading-relaxed">{selectedItem.aiDiagnosis}</p>
+            </div>
+
+            <button
+              onClick={() => setSelectedItem(null)}
+              className="mt-7 w-full bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-900 py-3 rounded-xl font-semibold hover:from-cyan-300 hover:to-blue-400"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -14,44 +14,65 @@ export default function Signup() {
       body: JSON.stringify(formData),
     });
 
-    // frontend/app/signup/page.tsx (Inside handleSubmit)
-const data = await res.json();
-if (res.ok) {
-  alert("Signup Success! Now Login.");
-  router.push("/login");
-} else {
-  alert(data.error || "Signup failed!");
-}
-
+    const data = await res.json();
+    if (res.ok) {
+      alert("Signup successful. You can now login.");
+      router.push("/login");
+    } else {
+      alert(data.error || "Signup failed!");
+    }
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-6">
-      <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl shadow-slate-200 border border-slate-100 max-w-md w-full">
-        <h1 className="text-3xl font-black text-slate-900 mb-2">Create Account</h1>
-        <p className="text-slate-500 mb-8 text-sm font-medium">Join Golden Refrigeration today.</p>
-        
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <input 
-            type="text" placeholder="Full Name" 
-            className="w-full p-4 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-            onChange={(e) => setFormData({...formData, name: e.target.value})}
-          />
-          <input 
-            type="email" placeholder="Email Address" 
-            className="w-full p-4 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-            onChange={(e) => setFormData({...formData, email: e.target.value})}
-          />
-          <input 
-            type="password" placeholder="Password" 
-            className="w-full p-4 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-            onChange={(e) => setFormData({...formData, password: e.target.value})}
-          />
-          <button className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all">
-            Sign Up
-          </button>
-        </form>
-      </div>
-    </div>
+    <main className="min-h-[80vh] px-4 sm:px-6 py-12 grid place-items-center">
+      <section className="w-full max-w-5xl rounded-[2rem] border border-slate-200 bg-white shadow-xl overflow-hidden grid lg:grid-cols-2">
+        <div className="hidden lg:flex flex-col justify-between p-10 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 text-white">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] font-semibold text-slate-300">Create Account</p>
+            <h1 className="text-4xl font-black mt-4 leading-tight">Build your professional service profile.</h1>
+          </div>
+          <p className="text-slate-300 text-sm leading-relaxed">
+            Register once to access diagnostics, service history, and inventory workflows.
+          </p>
+        </div>
+
+        <div className="p-8 sm:p-10">
+          <h2 className="text-3xl font-black text-slate-900">Create your account</h2>
+          <p className="text-slate-600 mt-2 mb-8 text-sm">
+            Join Golden Refrigeration in under a minute.
+          </p>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <input
+              type="text"
+              placeholder="Full name"
+              className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              required
+            />
+            <input
+              type="email"
+              placeholder="Email address"
+              className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              required
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              required
+            />
+            <button className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl hover:bg-blue-700 shadow-md shadow-blue-200">
+              Create Account
+            </button>
+          </form>
+        </div>
+      </section>
+    </main>
   );
 }
