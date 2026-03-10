@@ -16,6 +16,14 @@ export const ProductStatus = {
     AVAILABLE: 'AVAILABLE',
     SOLD: 'SOLD'
 };
+export const ProductType = {
+    NEW: 'NEW',
+    REFURBISHED: 'REFURBISHED'
+};
+export const WarrantyType = {
+    BRAND: 'BRAND',
+    SHOP: 'SHOP'
+};
 export const Status = {
     PENDING: 'PENDING',
     IN_PROGRESS: 'IN_PROGRESS',

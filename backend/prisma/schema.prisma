@@ -27,7 +27,12 @@ model Product {
   description    String
   price          Float
   isUsed         Boolean       @default(false)
+  productType    ProductType   @default(NEW)
   conditionScore Int?
+  ageMonths      Int?
+  warrantyType   WarrantyType?
+  warrantyExpiry DateTime?
+  warrantyCertificateUrl String?
   images         String[]
   status         ProductStatus @default(AVAILABLE)
   sellerId       String
@@ -57,6 +62,16 @@ enum Role {
 enum ProductStatus { 
   AVAILABLE 
   SOLD 
+}
+
+enum ProductType {
+  NEW
+  REFURBISHED
+}
+
+enum WarrantyType {
+  BRAND
+  SHOP
 }
 
 enum Status { 

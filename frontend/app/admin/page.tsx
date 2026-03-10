@@ -19,6 +19,11 @@ type ProductItem = {
   title: string;
   price: number;
   images?: string[] | string | null;
+  isUsed?: boolean;
+  productType?: "NEW" | "REFURBISHED";
+  conditionScore?: number | null;
+  warrantyType?: "BRAND" | "SHOP" | null;
+  warrantyExpiry?: string | null;
 };
 
 type ApplianceStat = {
@@ -41,13 +46,42 @@ type NewProduct = {
   description: string;
   price: string;
   imageUrl: string;
+  productType: "NEW" | "REFURBISHED";
+  conditionScore: string;
+  ageMonths: string;
+  warrantyType: "" | "BRAND" | "SHOP";
+  warrantyExpiry: string;
+  warrantyCertificateUrl: string;
 };
+
+const DEFAULT_CERTIFICATE_LINE = "Tested & Certified: Cooling system and compressor working properly.";
+const YEAR_OPTIONS = Array.from({ length: 16 }, (_, i) => String(i));
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i));
+const WARRANTY_DURATION_OPTIONS = ["3", "6", "9", "12", "18", "24", "36"];
 
 const initialProduct: NewProduct = {
   title: "",
   description: "",
   price: "",
   imageUrl: "",
+  productType: "NEW",
+  conditionScore: "",
+  ageMonths: "",
+  warrantyType: "BRAND",
+  warrantyExpiry: "",
+  warrantyCertificateUrl: "",
+};
+
+const toWarrantyExpiryFromDuration = (durationValue: string, durationUnit: "MONTHS" | "YEARS") => {
+  const value = Number(durationValue || 0);
+  if (!Number.isFinite(value) || value <= 0) return "";
+  const date = new Date();
+  if (durationUnit === "YEARS") {
+    date.setFullYear(date.getFullYear() + value);
+  } else {
+    date.setMonth(date.getMonth() + value);
+  }
+  return date.toISOString().slice(0, 10);
 };
 
 const getImageUrl = (images: unknown): string | null => {
@@ -80,8 +114,49 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedLog, setSelectedLog] = useState<DiagnosisItem | null>(null);
   const [newProd, setNewProd] = useState<NewProduct>(initialProduct);
+  const [ageYears, setAgeYears] = useState("0");
+  const [ageMonthsPart, setAgeMonthsPart] = useState("0");
+  const [warrantyDuration, setWarrantyDuration] = useState("12");
+  const [warrantyDurationUnit, setWarrantyDurationUnit] = useState<"MONTHS" | "YEARS">("MONTHS");
   const [isUploading, setIsUploading] = useState(false);
+  const [isSuggestingPrice, setIsSuggestingPrice] = useState(false);
   const router = useRouter();
+
+  const resetProductForm = () => {
+    setNewProd(initialProduct);
+    setAgeYears("0");
+    setAgeMonthsPart("0");
+    setWarrantyDuration("12");
+    setWarrantyDurationUnit("MONTHS");
+  };
+
+  const handleProductTypeChange = (nextType: "NEW" | "REFURBISHED") => {
+    if (nextType === "REFURBISHED") {
+      setNewProd((prev) => ({
+        ...prev,
+        productType: "REFURBISHED",
+        conditionScore: prev.conditionScore || "9",
+        warrantyType: "SHOP",
+        warrantyCertificateUrl: prev.warrantyCertificateUrl || DEFAULT_CERTIFICATE_LINE,
+      }));
+      setWarrantyDuration("6");
+      setWarrantyDurationUnit("MONTHS");
+      return;
+    }
+
+    setNewProd((prev) => ({
+      ...prev,
+      productType: "NEW",
+      conditionScore: "",
+      ageMonths: "",
+      warrantyType: "BRAND",
+      warrantyCertificateUrl: "",
+    }));
+    setAgeYears("0");
+    setAgeMonthsPart("0");
+    setWarrantyDuration("12");
+    setWarrantyDurationUnit("MONTHS");
+  };
 
   useEffect(() => {
     const checkAdmin = () => {
@@ -103,10 +178,26 @@ export default function AdminDashboard() {
           fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/stats`),
         ]);
         const dataPayload = await dataRes.json();
-        const statsPayload = await statsRes.json();
+        let statsPayload = await statsRes.json().catch(() => null);
+
+        // Fallback to basic stats if enriched stats endpoint is unavailable.
+        if (!statsRes.ok || !statsPayload || statsPayload?.error) {
+          const basicRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/stats-basic`);
+          statsPayload = await basicRes.json().catch(() => null);
+        }
+
+        const normalizedStats =
+          statsPayload && typeof statsPayload === "object"
+            ? {
+                ...statsPayload,
+                totalBookings: Number((statsPayload as DashboardStats).totalBookings || 0),
+                totalUsers: Number((statsPayload as DashboardStats).totalUsers || 0),
+                totalProducts: Number((statsPayload as DashboardStats).totalProducts || 0),
+              }
+            : null;
 
         setData(Array.isArray(dataPayload) ? dataPayload : []);
-        setStats(statsPayload && typeof statsPayload === "object" ? statsPayload : null);
+        setStats(normalizedStats);
       } catch (err) {
         console.error(err);
       } finally {
@@ -201,24 +292,76 @@ export default function AdminDashboard() {
     const user = savedUser ? JSON.parse(savedUser) : null;
     if (!user) return alert("Login required.");
     if (!newProd.imageUrl) return alert("Please upload a product image first.");
+    const isRefurbished = newProd.productType === "REFURBISHED";
+    const totalAgeMonths = (Number(ageYears || 0) * 12) + Number(ageMonthsPart || 0);
+    const computedWarrantyExpiry = toWarrantyExpiryFromDuration(warrantyDuration, warrantyDurationUnit);
+    const payload: NewProduct = {
+      ...newProd,
+      conditionScore: isRefurbished ? (newProd.conditionScore || "9") : "",
+      ageMonths: isRefurbished ? String(totalAgeMonths) : "",
+      warrantyType: isRefurbished ? (newProd.warrantyType || "SHOP") : newProd.warrantyType,
+      warrantyExpiry: computedWarrantyExpiry,
+      warrantyCertificateUrl:
+        isRefurbished
+          ? (newProd.warrantyCertificateUrl.trim() || DEFAULT_CERTIFICATE_LINE)
+          : newProd.warrantyCertificateUrl,
+    };
 
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/add-product`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...newProd, sellerId: user.id }),
+        body: JSON.stringify({ ...payload, sellerId: user.id }),
       });
 
       if (res.ok) {
         alert("Product listed successfully.");
-        setNewProd(initialProduct);
+        resetProductForm();
         window.location.reload();
       } else {
         const payload = await res.json();
-        alert(payload?.error || "Unable to add product.");
+        alert(`${payload?.error || "Unable to add product."}${payload?.details ? `\n${payload.details}` : ""}`);
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleSuggestPrice = async () => {
+    if (!newProd.price) return alert("Please enter base price first.");
+    const totalAgeMonths = (Number(ageYears || 0) * 12) + Number(ageMonthsPart || 0);
+    setIsSuggestingPrice(true);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/suggest-price`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          basePrice: newProd.price,
+          conditionScore: newProd.conditionScore,
+          ageMonths: newProd.productType === "REFURBISHED" ? totalAgeMonths : 0,
+          productType: newProd.productType,
+          title: newProd.title,
+          description: newProd.description,
+        }),
+      });
+      const payload = await res.json();
+      if (!res.ok) {
+        alert(payload?.error || "Unable to suggest price.");
+      } else {
+        setNewProd((prev) => ({ ...prev, price: String(payload.suggestedPrice || prev.price) }));
+        alert(
+          `AI Suggested Range: ₹${payload.recommendedMin} - ₹${payload.recommendedMax}\n` +
+          `Quick Sale Price: ₹${payload.quickSalePrice}\n` +
+          `Premium Listing Price: ₹${payload.premiumListingPrice}\n` +
+          `Confidence: ${Math.round((payload.confidenceScore || 0) * 100)}%\n` +
+          `Comparables Used: ${payload.marketSampleSize || 0}`
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Price suggestion failed.");
+    } finally {
+      setIsSuggestingPrice(false);
     }
   };
 
@@ -315,7 +458,9 @@ export default function AdminDashboard() {
                 </span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {safeLatestProducts.map((p) => (
+                  {safeLatestProducts.map((p) => {
+                  const normalizedType = p.productType || (p.isUsed ? "REFURBISHED" : "NEW");
+                  return (
                   <article
                     key={p.id}
                     className="flex justify-between items-center p-4 bg-gradient-to-r from-slate-900 to-slate-800 rounded-xl border border-slate-700 hover:border-red-400/60 hover:shadow-lg hover:shadow-red-900/20 transition-all group"
@@ -331,6 +476,16 @@ export default function AdminDashboard() {
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-100 text-sm truncate">{p.title}</p>
                         <p className="text-xs text-cyan-300 font-semibold">₹{p.price.toLocaleString()}</p>
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full border border-cyan-400/30 text-cyan-300 bg-cyan-400/10">
+                            {normalizedType}
+                          </span>
+                          {typeof p.conditionScore === "number" && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full border border-emerald-400/30 text-emerald-300 bg-emerald-400/10">
+                              {p.conditionScore}/10
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <button
@@ -343,7 +498,8 @@ export default function AdminDashboard() {
                       Delete
                     </button>
                   </article>
-                ))}
+                );
+                })}
               </div>
             </div>
           </div>
@@ -351,29 +507,181 @@ export default function AdminDashboard() {
           <div className="space-y-8">
             <div className="bg-slate-900/60 p-6 rounded-2xl border border-slate-700 shadow-xl">
               <h3 className="text-xl font-black text-white mb-5">Add product</h3>
+              <p className="text-xs text-slate-300 mb-4 leading-relaxed">
+                Required: Product title, Price, Product image.
+                <br />
+                Optional: Condition, Age, Warranty fields.
+              </p>
               <form onSubmit={handleAddProduct} className="space-y-4">
                 <input
                   type="text"
-                  placeholder="Product title"
+                  placeholder="Product title (Required)"
                   className="w-full p-3.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
                   value={newProd.title}
                   onChange={(e) => setNewProd({ ...newProd, title: e.target.value })}
                   required
                 />
                 <textarea
-                  placeholder="Description"
+                  placeholder="Short description (Optional)"
                   className="w-full p-3.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 min-h-[90px]"
                   value={newProd.description}
                   onChange={(e) => setNewProd({ ...newProd, description: e.target.value })}
                 />
                 <input
                   type="number"
-                  placeholder="Price (₹)"
+                  placeholder="Price in ₹ (Required)"
                   className="w-full p-3.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
                   value={newProd.price}
                   onChange={(e) => setNewProd({ ...newProd, price: e.target.value })}
                   required
                 />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <select
+                    value={newProd.productType}
+                    onChange={(e) => handleProductTypeChange(e.target.value as "NEW" | "REFURBISHED")}
+                    className="w-full p-3.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
+                  >
+                    <option value="NEW">NEW</option>
+                    <option value="REFURBISHED">REFURBISHED</option>
+                  </select>
+                </div>
+
+                {newProd.productType === "NEW" ? (
+                  <section className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 space-y-3">
+                    <h4 className="text-sm font-bold text-cyan-200 uppercase tracking-wide">New Product Section</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-slate-300 block mb-1.5">Warranty Type</label>
+                        <select
+                          value={newProd.warrantyType}
+                          onChange={(e) => setNewProd({ ...newProd, warrantyType: e.target.value as "" | "BRAND" | "SHOP" })}
+                          className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
+                        >
+                          <option value="">Select warranty type</option>
+                          <option value="BRAND">Brand Warranty</option>
+                          <option value="SHOP">Shop Warranty</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-300 block mb-1.5">Warranty Duration</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={warrantyDuration}
+                            onChange={(e) => setWarrantyDuration(e.target.value)}
+                            className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
+                          >
+                            {WARRANTY_DURATION_OPTIONS.map((value) => (
+                              <option key={value} value={value}>{value}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={warrantyDurationUnit}
+                            onChange={(e) => setWarrantyDurationUnit(e.target.value as "MONTHS" | "YEARS")}
+                            className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
+                          >
+                            <option value="MONTHS">Months</option>
+                            <option value="YEARS">Years</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                ) : (
+                  <section className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-4 space-y-3">
+                    <h4 className="text-sm font-bold text-cyan-200 uppercase tracking-wide">Refurbished / Second-Hand Section</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-slate-300 block mb-1.5">Condition Score</label>
+                        <select
+                          value={newProd.conditionScore}
+                          onChange={(e) => setNewProd({ ...newProd, conditionScore: e.target.value })}
+                          className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
+                        >
+                          {Array.from({ length: 10 }, (_, idx) => {
+                            const value = String(idx + 1);
+                            return <option key={value} value={value}>{value}/10</option>;
+                          })}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-300 block mb-1.5">Age of Product</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={ageYears}
+                            onChange={(e) => setAgeYears(e.target.value)}
+                            className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
+                          >
+                            {YEAR_OPTIONS.map((value) => (
+                              <option key={value} value={value}>{value} year</option>
+                            ))}
+                          </select>
+                          <select
+                            value={ageMonthsPart}
+                            onChange={(e) => setAgeMonthsPart(e.target.value)}
+                            className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
+                          >
+                            {MONTH_OPTIONS.map((value) => (
+                              <option key={value} value={value}>{value} month</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-slate-300 block mb-1.5">Warranty Type</label>
+                        <select
+                          value={newProd.warrantyType}
+                          onChange={(e) => setNewProd({ ...newProd, warrantyType: e.target.value as "" | "BRAND" | "SHOP" })}
+                          className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
+                        >
+                          <option value="SHOP">Shop Warranty</option>
+                          <option value="BRAND">Brand Warranty</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-300 block mb-1.5">Warranty Duration</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={warrantyDuration}
+                            onChange={(e) => setWarrantyDuration(e.target.value)}
+                            className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
+                          >
+                            {WARRANTY_DURATION_OPTIONS.map((value) => (
+                              <option key={value} value={value}>{value}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={warrantyDurationUnit}
+                            onChange={(e) => setWarrantyDurationUnit(e.target.value as "MONTHS" | "YEARS")}
+                            className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
+                          >
+                            <option value="MONTHS">Months</option>
+                            <option value="YEARS">Years</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-300 block mb-1.5">Warranty Certificate Note</label>
+                      <input
+                        type="text"
+                        placeholder={DEFAULT_CERTIFICATE_LINE}
+                        className="w-full p-3.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
+                        value={newProd.warrantyCertificateUrl}
+                        onChange={(e) => setNewProd({ ...newProd, warrantyCertificateUrl: e.target.value })}
+                      />
+                    </div>
+                  </section>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSuggestPrice}
+                  disabled={isSuggestingPrice}
+                  className="w-full bg-slate-800 text-cyan-300 border border-cyan-400/40 font-semibold py-3 rounded-xl hover:bg-cyan-500/20 disabled:opacity-60"
+                >
+                  {isSuggestingPrice ? "Suggesting..." : "AI Suggest Price (Bhaiya Final Decision)"}
+                </button>
 
                 <div className="border border-dashed border-slate-600 p-4 rounded-xl bg-gradient-to-br from-slate-900 to-slate-800">
                   <p className="text-xs uppercase tracking-wide font-semibold text-slate-300 mb-2">Product image</p>

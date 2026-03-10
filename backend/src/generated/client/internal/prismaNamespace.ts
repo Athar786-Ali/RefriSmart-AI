@@ -685,7 +685,12 @@ export const ProductScalarFieldEnum = {
   description: 'description',
   price: 'price',
   isUsed: 'isUsed',
+  productType: 'productType',
   conditionScore: 'conditionScore',
+  ageMonths: 'ageMonths',
+  warrantyType: 'warrantyType',
+  warrantyExpiry: 'warrantyExpiry',
+  warrantyCertificateUrl: 'warrantyCertificateUrl',
   images: 'images',
   status: 'status',
   sellerId: 'sellerId',
@@ -802,6 +807,20 @@ export type BooleanFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel,
 
 
 /**
+ * Reference to a field of type 'ProductType'
+ */
+export type EnumProductTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ProductType'>
+    
+
+
+/**
+ * Reference to a field of type 'ProductType[]'
+ */
+export type ListEnumProductTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ProductType[]'>
+    
+
+
+/**
  * Reference to a field of type 'Int'
  */
 export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int'>
@@ -812,6 +831,20 @@ export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'In
  * Reference to a field of type 'Int[]'
  */
 export type ListIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int[]'>
+    
+
+
+/**
+ * Reference to a field of type 'WarrantyType'
+ */
+export type EnumWarrantyTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'WarrantyType'>
+    
+
+
+/**
+ * Reference to a field of type 'WarrantyType[]'
+ */
+export type ListEnumWarrantyTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'WarrantyType[]'>
     
 
 

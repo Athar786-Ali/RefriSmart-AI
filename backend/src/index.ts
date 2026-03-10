@@ -7,8 +7,9 @@ import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { GoogleGenAI } from "@google/genai";
 import { v2 as cloudinary } from 'cloudinary';
+import { randomUUID } from 'node:crypto';
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './generated/client/client.js';
 
 const app = express();
 const PORT = 5001;
@@ -44,6 +45,128 @@ const demoProducts = [
   { title: "Panasonic Refrigerator 420L", description: "Frost-free refrigerator with humidity control drawers.", price: 40990, images: ["https://images.unsplash.com/photo-1556910096-6f5e72db6803?q=80&w=1200&auto=format&fit=crop"] },
   { title: "Onida Top Load Washing Machine 6.5kg", description: "Affordable washer with quick wash and gentle spin cycle.", price: 13990, images: ["https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?q=80&w=1200&auto=format&fit=crop"] },
 ];
+
+const cloudinaryOptimizeUrl = (rawUrl: string) => {
+  if (!rawUrl || !rawUrl.includes("res.cloudinary.com") || !rawUrl.includes("/upload/")) {
+    return rawUrl;
+  }
+  return rawUrl.replace("/upload/", "/upload/f_webp,q_auto:good,c_limit,w_1400/");
+};
+
+const parseFlexibleDate = (value: unknown): Date | null => {
+  if (!value || typeof value !== "string") return null;
+
+  const direct = new Date(value);
+  if (!Number.isNaN(direct.getTime())) return direct;
+
+  const ddmmyyyy = value.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (!ddmmyyyy) return null;
+  const day = Number(ddmmyyyy[1]);
+  const month = Number(ddmmyyyy[2]) - 1;
+  const year = Number(ddmmyyyy[3]);
+  const normalized = new Date(year, month, day);
+  return Number.isNaN(normalized.getTime()) ? null : normalized;
+};
+
+const parseOptionalNumber = (value: unknown) => {
+  if (value === undefined || value === null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isNaN(parsed) ? Number.NaN : parsed;
+};
+
+const tokenize = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 2 && !["the", "and", "with", "for", "from"].includes(token));
+
+const median = (values: number[]) => {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) return (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted[mid];
+};
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const PRODUCT_META_MARKER = "__GR_META__";
+
+type ProductCompatMeta = {
+  productType?: "NEW" | "REFURBISHED";
+  conditionScore?: number | null;
+  ageMonths?: number | null;
+  warrantyType?: "BRAND" | "SHOP" | null;
+  warrantyExpiry?: string | null;
+  warrantyCertificateUrl?: string | null;
+};
+
+const encodeCompatMetaInDescription = (description: string, meta: ProductCompatMeta) => {
+  const clean = description.includes(PRODUCT_META_MARKER)
+    ? description.split(PRODUCT_META_MARKER)[0].trim()
+    : description.trim();
+  return `${clean}\n\n${PRODUCT_META_MARKER}${JSON.stringify(meta)}`;
+};
+
+const decodeCompatMetaFromDescription = (description: string | null | undefined) => {
+  if (!description || typeof description !== "string") {
+    return { cleanDescription: "", meta: {} as ProductCompatMeta };
+  }
+
+  const idx = description.indexOf(PRODUCT_META_MARKER);
+  if (idx === -1) {
+    return { cleanDescription: description, meta: {} as ProductCompatMeta };
+  }
+
+  const cleanDescription = description.slice(0, idx).trim();
+  const rawMeta = description.slice(idx + PRODUCT_META_MARKER.length).trim();
+  try {
+    const parsed = JSON.parse(rawMeta) as ProductCompatMeta;
+    return { cleanDescription, meta: parsed || {} };
+  } catch {
+    return { cleanDescription, meta: {} as ProductCompatMeta };
+  }
+};
+
+let phase1SchemaEnsured = false;
+const ensurePhase1ProductSchema = async () => {
+  if (phase1SchemaEnsured) return;
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ProductType') THEN
+        CREATE TYPE "ProductType" AS ENUM ('NEW', 'REFURBISHED');
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'WarrantyType') THEN
+        CREATE TYPE "WarrantyType" AS ENUM ('BRAND', 'SHOP');
+      END IF;
+    END $$;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "Product"
+    ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS "productType" "ProductType" NOT NULL DEFAULT 'NEW',
+    ADD COLUMN IF NOT EXISTS "conditionScore" INTEGER,
+    ADD COLUMN IF NOT EXISTS "ageMonths" INTEGER,
+    ADD COLUMN IF NOT EXISTS "warrantyType" "WarrantyType",
+    ADD COLUMN IF NOT EXISTS "warrantyExpiry" TIMESTAMP(3),
+    ADD COLUMN IF NOT EXISTS "warrantyCertificateUrl" TEXT;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE "Product"
+    SET "productType" = CASE WHEN "isUsed" = true THEN 'REFURBISHED'::"ProductType" ELSE 'NEW'::"ProductType" END
+    WHERE ("isUsed" = true AND "productType" <> 'REFURBISHED'::"ProductType")
+       OR ("isUsed" = false AND "productType" <> 'NEW'::"ProductType");
+  `);
+
+  phase1SchemaEnsured = true;
+};
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -217,11 +340,63 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/products', async (req, res) => {
   try {
+    await ensurePhase1ProductSchema().catch(() => {});
     const products = await prisma.product.findMany({
       orderBy: { id: 'desc' }
     });
-    res.json(products);
-  } catch (error) { res.status(500).json({ error: "Database error" }); }
+    const normalized = products.map((p: any) => {
+      const { cleanDescription, meta } = decodeCompatMetaFromDescription(p.description);
+      return {
+        ...p,
+        description: cleanDescription,
+        productType: p.productType || meta.productType || (p.isUsed ? "REFURBISHED" : "NEW"),
+        conditionScore: p.conditionScore ?? meta.conditionScore ?? null,
+        ageMonths: p.ageMonths ?? meta.ageMonths ?? null,
+        warrantyType: p.warrantyType ?? meta.warrantyType ?? null,
+        warrantyExpiry: p.warrantyExpiry ?? meta.warrantyExpiry ?? null,
+        warrantyCertificateUrl: p.warrantyCertificateUrl ?? meta.warrantyCertificateUrl ?? null,
+      };
+    });
+    res.json(normalized);
+  } catch (error) {
+    try {
+      const legacyProducts = await prisma.$queryRaw<Array<{
+        id: string;
+        title: string;
+        description: string;
+        price: number;
+        isUsed: boolean;
+        images: string[];
+        status: string;
+        sellerId: string;
+        createdAt: Date;
+      }>>`
+        SELECT "id", "title", "description", "price", "isUsed", "images", "status", "sellerId", "createdAt"
+        FROM "Product"
+        ORDER BY "id" DESC
+      `;
+
+      res.json(
+        legacyProducts.map((p) => ({
+          ...(() => {
+            const { cleanDescription, meta } = decodeCompatMetaFromDescription(p.description);
+            return {
+              ...p,
+              description: cleanDescription,
+              productType: meta.productType || (p.isUsed ? "REFURBISHED" : "NEW"),
+              conditionScore: meta.conditionScore ?? null,
+              ageMonths: meta.ageMonths ?? null,
+              warrantyType: meta.warrantyType ?? null,
+              warrantyExpiry: meta.warrantyExpiry ?? null,
+              warrantyCertificateUrl: meta.warrantyCertificateUrl ?? null,
+            };
+          })(),
+        }))
+      );
+    } catch {
+      res.status(500).json({ error: "Database error" });
+    }
+  }
 });
 
 // --- ADMIN ROUTES ---
@@ -243,9 +418,14 @@ app.get('/api/admin/all-diagnoses', async (req, res) => {
 // 2. Dashboard Stats (Original Version)
 app.get('/api/admin/stats-basic', async (req, res) => {
   try {
-    const totalBookings = await prisma.serviceBooking.count();
-    const totalUsers = await prisma.user.count();
-    const totalProducts = await prisma.product.count();
+    const [bookingsCountRows, usersCountRows, productsCountRows] = await Promise.all([
+      prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "ServiceBooking"`,
+      prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "User"`,
+      prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "Product"`,
+    ]);
+    const totalBookings = Number(bookingsCountRows?.[0]?.count || 0);
+    const totalUsers = Number(usersCountRows?.[0]?.count || 0);
+    const totalProducts = Number(productsCountRows?.[0]?.count || 0);
     res.json({ totalBookings, totalUsers, totalProducts });
   } catch (error) {
     res.status(500).json({ error: "Stats fetch failed" });
@@ -255,20 +435,45 @@ app.get('/api/admin/stats-basic', async (req, res) => {
 // 3. Upgrade Stats with Latest Products & Appliance Pulse
 app.get('/api/admin/stats', async (req, res) => {
   try {
-    const [totalBookings, totalUsers, totalProducts, latestUsers, latestProducts] = await Promise.all([
-      prisma.serviceBooking.count(),
-      prisma.user.count(),
-      prisma.product.count(),
-      prisma.user.findMany({ take: 5, orderBy: { createdAt: 'desc' } }),
-      prisma.product.findMany({ orderBy: { id: 'desc' } })
+    const [bookingsCountRows, usersCountRows, productsCountRows, latestUsers, latestProducts, applianceStats] = await Promise.all([
+      prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "ServiceBooking"`.catch(() => []),
+      prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "User"`.catch(() => []),
+      prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "Product"`.catch(() => []),
+      prisma.$queryRaw<Array<{ id: string; name: string; email: string }>>`
+        SELECT "id", "name", "email"
+        FROM "User"
+        ORDER BY "createdAt" DESC NULLS LAST
+        LIMIT 5
+      `.catch(() => []),
+      prisma.$queryRaw<Array<{ id: string; title: string; price: number; images: string[]; status: string; isUsed: boolean }>>`
+        SELECT "id", "title", "price", "images", "status", "isUsed"
+        FROM "Product"
+        ORDER BY "id" DESC
+      `.catch(() => []),
+      prisma.$queryRaw<Array<{ appliance: string; count: bigint | number }>>`
+        SELECT "appliance", COUNT(*)::bigint AS count
+        FROM "ServiceBooking"
+        GROUP BY "appliance"
+      `.catch(() => [])
     ]);
-
-    const applianceStats = await prisma.serviceBooking.groupBy({
-      by: ['appliance'],
-      _count: { _all: true }
-    });
+    const totalBookings = Number(bookingsCountRows?.[0]?.count || 0);
+    const totalUsers = Number(usersCountRows?.[0]?.count || 0);
+    const totalProducts = Number(productsCountRows?.[0]?.count || 0);
    
-    res.json({ totalBookings, totalUsers, totalProducts, latestUsers, latestProducts, applianceStats });
+    res.json({
+      totalBookings,
+      totalUsers,
+      totalProducts,
+      latestUsers,
+      latestProducts: latestProducts.map((p) => ({
+        ...p,
+        productType: p.isUsed ? "REFURBISHED" : "NEW",
+      })),
+      applianceStats: applianceStats.map((row) => ({
+        appliance: row.appliance,
+        _count: { _all: Number(row.count || 0) }
+      }))
+    });
   } catch (error) {
     res.status(500).json({ error: "Stats fetch failed" });
   }
@@ -287,37 +492,248 @@ app.post('/api/admin/upload-image', async (req, res) => {
       folder: 'refri-smart/products',
       resource_type: 'image'
     });
-
-    res.status(201).json({ imageUrl: uploaded.secure_url });
+    const imageUrl = cloudinaryOptimizeUrl(uploaded.secure_url);
+    res.status(201).json({ imageUrl, originalUrl: uploaded.secure_url });
   } catch (error: any) {
     console.error("Upload Error:", error.message);
     res.status(500).json({ error: "Image upload failed." });
   }
 });
 
+app.post('/api/admin/suggest-price', async (req, res) => {
+  try {
+    const { basePrice, conditionScore, ageMonths, productType, title, description } = req.body as {
+      basePrice?: number | string;
+      conditionScore?: number | string;
+      ageMonths?: number | string;
+      productType?: "NEW" | "REFURBISHED";
+      title?: string;
+      description?: string;
+    };
+
+    const parsedBase = Number(basePrice || 0);
+    const parsedCondition = Number(conditionScore || 8);
+    const parsedAge = Number(ageMonths || 0);
+    const type = productType === "REFURBISHED" ? "REFURBISHED" : "NEW";
+
+    if (!parsedBase || parsedBase <= 0) {
+      return res.status(400).json({ error: "basePrice is required." });
+    }
+
+    let formulaSuggested = parsedBase;
+    if (type === "REFURBISHED") {
+      const agePenalty = Math.min(parsedAge * 0.012, 0.45);
+      const conditionBoost = Math.max((parsedCondition - 5) * 0.03, -0.2);
+      formulaSuggested = parsedBase * (1 - agePenalty + conditionBoost);
+    } else {
+      formulaSuggested = parsedBase * 1.02;
+    }
+
+    const marketRows = await prisma.$queryRaw<Array<{ title: string; price: number; isUsed: boolean }>>`
+      SELECT "title", "price", "isUsed"
+      FROM "Product"
+      WHERE "status" = 'AVAILABLE'
+      ORDER BY "id" DESC
+      LIMIT 140
+    `.catch(() => []);
+
+    const queryTokens = tokenize(`${title || ""} ${description || ""}`);
+    const tokenSet = new Set(queryTokens);
+    const sameTypeRows = marketRows.filter((row) => (type === "REFURBISHED" ? row.isUsed : !row.isUsed));
+
+    const comparables = sameTypeRows
+      .map((row) => {
+        const rowTokens = tokenize(row.title || "");
+        const overlap = rowTokens.filter((t) => tokenSet.has(t)).length;
+        const similarity = tokenSet.size > 0 ? overlap / tokenSet.size : 0;
+        const weight = 1 + similarity * 2;
+        return { ...row, similarity, weight };
+      })
+      .filter((row) => tokenSet.size === 0 || row.similarity > 0)
+      .slice(0, 60);
+
+    const fallbackComparables = comparables.length
+      ? comparables
+      : sameTypeRows.slice(0, 30).map((row) => ({ ...row, similarity: 0, weight: 1 }));
+
+    const comparablePrices = fallbackComparables.map((c) => Number(c.price)).filter((p) => Number.isFinite(p) && p > 0);
+    const marketMedian = median(comparablePrices);
+
+    let marketSuggested = parsedBase;
+    if (marketMedian) {
+      if (type === "REFURBISHED") {
+        const conditionFactor = clamp(0.72 + (parsedCondition - 1) * 0.038, 0.58, 1.08);
+        const ageFactor = clamp(1 - parsedAge * 0.01, 0.52, 1.02);
+        marketSuggested = marketMedian * conditionFactor * ageFactor;
+      } else {
+        marketSuggested = marketMedian * 1.01;
+      }
+    }
+
+    const sampleSize = fallbackComparables.length;
+    const marketWeight = marketMedian ? clamp(0.35 + sampleSize * 0.02, 0.35, 0.78) : 0;
+    const suggested = marketWeight
+      ? (marketSuggested * marketWeight) + (formulaSuggested * (1 - marketWeight))
+      : formulaSuggested;
+
+    const confidenceScore = clamp(
+      (marketMedian ? 0.48 : 0.26) +
+      Math.min(sampleSize * 0.018, 0.34) -
+      (type === "REFURBISHED" ? Math.min(parsedAge * 0.002, 0.1) : 0),
+      0.2,
+      0.92
+    );
+    const spread = confidenceScore >= 0.75 ? 0.08 : confidenceScore >= 0.58 ? 0.12 : 0.18;
+    const floor = Math.max(500, Math.round(suggested * (1 - spread)));
+    const ceil = Math.round(suggested * (1 + spread));
+    const quickSalePrice = Math.max(500, Math.round(suggested * (1 - spread * 0.85)));
+    const premiumListingPrice = Math.round(suggested * (1 + spread * 0.9));
+    const reasoning = [
+      marketMedian
+        ? `Used ${sampleSize} comparable ${type === "REFURBISHED" ? "refurbished" : "new"} listings from your live inventory.`
+        : "No strong comparables found; applied condition-age formula model.",
+      type === "REFURBISHED"
+        ? `Adjusted by condition ${parsedCondition}/10 and age ${parsedAge} months.`
+        : "Applied new-product margin and market anchor blending.",
+      "Final price remains admin decision; this is AI guidance."
+    ];
+
+    res.json({
+      suggestedPrice: Math.round(suggested),
+      recommendedMin: floor,
+      recommendedMax: ceil,
+      quickSalePrice,
+      premiumListingPrice,
+      confidenceScore: Number(confidenceScore.toFixed(2)),
+      marketSampleSize: sampleSize,
+      reasoning,
+      note: type === "REFURBISHED"
+        ? "Market-aware refurbished pricing with condition and age adjustments."
+        : "Market-aware new product pricing guidance."
+    });
+  } catch (error: any) {
+    console.error("Suggest Price Error:", error.message);
+    res.status(500).json({ error: "Price suggestion failed." });
+  }
+});
+
 app.post('/api/admin/add-product', async (req, res) => {
   try {
-    const { title, description, price, sellerId, imageUrl } = req.body;
+    await ensurePhase1ProductSchema().catch(() => {});
+    const {
+      title,
+      description,
+      price,
+      sellerId,
+      imageUrl,
+      productType,
+      conditionScore,
+      ageMonths,
+      warrantyType,
+      warrantyExpiry,
+      warrantyCertificateUrl
+    } = req.body;
 
     if (!title || !price || !sellerId) {
       return res.status(400).json({ error: "Missing details!" });
     }
 
-    const newProduct = await prisma.product.create({
-      data: {
-        title,
-        description: description || "",
-        price: parseFloat(price),
-        sellerId,
-        images: imageUrl ? [imageUrl] : [],
-        status: 'AVAILABLE'
+    const normalizedProductType = productType === "REFURBISHED" ? "REFURBISHED" : "NEW";
+    const optimizedImageUrl = imageUrl ? cloudinaryOptimizeUrl(imageUrl) : "";
+    const conditionRaw = parseOptionalNumber(conditionScore);
+    const ageRaw = parseOptionalNumber(ageMonths);
+    const parsedCondition = conditionRaw === null ? null : Math.min(10, Math.max(1, Math.round(conditionRaw)));
+    const parsedAge = ageRaw === null ? null : Math.max(0, Math.round(ageRaw));
+    const parsedWarrantyExpiry = parseFlexibleDate(warrantyExpiry);
+    const normalizedWarrantyType = warrantyType === "SHOP" || warrantyType === "BRAND"
+      ? warrantyType
+      : null;
+    const compatMeta: ProductCompatMeta = {
+      productType: normalizedProductType,
+      conditionScore: parsedCondition,
+      ageMonths: parsedAge,
+      warrantyType: normalizedWarrantyType,
+      warrantyExpiry: parsedWarrantyExpiry ? parsedWarrantyExpiry.toISOString() : null,
+      warrantyCertificateUrl: warrantyCertificateUrl || null,
+    };
+
+    if (conditionRaw !== null && Number.isNaN(conditionRaw)) {
+      return res.status(400).json({ error: "Condition score must be a valid number between 1 and 10." });
+    }
+    if (ageRaw !== null && Number.isNaN(ageRaw)) {
+      return res.status(400).json({ error: "Age in months must be a valid number." });
+    }
+    const baseData = {
+      title,
+      description: description || "",
+      price: parseFloat(price),
+      sellerId,
+      isUsed: normalizedProductType === "REFURBISHED",
+      images: optimizedImageUrl ? [optimizedImageUrl] : [],
+      status: 'AVAILABLE' as const
+    };
+    let newProduct;
+    try {
+      newProduct = await prisma.product.create({
+        data: {
+          ...baseData,
+          productType: normalizedProductType,
+          conditionScore: parsedCondition,
+          ageMonths: parsedAge,
+          warrantyType: normalizedWarrantyType,
+          warrantyExpiry: parsedWarrantyExpiry,
+          warrantyCertificateUrl: warrantyCertificateUrl || null
+        }
+      });
+    } catch (phaseOneError: any) {
+      const msg = String(phaseOneError?.message || "").toLowerCase();
+      const isSchemaCompatibilityIssue =
+        phaseOneError?.code === "P2021" ||
+        phaseOneError?.code === "P2022" ||
+        msg.includes("column") ||
+        msg.includes("does not exist");
+
+      if (!isSchemaCompatibilityIssue) {
+        throw phaseOneError;
       }
-    });
+
+      await ensurePhase1ProductSchema().catch(() => {});
+
+      try {
+        newProduct = await prisma.product.create({
+          data: {
+            ...baseData,
+            productType: normalizedProductType,
+            conditionScore: parsedCondition,
+            ageMonths: parsedAge,
+            warrantyType: normalizedWarrantyType,
+            warrantyExpiry: parsedWarrantyExpiry,
+            warrantyCertificateUrl: warrantyCertificateUrl || null
+          }
+        });
+        return res.status(201).json({ message: "Product added!", product: newProduct });
+      } catch {
+        // continue with minimal fallback below
+      }
+
+      // Backward-compatible save path for databases that have not run phase-1 migration yet.
+      const legacyId = randomUUID();
+      const fallbackDescription = encodeCompatMetaInDescription(description || "", compatMeta);
+      await prisma.$executeRaw`
+        INSERT INTO "Product" ("id", "title", "description", "price", "isUsed", "images", "status", "sellerId")
+        VALUES (${legacyId}, ${baseData.title}, ${fallbackDescription}, ${baseData.price}, ${baseData.isUsed}, ${baseData.images}, ${baseData.status}, ${baseData.sellerId})
+      `;
+      newProduct = { id: legacyId, ...baseData, ...compatMeta, description: description || "" };
+    }
 
     res.status(201).json({ message: "Product added!", product: newProduct });
   } catch (error: any) {
     console.error("Add Product Error:", error.message);
-    res.status(500).json({ error: "Failed to save product." });
+    res.status(500).json({
+      error: "Failed to save product.",
+      details: error?.message || "Unknown server error",
+      code: error?.code || null
+    });
   }
 });
 
@@ -349,6 +765,13 @@ app.post('/api/admin/seed-demo-products', async (req, res) => {
       await prisma.product.create({
         data: {
           ...product,
+          isUsed: true,
+          productType: "REFURBISHED",
+          conditionScore: 8,
+          ageMonths: 14,
+          warrantyType: "SHOP",
+          warrantyExpiry: new Date(Date.now() + 1000 * 60 * 60 * 24 * 180),
+          warrantyCertificateUrl: "",
           sellerId: seller.id,
           status: 'AVAILABLE',
         },

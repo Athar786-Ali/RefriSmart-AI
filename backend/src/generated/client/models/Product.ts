@@ -29,11 +29,13 @@ export type AggregateProduct = {
 export type ProductAvgAggregateOutputType = {
   price: number | null
   conditionScore: number | null
+  ageMonths: number | null
 }
 
 export type ProductSumAggregateOutputType = {
   price: number | null
   conditionScore: number | null
+  ageMonths: number | null
 }
 
 export type ProductMinAggregateOutputType = {
@@ -42,7 +44,12 @@ export type ProductMinAggregateOutputType = {
   description: string | null
   price: number | null
   isUsed: boolean | null
+  productType: $Enums.ProductType | null
   conditionScore: number | null
+  ageMonths: number | null
+  warrantyType: $Enums.WarrantyType | null
+  warrantyExpiry: Date | null
+  warrantyCertificateUrl: string | null
   status: $Enums.ProductStatus | null
   sellerId: string | null
   createdAt: Date | null
@@ -54,7 +61,12 @@ export type ProductMaxAggregateOutputType = {
   description: string | null
   price: number | null
   isUsed: boolean | null
+  productType: $Enums.ProductType | null
   conditionScore: number | null
+  ageMonths: number | null
+  warrantyType: $Enums.WarrantyType | null
+  warrantyExpiry: Date | null
+  warrantyCertificateUrl: string | null
   status: $Enums.ProductStatus | null
   sellerId: string | null
   createdAt: Date | null
@@ -66,7 +78,12 @@ export type ProductCountAggregateOutputType = {
   description: number
   price: number
   isUsed: number
+  productType: number
   conditionScore: number
+  ageMonths: number
+  warrantyType: number
+  warrantyExpiry: number
+  warrantyCertificateUrl: number
   images: number
   status: number
   sellerId: number
@@ -78,11 +95,13 @@ export type ProductCountAggregateOutputType = {
 export type ProductAvgAggregateInputType = {
   price?: true
   conditionScore?: true
+  ageMonths?: true
 }
 
 export type ProductSumAggregateInputType = {
   price?: true
   conditionScore?: true
+  ageMonths?: true
 }
 
 export type ProductMinAggregateInputType = {
@@ -91,7 +110,12 @@ export type ProductMinAggregateInputType = {
   description?: true
   price?: true
   isUsed?: true
+  productType?: true
   conditionScore?: true
+  ageMonths?: true
+  warrantyType?: true
+  warrantyExpiry?: true
+  warrantyCertificateUrl?: true
   status?: true
   sellerId?: true
   createdAt?: true
@@ -103,7 +127,12 @@ export type ProductMaxAggregateInputType = {
   description?: true
   price?: true
   isUsed?: true
+  productType?: true
   conditionScore?: true
+  ageMonths?: true
+  warrantyType?: true
+  warrantyExpiry?: true
+  warrantyCertificateUrl?: true
   status?: true
   sellerId?: true
   createdAt?: true
@@ -115,7 +144,12 @@ export type ProductCountAggregateInputType = {
   description?: true
   price?: true
   isUsed?: true
+  productType?: true
   conditionScore?: true
+  ageMonths?: true
+  warrantyType?: true
+  warrantyExpiry?: true
+  warrantyCertificateUrl?: true
   images?: true
   status?: true
   sellerId?: true
@@ -215,7 +249,12 @@ export type ProductGroupByOutputType = {
   description: string
   price: number
   isUsed: boolean
+  productType: $Enums.ProductType
   conditionScore: number | null
+  ageMonths: number | null
+  warrantyType: $Enums.WarrantyType | null
+  warrantyExpiry: Date | null
+  warrantyCertificateUrl: string | null
   images: string[]
   status: $Enums.ProductStatus
   sellerId: string
@@ -251,7 +290,12 @@ export type ProductWhereInput = {
   description?: Prisma.StringFilter<"Product"> | string
   price?: Prisma.FloatFilter<"Product"> | number
   isUsed?: Prisma.BoolFilter<"Product"> | boolean
+  productType?: Prisma.EnumProductTypeFilter<"Product"> | $Enums.ProductType
   conditionScore?: Prisma.IntNullableFilter<"Product"> | number | null
+  ageMonths?: Prisma.IntNullableFilter<"Product"> | number | null
+  warrantyType?: Prisma.EnumWarrantyTypeNullableFilter<"Product"> | $Enums.WarrantyType | null
+  warrantyExpiry?: Prisma.DateTimeNullableFilter<"Product"> | Date | string | null
+  warrantyCertificateUrl?: Prisma.StringNullableFilter<"Product"> | string | null
   images?: Prisma.StringNullableListFilter<"Product">
   status?: Prisma.EnumProductStatusFilter<"Product"> | $Enums.ProductStatus
   sellerId?: Prisma.StringFilter<"Product"> | string
@@ -265,7 +309,12 @@ export type ProductOrderByWithRelationInput = {
   description?: Prisma.SortOrder
   price?: Prisma.SortOrder
   isUsed?: Prisma.SortOrder
+  productType?: Prisma.SortOrder
   conditionScore?: Prisma.SortOrderInput | Prisma.SortOrder
+  ageMonths?: Prisma.SortOrderInput | Prisma.SortOrder
+  warrantyType?: Prisma.SortOrderInput | Prisma.SortOrder
+  warrantyExpiry?: Prisma.SortOrderInput | Prisma.SortOrder
+  warrantyCertificateUrl?: Prisma.SortOrderInput | Prisma.SortOrder
   images?: Prisma.SortOrder
   status?: Prisma.SortOrder
   sellerId?: Prisma.SortOrder
@@ -282,7 +331,12 @@ export type ProductWhereUniqueInput = Prisma.AtLeast<{
   description?: Prisma.StringFilter<"Product"> | string
   price?: Prisma.FloatFilter<"Product"> | number
   isUsed?: Prisma.BoolFilter<"Product"> | boolean
+  productType?: Prisma.EnumProductTypeFilter<"Product"> | $Enums.ProductType
   conditionScore?: Prisma.IntNullableFilter<"Product"> | number | null
+  ageMonths?: Prisma.IntNullableFilter<"Product"> | number | null
+  warrantyType?: Prisma.EnumWarrantyTypeNullableFilter<"Product"> | $Enums.WarrantyType | null
+  warrantyExpiry?: Prisma.DateTimeNullableFilter<"Product"> | Date | string | null
+  warrantyCertificateUrl?: Prisma.StringNullableFilter<"Product"> | string | null
   images?: Prisma.StringNullableListFilter<"Product">
   status?: Prisma.EnumProductStatusFilter<"Product"> | $Enums.ProductStatus
   sellerId?: Prisma.StringFilter<"Product"> | string
@@ -296,7 +350,12 @@ export type ProductOrderByWithAggregationInput = {
   description?: Prisma.SortOrder
   price?: Prisma.SortOrder
   isUsed?: Prisma.SortOrder
+  productType?: Prisma.SortOrder
   conditionScore?: Prisma.SortOrderInput | Prisma.SortOrder
+  ageMonths?: Prisma.SortOrderInput | Prisma.SortOrder
+  warrantyType?: Prisma.SortOrderInput | Prisma.SortOrder
+  warrantyExpiry?: Prisma.SortOrderInput | Prisma.SortOrder
+  warrantyCertificateUrl?: Prisma.SortOrderInput | Prisma.SortOrder
   images?: Prisma.SortOrder
   status?: Prisma.SortOrder
   sellerId?: Prisma.SortOrder
@@ -317,7 +376,12 @@ export type ProductScalarWhereWithAggregatesInput = {
   description?: Prisma.StringWithAggregatesFilter<"Product"> | string
   price?: Prisma.FloatWithAggregatesFilter<"Product"> | number
   isUsed?: Prisma.BoolWithAggregatesFilter<"Product"> | boolean
+  productType?: Prisma.EnumProductTypeWithAggregatesFilter<"Product"> | $Enums.ProductType
   conditionScore?: Prisma.IntNullableWithAggregatesFilter<"Product"> | number | null
+  ageMonths?: Prisma.IntNullableWithAggregatesFilter<"Product"> | number | null
+  warrantyType?: Prisma.EnumWarrantyTypeNullableWithAggregatesFilter<"Product"> | $Enums.WarrantyType | null
+  warrantyExpiry?: Prisma.DateTimeNullableWithAggregatesFilter<"Product"> | Date | string | null
+  warrantyCertificateUrl?: Prisma.StringNullableWithAggregatesFilter<"Product"> | string | null
   images?: Prisma.StringNullableListFilter<"Product">
   status?: Prisma.EnumProductStatusWithAggregatesFilter<"Product"> | $Enums.ProductStatus
   sellerId?: Prisma.StringWithAggregatesFilter<"Product"> | string
@@ -330,7 +394,12 @@ export type ProductCreateInput = {
   description: string
   price: number
   isUsed?: boolean
+  productType?: $Enums.ProductType
   conditionScore?: number | null
+  ageMonths?: number | null
+  warrantyType?: $Enums.WarrantyType | null
+  warrantyExpiry?: Date | string | null
+  warrantyCertificateUrl?: string | null
   images?: Prisma.ProductCreateimagesInput | string[]
   status?: $Enums.ProductStatus
   createdAt?: Date | string
@@ -343,7 +412,12 @@ export type ProductUncheckedCreateInput = {
   description: string
   price: number
   isUsed?: boolean
+  productType?: $Enums.ProductType
   conditionScore?: number | null
+  ageMonths?: number | null
+  warrantyType?: $Enums.WarrantyType | null
+  warrantyExpiry?: Date | string | null
+  warrantyCertificateUrl?: string | null
   images?: Prisma.ProductCreateimagesInput | string[]
   status?: $Enums.ProductStatus
   sellerId: string
@@ -356,7 +430,12 @@ export type ProductUpdateInput = {
   description?: Prisma.StringFieldUpdateOperationsInput | string
   price?: Prisma.FloatFieldUpdateOperationsInput | number
   isUsed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  productType?: Prisma.EnumProductTypeFieldUpdateOperationsInput | $Enums.ProductType
   conditionScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  ageMonths?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  warrantyType?: Prisma.NullableEnumWarrantyTypeFieldUpdateOperationsInput | $Enums.WarrantyType | null
+  warrantyExpiry?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  warrantyCertificateUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   images?: Prisma.ProductUpdateimagesInput | string[]
   status?: Prisma.EnumProductStatusFieldUpdateOperationsInput | $Enums.ProductStatus
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -369,7 +448,12 @@ export type ProductUncheckedUpdateInput = {
   description?: Prisma.StringFieldUpdateOperationsInput | string
   price?: Prisma.FloatFieldUpdateOperationsInput | number
   isUsed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  productType?: Prisma.EnumProductTypeFieldUpdateOperationsInput | $Enums.ProductType
   conditionScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  ageMonths?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  warrantyType?: Prisma.NullableEnumWarrantyTypeFieldUpdateOperationsInput | $Enums.WarrantyType | null
+  warrantyExpiry?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  warrantyCertificateUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   images?: Prisma.ProductUpdateimagesInput | string[]
   status?: Prisma.EnumProductStatusFieldUpdateOperationsInput | $Enums.ProductStatus
   sellerId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -382,7 +466,12 @@ export type ProductCreateManyInput = {
   description: string
   price: number
   isUsed?: boolean
+  productType?: $Enums.ProductType
   conditionScore?: number | null
+  ageMonths?: number | null
+  warrantyType?: $Enums.WarrantyType | null
+  warrantyExpiry?: Date | string | null
+  warrantyCertificateUrl?: string | null
   images?: Prisma.ProductCreateimagesInput | string[]
   status?: $Enums.ProductStatus
   sellerId: string
@@ -395,7 +484,12 @@ export type ProductUpdateManyMutationInput = {
   description?: Prisma.StringFieldUpdateOperationsInput | string
   price?: Prisma.FloatFieldUpdateOperationsInput | number
   isUsed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  productType?: Prisma.EnumProductTypeFieldUpdateOperationsInput | $Enums.ProductType
   conditionScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  ageMonths?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  warrantyType?: Prisma.NullableEnumWarrantyTypeFieldUpdateOperationsInput | $Enums.WarrantyType | null
+  warrantyExpiry?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  warrantyCertificateUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   images?: Prisma.ProductUpdateimagesInput | string[]
   status?: Prisma.EnumProductStatusFieldUpdateOperationsInput | $Enums.ProductStatus
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -407,7 +501,12 @@ export type ProductUncheckedUpdateManyInput = {
   description?: Prisma.StringFieldUpdateOperationsInput | string
   price?: Prisma.FloatFieldUpdateOperationsInput | number
   isUsed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  productType?: Prisma.EnumProductTypeFieldUpdateOperationsInput | $Enums.ProductType
   conditionScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  ageMonths?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  warrantyType?: Prisma.NullableEnumWarrantyTypeFieldUpdateOperationsInput | $Enums.WarrantyType | null
+  warrantyExpiry?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  warrantyCertificateUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   images?: Prisma.ProductUpdateimagesInput | string[]
   status?: Prisma.EnumProductStatusFieldUpdateOperationsInput | $Enums.ProductStatus
   sellerId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -438,7 +537,12 @@ export type ProductCountOrderByAggregateInput = {
   description?: Prisma.SortOrder
   price?: Prisma.SortOrder
   isUsed?: Prisma.SortOrder
+  productType?: Prisma.SortOrder
   conditionScore?: Prisma.SortOrder
+  ageMonths?: Prisma.SortOrder
+  warrantyType?: Prisma.SortOrder
+  warrantyExpiry?: Prisma.SortOrder
+  warrantyCertificateUrl?: Prisma.SortOrder
   images?: Prisma.SortOrder
   status?: Prisma.SortOrder
   sellerId?: Prisma.SortOrder
@@ -448,6 +552,7 @@ export type ProductCountOrderByAggregateInput = {
 export type ProductAvgOrderByAggregateInput = {
   price?: Prisma.SortOrder
   conditionScore?: Prisma.SortOrder
+  ageMonths?: Prisma.SortOrder
 }
 
 export type ProductMaxOrderByAggregateInput = {
@@ -456,7 +561,12 @@ export type ProductMaxOrderByAggregateInput = {
   description?: Prisma.SortOrder
   price?: Prisma.SortOrder
   isUsed?: Prisma.SortOrder
+  productType?: Prisma.SortOrder
   conditionScore?: Prisma.SortOrder
+  ageMonths?: Prisma.SortOrder
+  warrantyType?: Prisma.SortOrder
+  warrantyExpiry?: Prisma.SortOrder
+  warrantyCertificateUrl?: Prisma.SortOrder
   status?: Prisma.SortOrder
   sellerId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -468,7 +578,12 @@ export type ProductMinOrderByAggregateInput = {
   description?: Prisma.SortOrder
   price?: Prisma.SortOrder
   isUsed?: Prisma.SortOrder
+  productType?: Prisma.SortOrder
   conditionScore?: Prisma.SortOrder
+  ageMonths?: Prisma.SortOrder
+  warrantyType?: Prisma.SortOrder
+  warrantyExpiry?: Prisma.SortOrder
+  warrantyCertificateUrl?: Prisma.SortOrder
   status?: Prisma.SortOrder
   sellerId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -477,6 +592,7 @@ export type ProductMinOrderByAggregateInput = {
 export type ProductSumOrderByAggregateInput = {
   price?: Prisma.SortOrder
   conditionScore?: Prisma.SortOrder
+  ageMonths?: Prisma.SortOrder
 }
 
 export type ProductCreateNestedManyWithoutSellerInput = {
@@ -537,12 +653,24 @@ export type BoolFieldUpdateOperationsInput = {
   set?: boolean
 }
 
+export type EnumProductTypeFieldUpdateOperationsInput = {
+  set?: $Enums.ProductType
+}
+
 export type NullableIntFieldUpdateOperationsInput = {
   set?: number | null
   increment?: number
   decrement?: number
   multiply?: number
   divide?: number
+}
+
+export type NullableEnumWarrantyTypeFieldUpdateOperationsInput = {
+  set?: $Enums.WarrantyType | null
+}
+
+export type NullableDateTimeFieldUpdateOperationsInput = {
+  set?: Date | string | null
 }
 
 export type ProductUpdateimagesInput = {
@@ -560,7 +688,12 @@ export type ProductCreateWithoutSellerInput = {
   description: string
   price: number
   isUsed?: boolean
+  productType?: $Enums.ProductType
   conditionScore?: number | null
+  ageMonths?: number | null
+  warrantyType?: $Enums.WarrantyType | null
+  warrantyExpiry?: Date | string | null
+  warrantyCertificateUrl?: string | null
   images?: Prisma.ProductCreateimagesInput | string[]
   status?: $Enums.ProductStatus
   createdAt?: Date | string
@@ -572,7 +705,12 @@ export type ProductUncheckedCreateWithoutSellerInput = {
   description: string
   price: number
   isUsed?: boolean
+  productType?: $Enums.ProductType
   conditionScore?: number | null
+  ageMonths?: number | null
+  warrantyType?: $Enums.WarrantyType | null
+  warrantyExpiry?: Date | string | null
+  warrantyCertificateUrl?: string | null
   images?: Prisma.ProductCreateimagesInput | string[]
   status?: $Enums.ProductStatus
   createdAt?: Date | string
@@ -613,7 +751,12 @@ export type ProductScalarWhereInput = {
   description?: Prisma.StringFilter<"Product"> | string
   price?: Prisma.FloatFilter<"Product"> | number
   isUsed?: Prisma.BoolFilter<"Product"> | boolean
+  productType?: Prisma.EnumProductTypeFilter<"Product"> | $Enums.ProductType
   conditionScore?: Prisma.IntNullableFilter<"Product"> | number | null
+  ageMonths?: Prisma.IntNullableFilter<"Product"> | number | null
+  warrantyType?: Prisma.EnumWarrantyTypeNullableFilter<"Product"> | $Enums.WarrantyType | null
+  warrantyExpiry?: Prisma.DateTimeNullableFilter<"Product"> | Date | string | null
+  warrantyCertificateUrl?: Prisma.StringNullableFilter<"Product"> | string | null
   images?: Prisma.StringNullableListFilter<"Product">
   status?: Prisma.EnumProductStatusFilter<"Product"> | $Enums.ProductStatus
   sellerId?: Prisma.StringFilter<"Product"> | string
@@ -626,7 +769,12 @@ export type ProductCreateManySellerInput = {
   description: string
   price: number
   isUsed?: boolean
+  productType?: $Enums.ProductType
   conditionScore?: number | null
+  ageMonths?: number | null
+  warrantyType?: $Enums.WarrantyType | null
+  warrantyExpiry?: Date | string | null
+  warrantyCertificateUrl?: string | null
   images?: Prisma.ProductCreateimagesInput | string[]
   status?: $Enums.ProductStatus
   createdAt?: Date | string
@@ -638,7 +786,12 @@ export type ProductUpdateWithoutSellerInput = {
   description?: Prisma.StringFieldUpdateOperationsInput | string
   price?: Prisma.FloatFieldUpdateOperationsInput | number
   isUsed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  productType?: Prisma.EnumProductTypeFieldUpdateOperationsInput | $Enums.ProductType
   conditionScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  ageMonths?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  warrantyType?: Prisma.NullableEnumWarrantyTypeFieldUpdateOperationsInput | $Enums.WarrantyType | null
+  warrantyExpiry?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  warrantyCertificateUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   images?: Prisma.ProductUpdateimagesInput | string[]
   status?: Prisma.EnumProductStatusFieldUpdateOperationsInput | $Enums.ProductStatus
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -650,7 +803,12 @@ export type ProductUncheckedUpdateWithoutSellerInput = {
   description?: Prisma.StringFieldUpdateOperationsInput | string
   price?: Prisma.FloatFieldUpdateOperationsInput | number
   isUsed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  productType?: Prisma.EnumProductTypeFieldUpdateOperationsInput | $Enums.ProductType
   conditionScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  ageMonths?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  warrantyType?: Prisma.NullableEnumWarrantyTypeFieldUpdateOperationsInput | $Enums.WarrantyType | null
+  warrantyExpiry?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  warrantyCertificateUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   images?: Prisma.ProductUpdateimagesInput | string[]
   status?: Prisma.EnumProductStatusFieldUpdateOperationsInput | $Enums.ProductStatus
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -662,7 +820,12 @@ export type ProductUncheckedUpdateManyWithoutSellerInput = {
   description?: Prisma.StringFieldUpdateOperationsInput | string
   price?: Prisma.FloatFieldUpdateOperationsInput | number
   isUsed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  productType?: Prisma.EnumProductTypeFieldUpdateOperationsInput | $Enums.ProductType
   conditionScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  ageMonths?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  warrantyType?: Prisma.NullableEnumWarrantyTypeFieldUpdateOperationsInput | $Enums.WarrantyType | null
+  warrantyExpiry?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  warrantyCertificateUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   images?: Prisma.ProductUpdateimagesInput | string[]
   status?: Prisma.EnumProductStatusFieldUpdateOperationsInput | $Enums.ProductStatus
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -676,7 +839,12 @@ export type ProductSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   description?: boolean
   price?: boolean
   isUsed?: boolean
+  productType?: boolean
   conditionScore?: boolean
+  ageMonths?: boolean
+  warrantyType?: boolean
+  warrantyExpiry?: boolean
+  warrantyCertificateUrl?: boolean
   images?: boolean
   status?: boolean
   sellerId?: boolean
@@ -690,7 +858,12 @@ export type ProductSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exten
   description?: boolean
   price?: boolean
   isUsed?: boolean
+  productType?: boolean
   conditionScore?: boolean
+  ageMonths?: boolean
+  warrantyType?: boolean
+  warrantyExpiry?: boolean
+  warrantyCertificateUrl?: boolean
   images?: boolean
   status?: boolean
   sellerId?: boolean
@@ -704,7 +877,12 @@ export type ProductSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exten
   description?: boolean
   price?: boolean
   isUsed?: boolean
+  productType?: boolean
   conditionScore?: boolean
+  ageMonths?: boolean
+  warrantyType?: boolean
+  warrantyExpiry?: boolean
+  warrantyCertificateUrl?: boolean
   images?: boolean
   status?: boolean
   sellerId?: boolean
@@ -718,14 +896,19 @@ export type ProductSelectScalar = {
   description?: boolean
   price?: boolean
   isUsed?: boolean
+  productType?: boolean
   conditionScore?: boolean
+  ageMonths?: boolean
+  warrantyType?: boolean
+  warrantyExpiry?: boolean
+  warrantyCertificateUrl?: boolean
   images?: boolean
   status?: boolean
   sellerId?: boolean
   createdAt?: boolean
 }
 
-export type ProductOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "title" | "description" | "price" | "isUsed" | "conditionScore" | "images" | "status" | "sellerId" | "createdAt", ExtArgs["result"]["product"]>
+export type ProductOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "title" | "description" | "price" | "isUsed" | "productType" | "conditionScore" | "ageMonths" | "warrantyType" | "warrantyExpiry" | "warrantyCertificateUrl" | "images" | "status" | "sellerId" | "createdAt", ExtArgs["result"]["product"]>
 export type ProductInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   seller?: boolean | Prisma.UserDefaultArgs<ExtArgs>
 }
@@ -747,7 +930,12 @@ export type $ProductPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
     description: string
     price: number
     isUsed: boolean
+    productType: $Enums.ProductType
     conditionScore: number | null
+    ageMonths: number | null
+    warrantyType: $Enums.WarrantyType | null
+    warrantyExpiry: Date | null
+    warrantyCertificateUrl: string | null
     images: string[]
     status: $Enums.ProductStatus
     sellerId: string
@@ -1181,7 +1369,12 @@ export interface ProductFieldRefs {
   readonly description: Prisma.FieldRef<"Product", 'String'>
   readonly price: Prisma.FieldRef<"Product", 'Float'>
   readonly isUsed: Prisma.FieldRef<"Product", 'Boolean'>
+  readonly productType: Prisma.FieldRef<"Product", 'ProductType'>
   readonly conditionScore: Prisma.FieldRef<"Product", 'Int'>
+  readonly ageMonths: Prisma.FieldRef<"Product", 'Int'>
+  readonly warrantyType: Prisma.FieldRef<"Product", 'WarrantyType'>
+  readonly warrantyExpiry: Prisma.FieldRef<"Product", 'DateTime'>
+  readonly warrantyCertificateUrl: Prisma.FieldRef<"Product", 'String'>
   readonly images: Prisma.FieldRef<"Product", 'String[]'>
   readonly status: Prisma.FieldRef<"Product", 'ProductStatus'>
   readonly sellerId: Prisma.FieldRef<"Product", 'String'>

@@ -26,6 +26,22 @@ export const ProductStatus = {
 export type ProductStatus = (typeof ProductStatus)[keyof typeof ProductStatus]
 
 
+export const ProductType = {
+  NEW: 'NEW',
+  REFURBISHED: 'REFURBISHED'
+} as const
+
+export type ProductType = (typeof ProductType)[keyof typeof ProductType]
+
+
+export const WarrantyType = {
+  BRAND: 'BRAND',
+  SHOP: 'SHOP'
+} as const
+
+export type WarrantyType = (typeof WarrantyType)[keyof typeof WarrantyType]
+
+
 export const Status = {
   PENDING: 'PENDING',
   IN_PROGRESS: 'IN_PROGRESS',
