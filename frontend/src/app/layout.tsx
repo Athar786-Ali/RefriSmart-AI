@@ -1,7 +1,7 @@
-// frontend/app/layout.tsx
+// frontend/src/app/layout.tsx
 import "./globals.css";
-import Navbar from "./components/Navbar";
-import Footer from "./components/Footer";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import { Toaster } from "sonner";
 
 export default function RootLayout({

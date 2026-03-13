@@ -1,0 +1,17 @@
+import jwt from "jsonwebtoken";
+import { JWT_SECRET } from "../config/runtime.js";
+export const userAuth = async (req, res, next) => {
+    try {
+        const token = req.cookies?.token;
+        if (!token)
+            return res.status(401).json({ error: "Unauthorized. Login required." });
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (!decoded?.userId)
+            return res.status(401).json({ error: "Invalid token." });
+        req.userId = decoded.userId;
+        next();
+    }
+    catch {
+        return res.status(401).json({ error: "Unauthorized. Invalid or expired token." });
+    }
+};

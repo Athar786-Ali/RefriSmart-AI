@@ -3,11 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "react-qr-code";
 import { toast } from "sonner";
-import ProductCard, { type ProductCardItem } from "./components/ProductCard";
-import ProductSkeleton from "./components/ProductSkeleton";
+import ProductCard from "@/components/ProductCard";
+import ProductSkeleton from "@/components/ProductSkeleton";
+import type { NormalizedProduct, Product } from "@/types";
 
-type Product = ProductCardItem;
-type NormalizedProduct = ProductCardItem & { normalizedType: "NEW" | "REFURBISHED" };
 type UserSession = { id: string; name?: string; email?: string } | null;
 
 export default function Home() {

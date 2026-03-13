@@ -1,4 +1,4 @@
-// frontend/app/components/Footer.tsx
+// frontend/src/components/Footer.tsx
 import BrandLogo from "./BrandLogo";
 
 export default function Footer() {

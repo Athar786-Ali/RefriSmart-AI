@@ -1,25 +1,11 @@
 "use client";
 
-type ProductType = "NEW" | "REFURBISHED";
+import type { NormalizedProduct, Product, ProductType } from "@/types";
 
-export type ProductCardItem = {
-  id: string;
-  title: string;
-  description: string;
-  price: number | string;
-  images?: string[] | string | null;
-  isUsed?: boolean;
-  productType?: ProductType;
-  conditionScore?: number | null;
-  ageMonths?: number | null;
-  warrantyType?: "BRAND" | "SHOP" | null;
-  warrantyExpiry?: string | null;
-  warrantyCertificateUrl?: string | null;
-  createdAt?: string | null;
-};
+export type ProductCardItem = Product;
 
 type ProductCardProps = {
-  product: ProductCardItem & { normalizedType: ProductType };
+  product: NormalizedProduct;
   onBuyNow: () => void;
 };
 
@@ -151,4 +137,3 @@ export default function ProductCard({ product, onBuyNow }: ProductCardProps) {
     </article>
   );
 }
-

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import DiagnosisSkeleton from "../components/DiagnosisSkeleton";
+import DiagnosisSkeleton from "@/components/DiagnosisSkeleton";
 
 type StructuredDiagnosis = {
   probableFault: string;
@@ -475,4 +475,3 @@ export default function AIDiagnosis() {
     </main>
   );
 }
-

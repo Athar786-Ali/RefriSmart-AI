@@ -4,17 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
-
-type DiagnosisItem = {
-  id: string;
-  appliance: string;
-  issue: string;
-  aiDiagnosis: string;
-  customer?: {
-    name?: string;
-    email?: string;
-  };
-};
+import type { DiagnosisItem } from "@/types";
 
 type ProductItem = {
   id: string;

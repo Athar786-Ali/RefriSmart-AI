@@ -3,8 +3,8 @@
 import { FormEvent, type ComponentType, useEffect, useMemo, useState } from "react";
 import { AirVent, Loader2, MapPin, Microwave, Refrigerator, WashingMachine, Wrench } from "lucide-react";
 import { toast } from "sonner";
-import ServiceActiveTrackerCard, { type ServiceBooking } from "../components/ServiceActiveTrackerCard";
-import ServiceHistoryCard from "../components/ServiceHistoryCard";
+import ServiceActiveTrackerCard, { type ServiceBooking } from "@/components/ServiceActiveTrackerCard";
+import ServiceHistoryCard from "@/components/ServiceHistoryCard";
 
 type GalleryItem = {
   id: string;
@@ -484,4 +484,3 @@ export default function ServicePage() {
     </main>
   );
 }
-
