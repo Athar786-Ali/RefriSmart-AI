@@ -2,6 +2,7 @@
 import "./globals.css";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import { Toaster } from "sonner";
 
 export default function RootLayout({
   children,
@@ -16,6 +17,14 @@ export default function RootLayout({
           {children}
         </div>
         <Footer />
+        <Toaster
+          richColors
+          closeButton
+          position="top-right"
+          toastOptions={{
+            className: "border border-slate-200 bg-white text-slate-900",
+          }}
+        />
       </body>
     </html>
   );

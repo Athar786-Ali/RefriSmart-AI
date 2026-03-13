@@ -1,0 +1,189 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
+
+type OrderStatus = "ORDER_PLACED" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED";
+
+type ProductOrder = {
+  id: string;
+  productTitle: string;
+  productImageUrl?: string | null;
+  price: number;
+  deliveryPhone: string;
+  deliveryAddress: string;
+  orderStatus: OrderStatus;
+  paymentStatus?: string;
+  invoiceUrl?: string | null;
+  createdAt: string;
+};
+
+const STATUS_STEPS: Array<{ key: OrderStatus; label: string }> = [
+  { key: "ORDER_PLACED", label: "Order Placed" },
+  { key: "DISPATCHED", label: "Dispatched" },
+  { key: "OUT_FOR_DELIVERY", label: "Out for Delivery" },
+  { key: "DELIVERED", label: "Delivered" },
+];
+
+const getStepIndex = (status: OrderStatus) => {
+  const index = STATUS_STEPS.findIndex((step) => step.key === status);
+  return index >= 0 ? index : 0;
+};
+
+export default function OrdersPage() {
+  const [highlightId, setHighlightId] = useState("");
+  const [user, setUser] = useState<{ id: string; name?: string } | null>(null);
+  const [orders, setOrders] = useState<ProductOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setHighlightId(params.get("highlight") || "");
+    }
+  }, []);
+
+  useEffect(() => {
+    const raw = localStorage.getItem("user");
+    try {
+      setUser(raw ? (JSON.parse(raw) as { id: string; name?: string }) : null);
+    } catch {
+      setUser(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    const loadOrders = async () => {
+      if (!user?.id) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/my?userId=${user.id}`);
+        const payload = await res.json().catch(() => []);
+        setOrders(Array.isArray(payload) ? payload : []);
+      } catch {
+        setOrders([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    void loadOrders();
+  }, [user?.id]);
+
+  const orderedData = useMemo(
+    () => [...orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [orders],
+  );
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-slate-950 px-4 py-12 text-slate-100">
+        <div className="mx-auto grid max-w-6xl gap-4">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={`order-skeleton-${i}`} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+              <div className="h-6 w-48 animate-pulse rounded bg-slate-700" />
+              <div className="mt-3 h-4 w-32 animate-pulse rounded bg-slate-700" />
+              <div className="mt-2 h-4 w-64 animate-pulse rounded bg-slate-800" />
+              <div className="mt-5 flex items-center gap-2 text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin text-cyan-300" />
+                <span className="text-sm">Preparing live delivery timeline...</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </main>
+    );
+  }
+
+  if (!user?.id) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100 px-4 py-12">
+        <div className="max-w-4xl mx-auto rounded-3xl border border-slate-800 bg-slate-900/70 p-8 text-center">
+          <h1 className="text-3xl font-black text-white">My Orders / Delivery Tracker</h1>
+          <p className="mt-3 text-slate-300">Please login to view your product orders and live delivery status.</p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-slate-100 px-4 py-10">
+      <div className="max-w-6xl mx-auto space-y-6">
+        <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
+          <p className="text-xs uppercase tracking-[0.18em] text-cyan-300 font-semibold">E-Commerce</p>
+          <h1 className="text-3xl font-black mt-2">My Orders / Delivery Tracker</h1>
+          <p className="text-sm text-slate-300 mt-2">Track each purchase from placement to final delivery.</p>
+        </section>
+
+        <section className="space-y-4">
+          {orderedData.map((order) => {
+            const stepIndex = getStepIndex(order.orderStatus);
+            const isHighlighted = highlightId && highlightId === order.id;
+            return (
+              <article
+                key={order.id}
+                className={`rounded-2xl border p-5 bg-slate-900/70 ${
+                  isHighlighted ? "border-cyan-400/60 shadow-lg shadow-cyan-900/20" : "border-slate-800"
+                }`}
+              >
+                <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+                  <div className="space-y-2">
+                    <p className="text-lg font-bold text-white">{order.productTitle}</p>
+                    <p className="text-cyan-300 font-semibold">₹{Number(order.price || 0).toLocaleString("en-IN")}</p>
+                    <p className="text-xs text-slate-300">Delivery Phone: {order.deliveryPhone}</p>
+                    <p className="text-xs text-slate-300">Delivery Address: {order.deliveryAddress}</p>
+                    <p className="text-xs text-slate-400">Ordered on {new Date(order.createdAt).toLocaleString()}</p>
+                    <p className="text-xs text-slate-300">
+                      Payment: <span className="font-semibold">{order.paymentStatus || "PENDING"}</span>
+                    </p>
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const url = order.invoiceUrl || `${process.env.NEXT_PUBLIC_API_URL}/docs/order-invoice/${order.id}`;
+                          window.open(url, "_blank", "noopener,noreferrer");
+                        }}
+                        className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/20"
+                      >
+                        Download Bill
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.15em] text-slate-400 font-semibold mb-3">Delivery Progress</p>
+                    <div className="space-y-3">
+                      {STATUS_STEPS.map((step, index) => {
+                        const done = index <= stepIndex;
+                        const last = index === STATUS_STEPS.length - 1;
+                        return (
+                          <div key={step.key} className="flex items-start gap-3">
+                            <div className="flex flex-col items-center">
+                              <span
+                                className={`h-3 w-3 rounded-full border ${done ? "bg-cyan-400 border-cyan-300" : "bg-slate-800 border-slate-600"}`}
+                              />
+                              {!last && (
+                                <span className={`mt-1 h-8 w-[2px] ${done ? "bg-cyan-400/80" : "bg-slate-700"}`} />
+                              )}
+                            </div>
+                            <p className={`text-sm ${done ? "text-slate-100 font-semibold" : "text-slate-400"}`}>{step.label}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+          {!orderedData.length && (
+            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-10 text-center text-slate-400">
+              No product orders found yet.
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}

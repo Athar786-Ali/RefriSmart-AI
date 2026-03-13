@@ -41,7 +41,8 @@ export const AnyNull = runtime.AnyNull;
 export const ModelName = {
     User: 'User',
     Product: 'Product',
-    ServiceBooking: 'ServiceBooking'
+    ServiceBooking: 'ServiceBooking',
+    Gallery: 'Gallery'
 };
 /*
  * Enums
@@ -84,7 +85,20 @@ export const ServiceBookingScalarFieldEnum = {
     issue: 'issue',
     aiDiagnosis: 'aiDiagnosis',
     status: 'status',
-    scheduledAt: 'scheduledAt'
+    scheduledAt: 'scheduledAt',
+    address: 'address',
+    locationLat: 'locationLat',
+    locationLng: 'locationLng',
+    finalCost: 'finalCost',
+    paymentQR: 'paymentQR',
+    invoiceUrl: 'invoiceUrl',
+    rating: 'rating'
+};
+export const GalleryScalarFieldEnum = {
+    id: 'id',
+    imageUrl: 'imageUrl',
+    caption: 'caption',
+    createdAt: 'createdAt'
 };
 export const SortOrder = {
     asc: 'asc',

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 type DiagnosisItem = {
   id: string;
@@ -39,6 +41,56 @@ type DashboardStats = {
   totalProducts: number;
   latestProducts: ProductItem[];
   applianceStats: ApplianceStat[];
+};
+
+type ServiceBookingItem = {
+  id: string;
+  appliance: string;
+  issue: string;
+  status: "PENDING" | "ASSIGNED" | "OUT_FOR_REPAIR" | "REPAIRING" | "FIXED" | "COMPLETED";
+  scheduledAt: string;
+  address?: string | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  finalCost?: number | null;
+  paymentQR?: string | null;
+  invoiceUrl?: string | null;
+  customer?: { name?: string; email?: string };
+  technician?: { name?: string; phone?: string } | null;
+  pincode?: string | null;
+};
+
+type OpsAnalytics = {
+  conversionRate: number;
+  avgSlaHours: number;
+  topFaults: Array<{ appliance: string; count: number }>;
+  marginByCategory: Record<string, number>;
+};
+
+type ShowcaseImage = {
+  id: string;
+  imageUrl: string;
+  mediaType?: "image" | "video";
+  caption?: string | null;
+  createdAt?: string;
+};
+
+type OrderItem = {
+  id: string;
+  productId: string;
+  productTitle: string;
+  productImageUrl?: string | null;
+  customerId: string;
+  customerName?: string | null;
+  deliveryPhone: string;
+  deliveryAddress: string;
+  orderStatus: "ORDER_PLACED" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED";
+  paymentStatus?: string;
+  price: number;
+  invoiceUrl?: string | null;
+  createdAt: string;
+  userName?: string | null;
+  userEmail?: string | null;
 };
 
 type NewProduct = {
@@ -111,6 +163,19 @@ type UploadResult = {
 export default function AdminDashboard() {
   const [data, setData] = useState<DiagnosisItem[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [opsBookings, setOpsBookings] = useState<ServiceBookingItem[]>([]);
+  const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [showcaseImages, setShowcaseImages] = useState<ShowcaseImage[]>([]);
+  const [opsAnalytics, setOpsAnalytics] = useState<OpsAnalytics | null>(null);
+  const [selectedStatusByBooking, setSelectedStatusByBooking] = useState<Record<string, ServiceBookingItem["status"]>>({});
+  const [selectedStatusByOrder, setSelectedStatusByOrder] = useState<Record<string, OrderItem["orderStatus"]>>({});
+  const [finalCostByBooking, setFinalCostByBooking] = useState<Record<string, string>>({});
+  const [galleryCaption, setGalleryCaption] = useState("");
+  const [galleryFile, setGalleryFile] = useState<File | null>(null);
+  const [galleryDragActive, setGalleryDragActive] = useState(false);
+  const [galleryUploading, setGalleryUploading] = useState(false);
+  const [deletingImageIds, setDeletingImageIds] = useState<Record<string, boolean>>({});
+  const [generatingInvoiceByOrder, setGeneratingInvoiceByOrder] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [selectedLog, setSelectedLog] = useState<DiagnosisItem | null>(null);
   const [newProd, setNewProd] = useState<NewProduct>(initialProduct);
@@ -173,12 +238,20 @@ export default function AdminDashboard() {
       if (!checkAdmin()) return;
 
       try {
-        const [dataRes, statsRes] = await Promise.all([
+        const [dataRes, statsRes, serviceRes, opsRes, galleryRes, ordersRes] = await Promise.all([
           fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/all-diagnoses`),
           fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/stats`),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/service-overview`),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/ops/analytics`),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/gallery`),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/orders`),
         ]);
         const dataPayload = await dataRes.json();
         let statsPayload = await statsRes.json().catch(() => null);
+        const servicePayload = await serviceRes.json().catch(() => null);
+        const opsPayload = await opsRes.json().catch(() => null);
+        const galleryPayload = await galleryRes.json().catch(() => null);
+        const ordersPayload = await ordersRes.json().catch(() => null);
 
         // Fallback to basic stats if enriched stats endpoint is unavailable.
         if (!statsRes.ok || !statsPayload || statsPayload?.error) {
@@ -198,6 +271,10 @@ export default function AdminDashboard() {
 
         setData(Array.isArray(dataPayload) ? dataPayload : []);
         setStats(normalizedStats);
+        setOpsBookings(Array.isArray(servicePayload?.bookings) ? servicePayload.bookings : []);
+        setShowcaseImages(Array.isArray(galleryPayload) ? galleryPayload : []);
+        setOrders(Array.isArray(ordersPayload) ? ordersPayload : []);
+        setOpsAnalytics(opsPayload && typeof opsPayload === "object" ? opsPayload : null);
       } catch (err) {
         console.error(err);
       } finally {
@@ -250,7 +327,7 @@ export default function AdminDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      alert("Please select a valid image file.");
+      toast.error("Please select a valid image file.");
       return;
     }
 
@@ -260,13 +337,13 @@ export default function AdminDashboard() {
 
     if (finalUpload.ok) {
       setNewProd((prev) => ({ ...prev, imageUrl: finalUpload.imageUrl }));
-      alert("Image uploaded successfully.");
+      toast.success("Image uploaded successfully.");
     } else {
       console.error("Upload failed:", {
         backend: backendUpload.error,
         fallback: finalUpload.error,
       });
-      alert(
+      toast.error(
         `Upload failed. Backend: ${backendUpload.error || "unknown"} | Fallback: ${finalUpload.error || "unknown"}`
       );
     }
@@ -278,7 +355,7 @@ export default function AdminDashboard() {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/delete-product/${id}`, { method: "DELETE" });
       if (res.ok) {
-        alert("Product deleted.");
+        toast.success("Product deleted.");
         window.location.reload();
       }
     } catch (err) {
@@ -290,8 +367,8 @@ export default function AdminDashboard() {
     e.preventDefault();
     const savedUser = localStorage.getItem("user");
     const user = savedUser ? JSON.parse(savedUser) : null;
-    if (!user) return alert("Login required.");
-    if (!newProd.imageUrl) return alert("Please upload a product image first.");
+    if (!user) return toast.error("Login required.");
+    if (!newProd.imageUrl) return toast.error("Please upload a product image first.");
     const isRefurbished = newProd.productType === "REFURBISHED";
     const totalAgeMonths = (Number(ageYears || 0) * 12) + Number(ageMonthsPart || 0);
     const computedWarrantyExpiry = toWarrantyExpiryFromDuration(warrantyDuration, warrantyDurationUnit);
@@ -315,12 +392,12 @@ export default function AdminDashboard() {
       });
 
       if (res.ok) {
-        alert("Product listed successfully.");
+        toast.success("Product listed successfully.");
         resetProductForm();
         window.location.reload();
       } else {
         const payload = await res.json();
-        alert(`${payload?.error || "Unable to add product."}${payload?.details ? `\n${payload.details}` : ""}`);
+        toast.error(`${payload?.error || "Unable to add product."}${payload?.details ? `\n${payload.details}` : ""}`);
       }
     } catch (err) {
       console.error(err);
@@ -328,7 +405,7 @@ export default function AdminDashboard() {
   };
 
   const handleSuggestPrice = async () => {
-    if (!newProd.price) return alert("Please enter base price first.");
+    if (!newProd.price) return toast.error("Please enter base price first.");
     const totalAgeMonths = (Number(ageYears || 0) * 12) + Number(ageMonthsPart || 0);
     setIsSuggestingPrice(true);
     try {
@@ -346,10 +423,10 @@ export default function AdminDashboard() {
       });
       const payload = await res.json();
       if (!res.ok) {
-        alert(payload?.error || "Unable to suggest price.");
+        toast.error(payload?.error || "Unable to suggest price.");
       } else {
         setNewProd((prev) => ({ ...prev, price: String(payload.suggestedPrice || prev.price) }));
-        alert(
+        toast.success(
           `AI Suggested Range: ₹${payload.recommendedMin} - ₹${payload.recommendedMax}\n` +
           `Quick Sale Price: ₹${payload.quickSalePrice}\n` +
           `Premium Listing Price: ₹${payload.premiumListingPrice}\n` +
@@ -359,20 +436,265 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       console.error(err);
-      alert("Price suggestion failed.");
+      toast.error("Price suggestion failed.");
     } finally {
       setIsSuggestingPrice(false);
     }
   };
 
+  const refreshServiceOps = async () => {
+    try {
+      const [serviceRes, opsRes, galleryRes, ordersRes] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/service-overview`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/ops/analytics`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/gallery`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/orders`),
+      ]);
+      const servicePayload = await serviceRes.json().catch(() => null);
+      const opsPayload = await opsRes.json().catch(() => null);
+      const galleryPayload = await galleryRes.json().catch(() => null);
+      const ordersPayload = await ordersRes.json().catch(() => null);
+      setOpsBookings(Array.isArray(servicePayload?.bookings) ? servicePayload.bookings : []);
+      setShowcaseImages(Array.isArray(galleryPayload) ? galleryPayload : []);
+      setOrders(Array.isArray(ordersPayload) ? ordersPayload : []);
+      setOpsAnalytics(opsPayload && typeof opsPayload === "object" ? opsPayload : null);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const updateBookingStatus = async (
+    bookingId: string,
+    status: "PENDING" | "ASSIGNED" | "OUT_FOR_REPAIR" | "REPAIRING" | "FIXED" | "COMPLETED",
+    finalCost?: string,
+  ) => {
+    const parsedFinalCost = finalCost && finalCost.trim() ? Number(finalCost) : undefined;
+    const previousBookings = [...opsBookings];
+    setOpsBookings((prev) =>
+      prev.map((booking) =>
+        booking.id === bookingId
+          ? {
+              ...booking,
+              status,
+              finalCost: Number.isFinite(parsedFinalCost) ? parsedFinalCost : booking.finalCost,
+            }
+          : booking,
+      ),
+    );
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/service/${bookingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status,
+          finalCost: Number.isFinite(parsedFinalCost) ? parsedFinalCost : undefined,
+        }),
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        setOpsBookings(previousBookings);
+        return toast.error(payload?.error || "Failed to update booking status.");
+      }
+      if (payload?.booking) {
+        setOpsBookings((prev) =>
+          prev.map((booking) => (booking.id === bookingId ? { ...booking, ...(payload.booking as ServiceBookingItem) } : booking)),
+        );
+      }
+      if (status === "FIXED") {
+        toast.success("Bill generated and payment request pushed to customer screen.");
+      }
+      await refreshServiceOps();
+    } catch (err) {
+      console.error(err);
+      setOpsBookings(previousBookings);
+      toast.error("Status update failed.");
+    }
+  };
+
+  const uploadGalleryItem = async () => {
+    if (!galleryFile) return toast.error("Please choose an image or video first.");
+    setGalleryUploading(true);
+    try {
+      const fileData = await toDataUrl(galleryFile);
+      const mediaType: "image" | "video" = galleryFile.type.startsWith("video/") ? "video" : "image";
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/gallery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileData,
+          mediaType,
+          caption: galleryCaption.trim() || null,
+        }),
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) return toast.error(payload?.error || "Failed to upload gallery item.");
+      toast.success("Live gallery updated.");
+      if (payload?.id && payload?.imageUrl) {
+        setShowcaseImages((prev) => [
+          {
+            id: String(payload.id),
+            imageUrl: String(payload.imageUrl),
+            mediaType: payload?.mediaType === "video" ? "video" : mediaType,
+            caption: payload?.caption || galleryCaption || null,
+            createdAt: new Date().toISOString(),
+          },
+          ...prev,
+        ]);
+      } else {
+        await refreshServiceOps();
+      }
+      setGalleryCaption("");
+      setGalleryFile(null);
+    } catch (err) {
+      console.error(err);
+      toast.error("Gallery upload failed.");
+    } finally {
+      setGalleryUploading(false);
+    }
+  };
+
+  const handleDeleteImage = async (id: string) => {
+    if (!id) return;
+    if (!confirm("Delete this gallery image?")) return;
+
+    const previousImages = [...showcaseImages];
+    setDeletingImageIds((prev) => ({ ...prev, [id]: true }));
+    setShowcaseImages((prev) => prev.filter((image) => image.id !== id));
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/gallery/${id}`, {
+        method: "DELETE",
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        setShowcaseImages(previousImages);
+        toast.error(payload?.error || "Failed to delete image.");
+      }
+    } catch (err) {
+      console.error(err);
+      setShowcaseImages(previousImages);
+      toast.error("Failed to delete image.");
+    } finally {
+      setDeletingImageIds((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+  };
+
+  const updateOrderStatus = async (
+    orderId: string,
+    orderStatus: OrderItem["orderStatus"],
+  ) => {
+    const previousOrders = [...orders];
+    setOrders((prev) =>
+      prev.map((order) => (order.id === orderId ? { ...order, orderStatus } : order)),
+    );
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderStatus }),
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        setOrders(previousOrders);
+        return toast.error(payload?.error || "Failed to update order status.");
+      }
+      if (payload?.order) {
+        setOrders((prev) => prev.map((order) => (order.id === orderId ? payload.order : order)));
+      }
+    } catch (err) {
+      console.error(err);
+      setOrders(previousOrders);
+      toast.error("Failed to update order status.");
+    }
+  };
+
+  const handleGenerateOrderBill = async (orderId: string) => {
+    setGeneratingInvoiceByOrder((prev) => ({ ...prev, [orderId]: true }));
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/orders/${orderId}/generate-invoice`, {
+        method: "POST",
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        return toast.error(payload?.error || "Failed to generate order bill.");
+      }
+      if (payload?.order) {
+        setOrders((prev) => prev.map((order) => (order.id === orderId ? payload.order : order)));
+      }
+      if (payload?.invoiceUrl) {
+        window.open(payload.invoiceUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to generate order bill.");
+    } finally {
+      setGeneratingInvoiceByOrder((prev) => {
+        const next = { ...prev };
+        delete next[orderId];
+        return next;
+      });
+    }
+  };
+
+  const downloadServiceDoc = async (docType: "invoice" | "warranty-certificate" | "service-report", bookingId?: string) => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/docs/${docType}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId: bookingId || "ADMIN",
+          amount: 2500,
+          gst: 18,
+          signature: "Golden Refrigeration Digital Sign",
+          notes: "Generated from admin operations panel",
+        }),
+      });
+      if (!res.ok) return toast.error("Failed to generate document.");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${docType}-${bookingId || "admin"}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   if (loading) {
-    return <div className="h-screen grid place-items-center text-slate-700 font-semibold">Loading admin dashboard...</div>;
+    return (
+      <div className="min-h-screen bg-slate-950 px-4 py-8 sm:px-6">
+        <div className="mx-auto grid max-w-7xl gap-4">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={`admin-skeleton-${i}`} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+              <div className="h-5 w-40 animate-pulse rounded bg-slate-700" />
+              <div className="mt-3 h-10 w-28 animate-pulse rounded bg-slate-800" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   const safeData = Array.isArray(data) ? data : [];
   const safeLatestProducts = Array.isArray(stats?.latestProducts) ? stats.latestProducts : [];
   const safeApplianceStats = Array.isArray(stats?.applianceStats) ? stats.applianceStats : [];
-
+  const safeBookings = Array.isArray(opsBookings) ? opsBookings : [];
+  const activeQueue = safeBookings.filter((service) =>
+    ["PENDING", "ASSIGNED", "OUT_FOR_REPAIR", "REPAIRING", "ON_WAY"].includes(String(service.status)),
+  );
+  const completedOperations = safeBookings.filter((service) =>
+    ["FIXED", "COMPLETED"].includes(String(service.status)),
+  );
+  const activeServiceCount = activeQueue.length;
+  const fixedReadyCount = safeBookings.filter((booking) => booking.status === "FIXED").length;
   return (
     <main className="min-h-screen px-4 sm:px-6 py-8 bg-[radial-gradient(circle_at_top_right,#0f172a_0%,#020617_45%,#000814_100%)]">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -383,32 +705,319 @@ export default function AdminDashboard() {
         </section>
 
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <article className="bg-slate-900/60 rounded-2xl border border-slate-700 p-6 shadow-lg hover:border-cyan-400/50 transition-all">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-300 font-semibold mb-2">Total Requests</p>
-            <h2 className="text-3xl font-black text-cyan-300">{stats?.totalBookings || 0}</h2>
+          <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-blue-950/30 transition-all hover:border-blue-500/40">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">Active Services</p>
+            <h2 className="mt-2 text-3xl font-black text-cyan-300">{activeServiceCount}</h2>
           </article>
-          <article className="bg-slate-900/60 rounded-2xl border border-slate-700 p-6 shadow-lg hover:border-cyan-400/50 transition-all">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-300 font-semibold mb-2">Registered Users</p>
-            <h2 className="text-3xl font-black text-white">{stats?.totalUsers || 0}</h2>
+          <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-blue-950/30 transition-all hover:border-emerald-500/40">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">Ready for Payment</p>
+            <h2 className="mt-2 text-3xl font-black text-emerald-300">{fixedReadyCount}</h2>
           </article>
-          <article className="bg-slate-900/60 rounded-2xl border border-slate-700 p-6 shadow-lg hover:border-cyan-400/50 transition-all">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-300 font-semibold mb-2">Inventory</p>
-            <h2 className="text-3xl font-black text-white">{stats?.totalProducts || 0}</h2>
+          <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-blue-950/30 transition-all hover:border-blue-500/40">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">Conversion</p>
+            <h2 className="mt-2 text-3xl font-black text-cyan-300">{opsAnalytics?.conversionRate ?? 0}%</h2>
           </article>
-          <article className="bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-600 text-white rounded-2xl border border-cyan-300/40 p-6 shadow-xl shadow-cyan-900/30">
-            <p className="text-xs uppercase tracking-[0.16em] text-cyan-100 font-semibold mb-2">AI Efficiency</p>
-            <h2 className="text-3xl font-black">98.4%</h2>
+          <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-blue-950/30 transition-all hover:border-blue-500/40">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">Avg SLA</p>
+            <h2 className="mt-2 text-3xl font-black text-cyan-300">{opsAnalytics?.avgSlaHours ?? 0}h</h2>
           </article>
         </section>
 
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-blue-950/30">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] font-semibold text-cyan-300">E-Commerce Ops</p>
+              <h3 className="text-xl font-black text-white mt-1">Live Orders Controller</h3>
+            </div>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-300 bg-slate-800 border border-slate-700 px-3 py-1 rounded-full">
+              {orders.length} orders
+            </span>
+          </div>
+
+          <div className="space-y-3 max-h-[36rem] overflow-auto pr-1">
+            {orders.map((order) => {
+              const status = selectedStatusByOrder[order.id] || order.orderStatus;
+              const isGeneratingInvoice = Boolean(generatingInvoiceByOrder[order.id]);
+              return (
+                <article
+                  key={order.id}
+                  className="rounded-xl border border-slate-700 bg-slate-900/90 p-4 transition-all duration-300 hover:border-blue-500/50"
+                >
+                  <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-semibold text-white">{order.productTitle}</p>
+                      <p className="text-xs text-cyan-300 font-semibold">₹{Number(order.price || 0).toLocaleString("en-IN")}</p>
+                      <p className="text-xs text-slate-300">
+                        Customer: <span className="font-semibold">{order.customerName || order.userName || "Unknown"}</span>
+                        {order.userEmail ? ` · ${order.userEmail}` : ""}
+                      </p>
+                      <p className="text-xs text-slate-300">
+                        Phone: <span className="font-semibold">{order.deliveryPhone || "N/A"}</span>
+                      </p>
+                      <p className="text-xs text-slate-300">
+                        Address: <span className="font-semibold">{order.deliveryAddress || "N/A"}</span>
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        Placed: {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}
+                      </p>
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 lg:w-56">
+                      <select
+                        value={status}
+                        onChange={(e) => {
+                          const next = e.target.value as OrderItem["orderStatus"];
+                          setSelectedStatusByOrder((prev) => ({ ...prev, [order.id]: next }));
+                          updateOrderStatus(order.id, next);
+                        }}
+                        className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-100"
+                      >
+                        <option value="ORDER_PLACED">Order Placed</option>
+                        <option value="DISPATCHED">Dispatched</option>
+                        <option value="OUT_FOR_DELIVERY">Out for Delivery</option>
+                        <option value="DELIVERED">Delivered</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateOrderBill(order.id)}
+                        disabled={isGeneratingInvoice}
+                        className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-60"
+                      >
+                        {isGeneratingInvoice ? "Generating..." : "Generate & Send Bill"}
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+            {!orders.length && (
+              <p className="text-xs text-slate-400">No incoming product orders yet.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-blue-950/30">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-black text-white">Live Service Controller</h3>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-300 bg-slate-800 border border-slate-700 px-3 py-1 rounded-full">
+                {activeQueue.length} active
+              </span>
+            </div>
+            <div className="space-y-3 max-h-[520px] overflow-auto pr-1">
+              {activeQueue.map((service) => {
+                const selectedStatus = selectedStatusByBooking[service.id] || service.status;
+                const draftFinalCost = finalCostByBooking[service.id] ?? (service.finalCost ? String(service.finalCost) : "");
+                return (
+                  <article
+                    key={service.id}
+                    className="rounded-xl border border-slate-700 bg-slate-900 p-3 transition-all duration-300 hover:border-blue-500/40 hover:shadow-md hover:shadow-blue-900/20"
+                  >
+                    <p className="text-sm font-semibold text-slate-100">{service.appliance}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{new Date(service.scheduledAt).toLocaleString()}</p>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      Customer: {service.contactName || service.customer?.name || "Unknown"}
+                    </p>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      Phone: {service.contactPhone || "Not provided"}
+                    </p>
+                    <p className="text-[11px] text-slate-300 mt-0.5 line-clamp-2">
+                      Address: {service.address || "Not provided"}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Technician: {service.technician?.name || "Unassigned"}</p>
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+                      <select
+                        value={selectedStatus}
+                        onChange={(e) => {
+                          const nextStatus = e.target.value as ServiceBookingItem["status"];
+                          if (nextStatus === "FIXED" && !draftFinalCost.trim()) {
+                            toast.error("Please enter final cost before moving to FIXED.");
+                            return;
+                          }
+                          setSelectedStatusByBooking((prev) => ({ ...prev, [service.id]: nextStatus }));
+                          updateBookingStatus(service.id, nextStatus, nextStatus === "FIXED" ? draftFinalCost : undefined);
+                        }}
+                        className="w-full p-2 rounded-md bg-slate-800 border border-slate-600 text-slate-100 text-xs"
+                      >
+                        <option value="PENDING">PENDING</option>
+                        <option value="ASSIGNED">ASSIGNED</option>
+                        <option value="OUT_FOR_REPAIR">ON_WAY</option>
+                        <option value="REPAIRING">REPAIRING</option>
+                        <option value="FIXED">FIXED</option>
+                        <option value="COMPLETED">COMPLETED</option>
+                      </select>
+                      <input
+                        value={draftFinalCost}
+                        onChange={(e) => setFinalCostByBooking((prev) => ({ ...prev, [service.id]: e.target.value }))}
+                        placeholder="Final Cost ₹"
+                        className="w-full sm:w-32 p-2 rounded-md bg-slate-800 border border-slate-600 text-slate-100 text-xs"
+                      />
+                    </div>
+                  </article>
+                );
+              })}
+              {!activeQueue.length && <p className="text-xs text-slate-400">No active services in queue.</p>}
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-blue-950/30">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-black text-white">Completed Operations Log</h3>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-300 bg-slate-800 border border-slate-700 px-3 py-1 rounded-full">
+                {completedOperations.length} completed
+              </span>
+            </div>
+            <div className="space-y-2 max-h-[520px] overflow-auto pr-1">
+              {completedOperations.map((service) => (
+                <article
+                  key={service.id}
+                  className="rounded-xl border border-slate-700 bg-slate-900/80 p-3 transition-all duration-300 hover:border-emerald-500/40"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-100">{service.appliance}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{new Date(service.scheduledAt).toLocaleString()}</p>
+                      <p className="text-xs text-emerald-300 mt-1">Final Cost: ₹{Number(service.finalCost || 0).toLocaleString()}</p>
+                    </div>
+                    <button
+                      onClick={() => downloadServiceDoc("invoice", service.id)}
+                      className="rounded-lg border border-slate-600 bg-transparent px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-cyan-400/60 hover:text-cyan-200"
+                    >
+                      View Invoice
+                    </button>
+                  </div>
+                </article>
+              ))}
+              {!completedOperations.length && <p className="text-xs text-slate-400">No completed services yet.</p>}
+            </div>
+          </article>
+        </section>
+
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl shadow-blue-950/30">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] font-semibold text-cyan-300">Media Manager</p>
+              <h3 className="text-xl font-black text-white mt-1">On-Site Work Showcase</h3>
+            </div>
+            <button
+              onClick={refreshServiceOps}
+              className="text-xs px-3 py-1.5 rounded-lg border border-cyan-400/40 text-cyan-200 hover:bg-cyan-500/10"
+            >
+              Refresh
+            </button>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="lg:col-span-2 rounded-xl border border-dashed border-slate-600 bg-slate-900 p-5">
+              <p className="text-sm text-slate-300 mb-3">Upload Live Repair Photos / Videos</p>
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setGalleryDragActive(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  setGalleryDragActive(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setGalleryDragActive(false);
+                  const dropped = e.dataTransfer.files?.[0];
+                  if (dropped && (dropped.type.startsWith("image/") || dropped.type.startsWith("video/"))) {
+                    setGalleryFile(dropped);
+                  }
+                }}
+                className={`rounded-lg border border-dashed p-6 text-center transition ${
+                  galleryDragActive ? "border-cyan-400 bg-cyan-500/10" : "border-slate-700 bg-slate-900"
+                }`}
+              >
+                <p className="text-sm text-slate-300">Drop image/video here or browse file</p>
+                <input
+                  type="file"
+                  accept="image/*,video/mp4,video/webm"
+                  onChange={(e) => setGalleryFile(e.target.files?.[0] || null)}
+                  className="mt-3 w-full text-xs text-slate-300 file:mr-2 file:rounded-md file:border file:border-cyan-500/40 file:bg-cyan-500/20 file:px-3 file:py-1.5 file:text-cyan-200"
+                />
+                {galleryFile && <p className="mt-2 text-xs text-cyan-300">{galleryFile.name}</p>}
+              </div>
+              <input
+                value={galleryCaption}
+                onChange={(e) => setGalleryCaption(e.target.value)}
+                placeholder="Caption for this repair photo"
+                className="mt-3 w-full rounded-md border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-100"
+              />
+              <button
+                onClick={uploadGalleryItem}
+                disabled={galleryUploading}
+                className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+              >
+                {galleryUploading ? "Uploading..." : "Publish Showcase Image"}
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs uppercase tracking-wide text-slate-300 font-semibold">Recent Uploads</p>
+                <span className="text-[11px] text-slate-400">{showcaseImages.length} media files</span>
+              </div>
+              <div className="space-y-3 max-h-[28rem] overflow-auto pr-1">
+                {showcaseImages.map((item) => {
+                  const isDeleting = Boolean(deletingImageIds[item.id]);
+                  const isVideo =
+                    item.mediaType === "video" ||
+                    item.imageUrl.toLowerCase().includes(".mp4") ||
+                    item.imageUrl.toLowerCase().includes(".webm");
+                  return (
+                    <article
+                      key={item.id}
+                      className="overflow-hidden rounded-lg border border-slate-700 bg-slate-800/90 transition-all duration-300 hover:border-cyan-400/40"
+                    >
+                      {isVideo ? (
+                        <video
+                          src={item.imageUrl}
+                          controls
+                          preload="metadata"
+                          className="h-28 w-full object-cover"
+                        />
+                      ) : (
+                        <img src={item.imageUrl} alt={item.caption || "Showcase"} className="h-28 w-full object-cover" />
+                      )}
+                      <div className="p-2.5 flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-[11px] text-slate-200 truncate">
+                            {item.caption || "Live repair snapshot"}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            {item.createdAt ? new Date(item.createdAt).toLocaleString() : "Uploaded image"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteImage(item.id)}
+                          disabled={isDeleting}
+                          className="inline-flex items-center justify-center rounded-md border border-red-500/50 bg-red-500/10 p-2 text-red-300 hover:bg-red-500 hover:text-white disabled:opacity-60"
+                          aria-label="Delete gallery image"
+                          title="Delete image"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+                {!showcaseImages.length && <p className="text-xs text-slate-400">No showcase images uploaded yet.</p>}
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
+          <div className="space-y-8 lg:col-span-3 lg:order-2">
             <div className="bg-slate-900/60 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
               <div className="px-5 sm:px-6 py-5 border-b border-slate-700 bg-gradient-to-r from-slate-900 to-slate-800">
                 <h3 className="text-xl font-black text-white">Customer consultations</h3>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
+                <table className="hidden w-full text-left md:table">
                   <thead className="bg-slate-800/80 text-xs uppercase tracking-wide text-slate-300 font-semibold">
                     <tr>
                       <th className="px-6 py-3">Customer</th>
@@ -447,6 +1056,32 @@ export default function AdminDashboard() {
                     ))}
                   </tbody>
                 </table>
+                <div className="space-y-3 p-4 md:hidden">
+                  {safeData.map((item) => (
+                    <article
+                      key={item.id}
+                      className="rounded-xl border border-slate-700 bg-slate-900 p-3"
+                    >
+                      <p className="text-sm font-semibold text-slate-100">{item.customer?.name || "Unknown"}</p>
+                      <p className="text-xs text-slate-400">{item.customer?.email || "No email"}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1 text-[10px] font-semibold uppercase text-slate-300">
+                          {item.appliance}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase text-cyan-300">
+                          <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
+                          Processed
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setSelectedLog(item)}
+                        className="mt-3 min-h-[48px] w-full rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-900 transition-transform hover:bg-cyan-400 active:scale-95"
+                      >
+                        View
+                      </button>
+                    </article>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -504,7 +1139,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="space-y-8">
+          <div className="space-y-8 lg:col-span-3 lg:order-1">
             <div className="bg-slate-900/60 p-6 rounded-2xl border border-slate-700 shadow-xl">
               <h3 className="text-xl font-black text-white mb-5">Add product</h3>
               <p className="text-xs text-slate-300 mb-4 leading-relaxed">
@@ -720,7 +1355,7 @@ export default function AdminDashboard() {
                     <div className="h-1.5 w-full bg-slate-700 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-cyan-400"
-                        style={{ width: `${(s._count._all / (stats.totalBookings || 1)) * 100}%` }}
+                        style={{ width: `${(s._count._all / (stats?.totalBookings || 1)) * 100}%` }}
                       />
                     </div>
                   </div>
@@ -732,8 +1367,9 @@ export default function AdminDashboard() {
       </div>
 
       {selectedLog && (
-        <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 w-full max-w-xl rounded-3xl border border-slate-700 shadow-2xl p-6 sm:p-8 relative">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-sm md:items-center md:p-4">
+          <div className="relative w-full max-w-xl rounded-t-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl sm:p-8 md:rounded-3xl">
+            <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-slate-600 md:hidden" />
             <button
               onClick={() => setSelectedLog(null)}
               className="absolute top-5 right-5 text-slate-400 hover:text-white text-2xl font-semibold"

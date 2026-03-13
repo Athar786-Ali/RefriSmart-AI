@@ -386,7 +386,8 @@ type FieldRefInputType<Model, FieldType> = Model extends never ? never : FieldRe
 export const ModelName = {
   User: 'User',
   Product: 'Product',
-  ServiceBooking: 'ServiceBooking'
+  ServiceBooking: 'ServiceBooking',
+  Gallery: 'Gallery'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -402,7 +403,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "product" | "serviceBooking"
+    modelProps: "user" | "product" | "serviceBooking" | "gallery"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -628,6 +629,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    Gallery: {
+      payload: Prisma.$GalleryPayload<ExtArgs>
+      fields: Prisma.GalleryFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.GalleryFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GalleryPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.GalleryFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GalleryPayload>
+        }
+        findFirst: {
+          args: Prisma.GalleryFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GalleryPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.GalleryFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GalleryPayload>
+        }
+        findMany: {
+          args: Prisma.GalleryFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GalleryPayload>[]
+        }
+        create: {
+          args: Prisma.GalleryCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GalleryPayload>
+        }
+        createMany: {
+          args: Prisma.GalleryCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.GalleryCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GalleryPayload>[]
+        }
+        delete: {
+          args: Prisma.GalleryDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GalleryPayload>
+        }
+        update: {
+          args: Prisma.GalleryUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GalleryPayload>
+        }
+        deleteMany: {
+          args: Prisma.GalleryDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.GalleryUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.GalleryUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GalleryPayload>[]
+        }
+        upsert: {
+          args: Prisma.GalleryUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GalleryPayload>
+        }
+        aggregate: {
+          args: Prisma.GalleryAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateGallery>
+        }
+        groupBy: {
+          args: Prisma.GalleryGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GalleryGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.GalleryCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GalleryCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -707,10 +782,27 @@ export const ServiceBookingScalarFieldEnum = {
   issue: 'issue',
   aiDiagnosis: 'aiDiagnosis',
   status: 'status',
-  scheduledAt: 'scheduledAt'
+  scheduledAt: 'scheduledAt',
+  address: 'address',
+  locationLat: 'locationLat',
+  locationLng: 'locationLng',
+  finalCost: 'finalCost',
+  paymentQR: 'paymentQR',
+  invoiceUrl: 'invoiceUrl',
+  rating: 'rating'
 } as const
 
 export type ServiceBookingScalarFieldEnum = (typeof ServiceBookingScalarFieldEnum)[keyof typeof ServiceBookingScalarFieldEnum]
+
+
+export const GalleryScalarFieldEnum = {
+  id: 'id',
+  imageUrl: 'imageUrl',
+  caption: 'caption',
+  createdAt: 'createdAt'
+} as const
+
+export type GalleryScalarFieldEnum = (typeof GalleryScalarFieldEnum)[keyof typeof GalleryScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -973,6 +1065,7 @@ export type GlobalOmitConfig = {
   user?: Prisma.UserOmit
   product?: Prisma.ProductOmit
   serviceBooking?: Prisma.ServiceBookingOmit
+  gallery?: Prisma.GalleryOmit
 }
 
 /* Types for Logging */

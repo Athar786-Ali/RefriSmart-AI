@@ -26,7 +26,9 @@ export const WarrantyType = {
 };
 export const Status = {
     PENDING: 'PENDING',
-    IN_PROGRESS: 'IN_PROGRESS',
-    COMPLETED: 'COMPLETED',
-    CANCELLED: 'CANCELLED'
+    ASSIGNED: 'ASSIGNED',
+    OUT_FOR_REPAIR: 'OUT_FOR_REPAIR',
+    REPAIRING: 'REPAIRING',
+    FIXED: 'FIXED',
+    COMPLETED: 'COMPLETED'
 };

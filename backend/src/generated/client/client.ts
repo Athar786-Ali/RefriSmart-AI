@@ -56,3 +56,8 @@ export type Product = Prisma.ProductModel
  * 
  */
 export type ServiceBooking = Prisma.ServiceBookingModel
+/**
+ * Model Gallery
+ * 
+ */
+export type Gallery = Prisma.GalleryModel

@@ -1,7 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import DiagnosisSkeleton from "../components/DiagnosisSkeleton";
+
+type StructuredDiagnosis = {
+  probableFault: string;
+  urgency: "LOW" | "MEDIUM" | "HIGH";
+  partsList: string[];
+  estimatedCostMin: number;
+  estimatedCostMax: number;
+  actionPlan: string;
+};
+
+type ContactInfo = {
+  phone: string;
+  call: string;
+  whatsapp: string;
+  sms: string;
+};
+
+type SpeechRecognitionCtor = new () => {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start: () => void;
+  onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }>> }) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+};
 
 type HistoryItem = {
   id: string;
@@ -9,12 +36,32 @@ type HistoryItem = {
   issue: string;
   aiDiagnosis: string;
   scheduledAt: string;
+  status?: string;
+};
+
+const toDateTimeLocalValue = (date: Date) => {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
 export default function AIDiagnosis() {
   const [appliance, setAppliance] = useState("Refrigerator");
   const [issue, setIssue] = useState("");
   const [result, setResult] = useState("");
+  const [structured, setStructured] = useState<StructuredDiagnosis | null>(null);
+  const [bookingDateTime, setBookingDateTime] = useState(() => toDateTimeLocalValue(new Date(Date.now() + 2 * 60 * 60 * 1000)));
+  const [bookingAddress, setBookingAddress] = useState("");
+  const [bookingLat, setBookingLat] = useState("");
+  const [bookingLng, setBookingLng] = useState("");
+  const [contact, setContact] = useState<ContactInfo>({
+    phone: "9060877595",
+    call: "tel:9060877595",
+    whatsapp: "https://wa.me/919060877595",
+    sms: "sms:+919060877595",
+  });
+  const [isListening, setIsListening] = useState(false);
+  const [isBookingLoading, setIsBookingLoading] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<HistoryItem | null>(null);
@@ -34,7 +81,7 @@ export default function AIDiagnosis() {
     if (!userId) return;
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/history/${userId}`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/history/${userId}`, { credentials: "include" });
       const data = await res.json();
       if (Array.isArray(data)) {
         setHistory(data);
@@ -48,51 +95,177 @@ export default function AIDiagnosis() {
     fetchHistory();
   }, [fetchHistory]);
 
+  const startVoiceInput = () => {
+    const speechWindow = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionCtor;
+      webkitSpeechRecognition?: SpeechRecognitionCtor;
+    };
+    const SpeechRecognition =
+      speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Voice input is not supported in this browser.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-IN";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    setIsListening(true);
+    recognition.start();
+    recognition.onresult = (event: { results?: ArrayLike<ArrayLike<{ transcript?: string }>> }) => {
+      const transcript = event?.results?.[0]?.[0]?.transcript || "";
+      if (transcript) {
+        setIssue((prev) => (prev ? `${prev}. ${transcript}` : transcript));
+      }
+    };
+    recognition.onerror = () => {
+      setIsListening(false);
+    };
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+  };
+
   const handleDiagnose = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setResult("");
+    setStructured(null);
 
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ai/diagnose`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appliance, issue, userId: getUserId() }),
+        credentials: "include",
+        body: JSON.stringify({ appliance, issue }),
       });
 
       const data = await res.json();
       if (res.ok) {
         setResult(data.diagnosis);
-        fetchHistory();
+        setStructured(data.structured || null);
+        if (data.contact) setContact(data.contact as ContactInfo);
+        toast.success("Diagnosis completed.");
       } else {
         setResult(data?.error || data?.details || "AI service is currently unavailable. Please try again.");
+        toast.error(data?.error || "Diagnosis failed.");
       }
     } catch {
       setResult("Connection error. Please check the backend service.");
+      toast.error("Connection error. Please check backend service.");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported in this browser.");
+      return;
+    }
+
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setBookingLat(String(position.coords.latitude.toFixed(6)));
+        setBookingLng(String(position.coords.longitude.toFixed(6)));
+        setGpsLoading(false);
+        toast.success("GPS location fetched.");
+      },
+      () => {
+        setGpsLoading(false);
+        toast.error("Unable to fetch location. Please enter location manually.");
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
+
+  const handleBookTechnician = async () => {
+    const userId = getUserId();
+    if (!userId) {
+      toast.error("Please login first.");
+      return;
+    }
+    if (!issue.trim()) {
+      toast.error("Please enter issue details first.");
+      return;
+    }
+    if (!bookingAddress.trim()) {
+      toast.error("Please enter service address.");
+      return;
+    }
+    if (!bookingDateTime) {
+      toast.error("Please select booking date and time.");
+      return;
+    }
+
+    setIsBookingLoading(true);
+    try {
+      const bookingSlot = new Date(bookingDateTime);
+      if (Number.isNaN(bookingSlot.getTime())) {
+        toast.error("Please select a valid date/time.");
+        return;
+      }
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/service/book`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          userId,
+          appliance,
+          issue,
+          fullName: (() => {
+            try {
+              const raw = localStorage.getItem("user");
+              return raw ? JSON.parse(raw)?.name || "" : "";
+            } catch {
+              return "";
+            }
+          })(),
+          address: bookingAddress,
+          lat: bookingLat || undefined,
+          lng: bookingLng || undefined,
+          slot: bookingSlot.toISOString(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || "Booking failed.");
+      } else {
+        toast.success("Technician booked successfully. Admin has been notified.");
+        fetchHistory();
+      }
+    } catch {
+      toast.error("Booking service is unavailable right now.");
+    } finally {
+      setIsBookingLoading(false);
+    }
+  };
+
+  const urgencyStyle =
+    structured?.urgency === "HIGH"
+      ? "bg-red-50 border-red-200 text-red-700"
+      : structured?.urgency === "MEDIUM"
+        ? "bg-amber-50 border-amber-200 text-amber-700"
+        : "bg-emerald-50 border-emerald-200 text-emerald-700";
+
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-10 bg-[radial-gradient(circle_at_top_right,#0f172a_0%,#020617_45%,#000814_100%)]">
-      <div className="max-w-6xl mx-auto grid lg:grid-cols-[1.2fr_0.8fr] gap-8">
-        <section className="rounded-[2rem] border border-cyan-400/20 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-cyan-900/20 p-6 sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">AI Assistant</p>
-          <h1 className="text-3xl sm:text-4xl font-black text-white mt-3">Smart appliance diagnosis</h1>
-          <p className="text-slate-300 mt-3 mb-8">
-            Describe the problem and get technician-style guidance in seconds.
-          </p>
+    <main className="min-h-screen bg-slate-50 px-4 py-12 sm:px-6 md:py-16">
+      <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">AI Assistant</p>
+          <h1 className="mt-3 text-4xl font-extrabold tracking-tight text-slate-900 md:text-5xl lg:text-6xl">Smart appliance diagnosis</h1>
+          <p className="mb-8 mt-3 text-slate-600">Describe the problem and get technician-style guidance in seconds.</p>
 
           <form onSubmit={handleDiagnose} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wide mb-2">
-                Appliance type
-              </label>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Appliance type</label>
               <select
                 value={appliance}
                 onChange={(e) => setAppliance(e.target.value)}
-                className="w-full p-4 rounded-xl bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-cyan-400 outline-none text-slate-100 font-medium"
+                className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white p-4 font-medium text-slate-900 outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option>Refrigerator</option>
                 <option>Air Conditioner</option>
@@ -102,86 +275,197 @@ export default function AIDiagnosis() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wide mb-2">
-                Issue details
-              </label>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Issue details</label>
               <textarea
                 placeholder="Example: Cooling is inconsistent and there is noise near the compressor."
-                className="w-full p-4 rounded-xl bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-cyan-400 outline-none min-h-[150px] text-slate-100 placeholder:text-slate-400"
+                className="min-h-[150px] w-full rounded-xl border border-slate-200 bg-white p-4 text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500"
                 value={issue}
                 onChange={(e) => setIssue(e.target.value)}
                 required
               />
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={startVoiceInput}
+                  className="min-h-[48px] rounded-lg border border-blue-200 px-3 py-2 text-xs text-blue-700 hover:bg-blue-50"
+                >
+                  {isListening ? "Listening..." : "Voice Input"}
+                </button>
+              </div>
             </div>
 
             <button
               disabled={loading}
-              className="w-full bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-900 font-semibold py-4 rounded-xl hover:from-cyan-300 hover:to-blue-400 disabled:opacity-60 shadow-lg shadow-cyan-900/30"
+              className="min-h-[48px] w-full rounded-xl bg-blue-600 py-4 font-semibold text-white shadow-sm transition-transform hover:bg-blue-700 active:scale-95 disabled:opacity-60"
             >
               {loading ? "Analyzing..." : "Get AI Diagnosis"}
             </button>
           </form>
 
-          {result && (
-            <div className="mt-8 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 p-6 text-white shadow-2xl shadow-cyan-900/30 border border-cyan-300/40">
-              <h3 className="text-lg font-bold mb-2">Golden Refrigeration Technician Advice</h3>
-              <p className="leading-relaxed text-cyan-50 whitespace-pre-wrap">{result}</p>
+          {loading ? (
+            <div className="mt-8">
+              <DiagnosisSkeleton />
             </div>
-          )}
+          ) : result ? (
+            <div className="mt-8 space-y-4">
+              <div className="rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-500 to-blue-600 p-6 text-white shadow-lg">
+                <h3 className="mb-2 text-lg font-bold">Golden Refrigeration Technician Advice</h3>
+                <p className="whitespace-pre-wrap leading-relaxed text-cyan-50">{result}</p>
+              </div>
+
+              {structured && (
+                <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h4 className="font-bold text-slate-900">Structured Diagnosis</h4>
+                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${urgencyStyle}`}>
+                      Urgency: {structured.urgency}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-700">
+                    <span className="font-semibold text-blue-600">Probable fault: </span>
+                    {structured.probableFault}
+                  </p>
+                  <p className="text-sm text-slate-700">
+                    <span className="font-semibold text-blue-600">Estimated cost: </span>
+                    ₹{Number(structured.estimatedCostMin || 0).toLocaleString()} - ₹
+                    {Number(structured.estimatedCostMax || 0).toLocaleString()}
+                  </p>
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Likely parts</p>
+                    <div className="flex flex-wrap gap-2">
+                      {structured.partsList.map((part, idx) => (
+                        <span key={`${part}-${idx}`} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
+                          {part}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4 rounded-2xl border border-blue-200 bg-blue-50/70 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="font-bold text-slate-900">Quick Booking Desk</h4>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+                    Booking starts only after confirmation
+                  </span>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Appliance (Auto-selected)
+                    </label>
+                    <input value={appliance} readOnly className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white p-3 text-slate-900 outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Preferred Date & Time
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={bookingDateTime}
+                      onChange={(e) => setBookingDateTime(e.target.value)}
+                      className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white p-3 text-slate-900 outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Service Address</label>
+                  <textarea
+                    value={bookingAddress}
+                    onChange={(e) => setBookingAddress(e.target.value)}
+                    placeholder="Enter full address with landmark and pincode"
+                    className="min-h-[90px] w-full rounded-xl border border-slate-200 bg-white p-3 text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleUseCurrentLocation}
+                    disabled={gpsLoading}
+                    className="min-h-[48px] rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-blue-700 disabled:opacity-60"
+                  >
+                    {gpsLoading ? "Fetching GPS..." : "📍 Use Current Location (GPS)"}
+                  </button>
+                  {(bookingLat && bookingLng) && <span className="text-xs text-slate-600">GPS: {bookingLat}, {bookingLng}</span>}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleBookTechnician}
+                  disabled={isBookingLoading}
+                  className="min-h-[48px] w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition-transform active:scale-95 disabled:opacity-60"
+                >
+                  {isBookingLoading ? "Booking..." : "Confirm & Book Technician"}
+                </button>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <a href={contact.call} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">Call: {contact.phone}</a>
+                  <a href={contact.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white">WhatsApp</a>
+                  <a href={`${contact.sms}?body=Hello technician, I need service support.`} className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white">Message</a>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </section>
 
-        <section className="rounded-[2rem] border border-cyan-400/20 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-cyan-900/20 p-6 sm:p-8 h-fit">
-          <h2 className="text-2xl font-black text-white">Consultation history</h2>
-          <p className="text-slate-300 text-sm mt-2 mb-6">Review your previous diagnosis records.</p>
+        <section className="h-fit rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <h2 className="text-2xl font-black text-slate-900">Consultation history</h2>
+          <p className="mb-6 mt-2 text-sm text-slate-600">Review your previous diagnosis records.</p>
 
           {history.length > 0 ? (
-            <div className="space-y-3 max-h-[28rem] overflow-auto pr-1">
+            <div className="max-h-[28rem] space-y-3 overflow-auto pr-1">
               {history.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setSelectedItem(item)}
-                  className="w-full text-left bg-slate-800 border border-slate-700 p-4 rounded-xl hover:border-cyan-400/60 hover:bg-cyan-500/10"
+                  className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-blue-300 hover:bg-blue-50/50"
                 >
-                  <div className="flex justify-between items-start gap-2 mb-1">
-                    <span className="text-cyan-300 font-semibold text-sm uppercase">{item.appliance}</span>
-                    <span className="text-slate-400 text-xs">{new Date(item.scheduledAt).toLocaleDateString()}</span>
+                  <div className="mb-1 flex items-start justify-between gap-2">
+                    <span className="text-sm font-semibold uppercase text-blue-600">{item.appliance}</span>
+                    <span className="text-xs text-slate-500">{new Date(item.scheduledAt).toLocaleDateString()}</span>
                   </div>
-                  <p className="text-slate-100 text-sm font-medium line-clamp-2">{item.issue}</p>
+                  <p className="line-clamp-2 text-sm font-medium text-slate-900">{item.issue}</p>
+                  <p className="mt-1 text-[11px] uppercase tracking-wide text-slate-500">{item.status || "PENDING"}</p>
                 </button>
               ))}
             </div>
           ) : (
-            <p className="text-slate-400 text-sm">No consultations yet. Submit your first diagnosis request.</p>
+            <p className="text-sm text-slate-500">No consultations yet. Submit your first diagnosis request.</p>
           )}
         </section>
       </div>
 
       {selectedItem && (
-        <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-xl rounded-3xl shadow-2xl p-6 sm:p-8 relative">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-0 backdrop-blur-sm md:items-center md:p-4">
+          <div className="relative w-full max-w-xl rounded-t-3xl border border-slate-200 bg-white p-6 shadow-2xl sm:p-8 md:rounded-3xl">
+            <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-slate-300 md:hidden" />
             <button
               onClick={() => setSelectedItem(null)}
-              className="absolute top-5 right-5 text-slate-400 hover:text-white text-2xl font-semibold"
+              className="absolute right-5 top-5 text-2xl font-semibold text-slate-400 hover:text-slate-900"
             >
               ×
             </button>
 
-            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300 font-semibold">{selectedItem.appliance}</p>
-            <h3 className="text-2xl font-black text-white mt-2">Diagnosis details</h3>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">{selectedItem.appliance}</p>
+            <h3 className="mt-2 text-2xl font-black text-slate-900">Diagnosis details</h3>
 
-            <div className="mt-6 rounded-xl bg-slate-800 border border-slate-700 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-300 font-semibold mb-1">Issue</p>
-              <p className="text-slate-100">{selectedItem.issue}</p>
+            <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Issue</p>
+              <p className="text-slate-900">{selectedItem.issue}</p>
             </div>
 
             <div className="mt-4">
-              <p className="text-xs uppercase tracking-wide text-cyan-300 font-semibold mb-2">Recommendation</p>
-              <p className="text-slate-300 whitespace-pre-wrap leading-relaxed">{selectedItem.aiDiagnosis}</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-600">Recommendation</p>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{selectedItem.aiDiagnosis}</p>
             </div>
 
             <button
               onClick={() => setSelectedItem(null)}
-              className="mt-7 w-full bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-900 py-3 rounded-xl font-semibold hover:from-cyan-300 hover:to-blue-400"
+              className="mt-7 min-h-[48px] w-full rounded-xl bg-blue-600 py-3 font-semibold text-white transition-transform hover:bg-blue-700 active:scale-95"
             >
               Close
             </button>
@@ -191,3 +475,4 @@ export default function AIDiagnosis() {
     </main>
   );
 }
+

@@ -20,8 +20,24 @@ export type ServiceBookingModel = runtime.Types.Result.DefaultSelection<Prisma.$
 
 export type AggregateServiceBooking = {
   _count: ServiceBookingCountAggregateOutputType | null
+  _avg: ServiceBookingAvgAggregateOutputType | null
+  _sum: ServiceBookingSumAggregateOutputType | null
   _min: ServiceBookingMinAggregateOutputType | null
   _max: ServiceBookingMaxAggregateOutputType | null
+}
+
+export type ServiceBookingAvgAggregateOutputType = {
+  locationLat: number | null
+  locationLng: number | null
+  finalCost: number | null
+  rating: number | null
+}
+
+export type ServiceBookingSumAggregateOutputType = {
+  locationLat: number | null
+  locationLng: number | null
+  finalCost: number | null
+  rating: number | null
 }
 
 export type ServiceBookingMinAggregateOutputType = {
@@ -32,6 +48,13 @@ export type ServiceBookingMinAggregateOutputType = {
   aiDiagnosis: string | null
   status: $Enums.Status | null
   scheduledAt: Date | null
+  address: string | null
+  locationLat: number | null
+  locationLng: number | null
+  finalCost: number | null
+  paymentQR: string | null
+  invoiceUrl: string | null
+  rating: number | null
 }
 
 export type ServiceBookingMaxAggregateOutputType = {
@@ -42,6 +65,13 @@ export type ServiceBookingMaxAggregateOutputType = {
   aiDiagnosis: string | null
   status: $Enums.Status | null
   scheduledAt: Date | null
+  address: string | null
+  locationLat: number | null
+  locationLng: number | null
+  finalCost: number | null
+  paymentQR: string | null
+  invoiceUrl: string | null
+  rating: number | null
 }
 
 export type ServiceBookingCountAggregateOutputType = {
@@ -52,9 +82,30 @@ export type ServiceBookingCountAggregateOutputType = {
   aiDiagnosis: number
   status: number
   scheduledAt: number
+  address: number
+  locationLat: number
+  locationLng: number
+  finalCost: number
+  paymentQR: number
+  invoiceUrl: number
+  rating: number
   _all: number
 }
 
+
+export type ServiceBookingAvgAggregateInputType = {
+  locationLat?: true
+  locationLng?: true
+  finalCost?: true
+  rating?: true
+}
+
+export type ServiceBookingSumAggregateInputType = {
+  locationLat?: true
+  locationLng?: true
+  finalCost?: true
+  rating?: true
+}
 
 export type ServiceBookingMinAggregateInputType = {
   id?: true
@@ -64,6 +115,13 @@ export type ServiceBookingMinAggregateInputType = {
   aiDiagnosis?: true
   status?: true
   scheduledAt?: true
+  address?: true
+  locationLat?: true
+  locationLng?: true
+  finalCost?: true
+  paymentQR?: true
+  invoiceUrl?: true
+  rating?: true
 }
 
 export type ServiceBookingMaxAggregateInputType = {
@@ -74,6 +132,13 @@ export type ServiceBookingMaxAggregateInputType = {
   aiDiagnosis?: true
   status?: true
   scheduledAt?: true
+  address?: true
+  locationLat?: true
+  locationLng?: true
+  finalCost?: true
+  paymentQR?: true
+  invoiceUrl?: true
+  rating?: true
 }
 
 export type ServiceBookingCountAggregateInputType = {
@@ -84,6 +149,13 @@ export type ServiceBookingCountAggregateInputType = {
   aiDiagnosis?: true
   status?: true
   scheduledAt?: true
+  address?: true
+  locationLat?: true
+  locationLng?: true
+  finalCost?: true
+  paymentQR?: true
+  invoiceUrl?: true
+  rating?: true
   _all?: true
 }
 
@@ -125,6 +197,18 @@ export type ServiceBookingAggregateArgs<ExtArgs extends runtime.Types.Extensions
   /**
    * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
    * 
+   * Select which fields to average
+  **/
+  _avg?: ServiceBookingAvgAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
+   * Select which fields to sum
+  **/
+  _sum?: ServiceBookingSumAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
    * Select which fields to find the minimum value
   **/
   _min?: ServiceBookingMinAggregateInputType
@@ -155,6 +239,8 @@ export type ServiceBookingGroupByArgs<ExtArgs extends runtime.Types.Extensions.I
   take?: number
   skip?: number
   _count?: ServiceBookingCountAggregateInputType | true
+  _avg?: ServiceBookingAvgAggregateInputType
+  _sum?: ServiceBookingSumAggregateInputType
   _min?: ServiceBookingMinAggregateInputType
   _max?: ServiceBookingMaxAggregateInputType
 }
@@ -167,7 +253,16 @@ export type ServiceBookingGroupByOutputType = {
   aiDiagnosis: string | null
   status: $Enums.Status
   scheduledAt: Date
+  address: string | null
+  locationLat: number | null
+  locationLng: number | null
+  finalCost: number | null
+  paymentQR: string | null
+  invoiceUrl: string | null
+  rating: number | null
   _count: ServiceBookingCountAggregateOutputType | null
+  _avg: ServiceBookingAvgAggregateOutputType | null
+  _sum: ServiceBookingSumAggregateOutputType | null
   _min: ServiceBookingMinAggregateOutputType | null
   _max: ServiceBookingMaxAggregateOutputType | null
 }
@@ -198,6 +293,13 @@ export type ServiceBookingWhereInput = {
   aiDiagnosis?: Prisma.StringNullableFilter<"ServiceBooking"> | string | null
   status?: Prisma.EnumStatusFilter<"ServiceBooking"> | $Enums.Status
   scheduledAt?: Prisma.DateTimeFilter<"ServiceBooking"> | Date | string
+  address?: Prisma.StringNullableFilter<"ServiceBooking"> | string | null
+  locationLat?: Prisma.FloatNullableFilter<"ServiceBooking"> | number | null
+  locationLng?: Prisma.FloatNullableFilter<"ServiceBooking"> | number | null
+  finalCost?: Prisma.FloatNullableFilter<"ServiceBooking"> | number | null
+  paymentQR?: Prisma.StringNullableFilter<"ServiceBooking"> | string | null
+  invoiceUrl?: Prisma.StringNullableFilter<"ServiceBooking"> | string | null
+  rating?: Prisma.IntNullableFilter<"ServiceBooking"> | number | null
   customer?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
 }
 
@@ -209,6 +311,13 @@ export type ServiceBookingOrderByWithRelationInput = {
   aiDiagnosis?: Prisma.SortOrderInput | Prisma.SortOrder
   status?: Prisma.SortOrder
   scheduledAt?: Prisma.SortOrder
+  address?: Prisma.SortOrderInput | Prisma.SortOrder
+  locationLat?: Prisma.SortOrderInput | Prisma.SortOrder
+  locationLng?: Prisma.SortOrderInput | Prisma.SortOrder
+  finalCost?: Prisma.SortOrderInput | Prisma.SortOrder
+  paymentQR?: Prisma.SortOrderInput | Prisma.SortOrder
+  invoiceUrl?: Prisma.SortOrderInput | Prisma.SortOrder
+  rating?: Prisma.SortOrderInput | Prisma.SortOrder
   customer?: Prisma.UserOrderByWithRelationInput
 }
 
@@ -223,6 +332,13 @@ export type ServiceBookingWhereUniqueInput = Prisma.AtLeast<{
   aiDiagnosis?: Prisma.StringNullableFilter<"ServiceBooking"> | string | null
   status?: Prisma.EnumStatusFilter<"ServiceBooking"> | $Enums.Status
   scheduledAt?: Prisma.DateTimeFilter<"ServiceBooking"> | Date | string
+  address?: Prisma.StringNullableFilter<"ServiceBooking"> | string | null
+  locationLat?: Prisma.FloatNullableFilter<"ServiceBooking"> | number | null
+  locationLng?: Prisma.FloatNullableFilter<"ServiceBooking"> | number | null
+  finalCost?: Prisma.FloatNullableFilter<"ServiceBooking"> | number | null
+  paymentQR?: Prisma.StringNullableFilter<"ServiceBooking"> | string | null
+  invoiceUrl?: Prisma.StringNullableFilter<"ServiceBooking"> | string | null
+  rating?: Prisma.IntNullableFilter<"ServiceBooking"> | number | null
   customer?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
 }, "id">
 
@@ -234,9 +350,18 @@ export type ServiceBookingOrderByWithAggregationInput = {
   aiDiagnosis?: Prisma.SortOrderInput | Prisma.SortOrder
   status?: Prisma.SortOrder
   scheduledAt?: Prisma.SortOrder
+  address?: Prisma.SortOrderInput | Prisma.SortOrder
+  locationLat?: Prisma.SortOrderInput | Prisma.SortOrder
+  locationLng?: Prisma.SortOrderInput | Prisma.SortOrder
+  finalCost?: Prisma.SortOrderInput | Prisma.SortOrder
+  paymentQR?: Prisma.SortOrderInput | Prisma.SortOrder
+  invoiceUrl?: Prisma.SortOrderInput | Prisma.SortOrder
+  rating?: Prisma.SortOrderInput | Prisma.SortOrder
   _count?: Prisma.ServiceBookingCountOrderByAggregateInput
+  _avg?: Prisma.ServiceBookingAvgOrderByAggregateInput
   _max?: Prisma.ServiceBookingMaxOrderByAggregateInput
   _min?: Prisma.ServiceBookingMinOrderByAggregateInput
+  _sum?: Prisma.ServiceBookingSumOrderByAggregateInput
 }
 
 export type ServiceBookingScalarWhereWithAggregatesInput = {
@@ -250,6 +375,13 @@ export type ServiceBookingScalarWhereWithAggregatesInput = {
   aiDiagnosis?: Prisma.StringNullableWithAggregatesFilter<"ServiceBooking"> | string | null
   status?: Prisma.EnumStatusWithAggregatesFilter<"ServiceBooking"> | $Enums.Status
   scheduledAt?: Prisma.DateTimeWithAggregatesFilter<"ServiceBooking"> | Date | string
+  address?: Prisma.StringNullableWithAggregatesFilter<"ServiceBooking"> | string | null
+  locationLat?: Prisma.FloatNullableWithAggregatesFilter<"ServiceBooking"> | number | null
+  locationLng?: Prisma.FloatNullableWithAggregatesFilter<"ServiceBooking"> | number | null
+  finalCost?: Prisma.FloatNullableWithAggregatesFilter<"ServiceBooking"> | number | null
+  paymentQR?: Prisma.StringNullableWithAggregatesFilter<"ServiceBooking"> | string | null
+  invoiceUrl?: Prisma.StringNullableWithAggregatesFilter<"ServiceBooking"> | string | null
+  rating?: Prisma.IntNullableWithAggregatesFilter<"ServiceBooking"> | number | null
 }
 
 export type ServiceBookingCreateInput = {
@@ -259,6 +391,13 @@ export type ServiceBookingCreateInput = {
   aiDiagnosis?: string | null
   status?: $Enums.Status
   scheduledAt: Date | string
+  address?: string | null
+  locationLat?: number | null
+  locationLng?: number | null
+  finalCost?: number | null
+  paymentQR?: string | null
+  invoiceUrl?: string | null
+  rating?: number | null
   customer: Prisma.UserCreateNestedOneWithoutBookingsInput
 }
 
@@ -270,6 +409,13 @@ export type ServiceBookingUncheckedCreateInput = {
   aiDiagnosis?: string | null
   status?: $Enums.Status
   scheduledAt: Date | string
+  address?: string | null
+  locationLat?: number | null
+  locationLng?: number | null
+  finalCost?: number | null
+  paymentQR?: string | null
+  invoiceUrl?: string | null
+  rating?: number | null
 }
 
 export type ServiceBookingUpdateInput = {
@@ -279,6 +425,13 @@ export type ServiceBookingUpdateInput = {
   aiDiagnosis?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumStatusFieldUpdateOperationsInput | $Enums.Status
   scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  locationLat?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  locationLng?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  finalCost?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  invoiceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   customer?: Prisma.UserUpdateOneRequiredWithoutBookingsNestedInput
 }
 
@@ -290,6 +443,13 @@ export type ServiceBookingUncheckedUpdateInput = {
   aiDiagnosis?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumStatusFieldUpdateOperationsInput | $Enums.Status
   scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  locationLat?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  locationLng?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  finalCost?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  invoiceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
 }
 
 export type ServiceBookingCreateManyInput = {
@@ -300,6 +460,13 @@ export type ServiceBookingCreateManyInput = {
   aiDiagnosis?: string | null
   status?: $Enums.Status
   scheduledAt: Date | string
+  address?: string | null
+  locationLat?: number | null
+  locationLng?: number | null
+  finalCost?: number | null
+  paymentQR?: string | null
+  invoiceUrl?: string | null
+  rating?: number | null
 }
 
 export type ServiceBookingUpdateManyMutationInput = {
@@ -309,6 +476,13 @@ export type ServiceBookingUpdateManyMutationInput = {
   aiDiagnosis?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumStatusFieldUpdateOperationsInput | $Enums.Status
   scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  locationLat?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  locationLng?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  finalCost?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  invoiceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
 }
 
 export type ServiceBookingUncheckedUpdateManyInput = {
@@ -319,6 +493,13 @@ export type ServiceBookingUncheckedUpdateManyInput = {
   aiDiagnosis?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumStatusFieldUpdateOperationsInput | $Enums.Status
   scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  locationLat?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  locationLng?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  finalCost?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  invoiceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
 }
 
 export type ServiceBookingListRelationFilter = {
@@ -339,6 +520,20 @@ export type ServiceBookingCountOrderByAggregateInput = {
   aiDiagnosis?: Prisma.SortOrder
   status?: Prisma.SortOrder
   scheduledAt?: Prisma.SortOrder
+  address?: Prisma.SortOrder
+  locationLat?: Prisma.SortOrder
+  locationLng?: Prisma.SortOrder
+  finalCost?: Prisma.SortOrder
+  paymentQR?: Prisma.SortOrder
+  invoiceUrl?: Prisma.SortOrder
+  rating?: Prisma.SortOrder
+}
+
+export type ServiceBookingAvgOrderByAggregateInput = {
+  locationLat?: Prisma.SortOrder
+  locationLng?: Prisma.SortOrder
+  finalCost?: Prisma.SortOrder
+  rating?: Prisma.SortOrder
 }
 
 export type ServiceBookingMaxOrderByAggregateInput = {
@@ -349,6 +544,13 @@ export type ServiceBookingMaxOrderByAggregateInput = {
   aiDiagnosis?: Prisma.SortOrder
   status?: Prisma.SortOrder
   scheduledAt?: Prisma.SortOrder
+  address?: Prisma.SortOrder
+  locationLat?: Prisma.SortOrder
+  locationLng?: Prisma.SortOrder
+  finalCost?: Prisma.SortOrder
+  paymentQR?: Prisma.SortOrder
+  invoiceUrl?: Prisma.SortOrder
+  rating?: Prisma.SortOrder
 }
 
 export type ServiceBookingMinOrderByAggregateInput = {
@@ -359,6 +561,20 @@ export type ServiceBookingMinOrderByAggregateInput = {
   aiDiagnosis?: Prisma.SortOrder
   status?: Prisma.SortOrder
   scheduledAt?: Prisma.SortOrder
+  address?: Prisma.SortOrder
+  locationLat?: Prisma.SortOrder
+  locationLng?: Prisma.SortOrder
+  finalCost?: Prisma.SortOrder
+  paymentQR?: Prisma.SortOrder
+  invoiceUrl?: Prisma.SortOrder
+  rating?: Prisma.SortOrder
+}
+
+export type ServiceBookingSumOrderByAggregateInput = {
+  locationLat?: Prisma.SortOrder
+  locationLng?: Prisma.SortOrder
+  finalCost?: Prisma.SortOrder
+  rating?: Prisma.SortOrder
 }
 
 export type ServiceBookingCreateNestedManyWithoutCustomerInput = {
@@ -407,6 +623,14 @@ export type EnumStatusFieldUpdateOperationsInput = {
   set?: $Enums.Status
 }
 
+export type NullableFloatFieldUpdateOperationsInput = {
+  set?: number | null
+  increment?: number
+  decrement?: number
+  multiply?: number
+  divide?: number
+}
+
 export type ServiceBookingCreateWithoutCustomerInput = {
   id?: string
   appliance: string
@@ -414,6 +638,13 @@ export type ServiceBookingCreateWithoutCustomerInput = {
   aiDiagnosis?: string | null
   status?: $Enums.Status
   scheduledAt: Date | string
+  address?: string | null
+  locationLat?: number | null
+  locationLng?: number | null
+  finalCost?: number | null
+  paymentQR?: string | null
+  invoiceUrl?: string | null
+  rating?: number | null
 }
 
 export type ServiceBookingUncheckedCreateWithoutCustomerInput = {
@@ -423,6 +654,13 @@ export type ServiceBookingUncheckedCreateWithoutCustomerInput = {
   aiDiagnosis?: string | null
   status?: $Enums.Status
   scheduledAt: Date | string
+  address?: string | null
+  locationLat?: number | null
+  locationLng?: number | null
+  finalCost?: number | null
+  paymentQR?: string | null
+  invoiceUrl?: string | null
+  rating?: number | null
 }
 
 export type ServiceBookingCreateOrConnectWithoutCustomerInput = {
@@ -462,6 +700,13 @@ export type ServiceBookingScalarWhereInput = {
   aiDiagnosis?: Prisma.StringNullableFilter<"ServiceBooking"> | string | null
   status?: Prisma.EnumStatusFilter<"ServiceBooking"> | $Enums.Status
   scheduledAt?: Prisma.DateTimeFilter<"ServiceBooking"> | Date | string
+  address?: Prisma.StringNullableFilter<"ServiceBooking"> | string | null
+  locationLat?: Prisma.FloatNullableFilter<"ServiceBooking"> | number | null
+  locationLng?: Prisma.FloatNullableFilter<"ServiceBooking"> | number | null
+  finalCost?: Prisma.FloatNullableFilter<"ServiceBooking"> | number | null
+  paymentQR?: Prisma.StringNullableFilter<"ServiceBooking"> | string | null
+  invoiceUrl?: Prisma.StringNullableFilter<"ServiceBooking"> | string | null
+  rating?: Prisma.IntNullableFilter<"ServiceBooking"> | number | null
 }
 
 export type ServiceBookingCreateManyCustomerInput = {
@@ -471,6 +716,13 @@ export type ServiceBookingCreateManyCustomerInput = {
   aiDiagnosis?: string | null
   status?: $Enums.Status
   scheduledAt: Date | string
+  address?: string | null
+  locationLat?: number | null
+  locationLng?: number | null
+  finalCost?: number | null
+  paymentQR?: string | null
+  invoiceUrl?: string | null
+  rating?: number | null
 }
 
 export type ServiceBookingUpdateWithoutCustomerInput = {
@@ -480,6 +732,13 @@ export type ServiceBookingUpdateWithoutCustomerInput = {
   aiDiagnosis?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumStatusFieldUpdateOperationsInput | $Enums.Status
   scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  locationLat?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  locationLng?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  finalCost?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  invoiceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
 }
 
 export type ServiceBookingUncheckedUpdateWithoutCustomerInput = {
@@ -489,6 +748,13 @@ export type ServiceBookingUncheckedUpdateWithoutCustomerInput = {
   aiDiagnosis?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumStatusFieldUpdateOperationsInput | $Enums.Status
   scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  locationLat?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  locationLng?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  finalCost?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  invoiceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
 }
 
 export type ServiceBookingUncheckedUpdateManyWithoutCustomerInput = {
@@ -498,6 +764,13 @@ export type ServiceBookingUncheckedUpdateManyWithoutCustomerInput = {
   aiDiagnosis?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumStatusFieldUpdateOperationsInput | $Enums.Status
   scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  locationLat?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  locationLng?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  finalCost?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  invoiceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
 }
 
 
@@ -510,6 +783,13 @@ export type ServiceBookingSelect<ExtArgs extends runtime.Types.Extensions.Intern
   aiDiagnosis?: boolean
   status?: boolean
   scheduledAt?: boolean
+  address?: boolean
+  locationLat?: boolean
+  locationLng?: boolean
+  finalCost?: boolean
+  paymentQR?: boolean
+  invoiceUrl?: boolean
+  rating?: boolean
   customer?: boolean | Prisma.UserDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["serviceBooking"]>
 
@@ -521,6 +801,13 @@ export type ServiceBookingSelectCreateManyAndReturn<ExtArgs extends runtime.Type
   aiDiagnosis?: boolean
   status?: boolean
   scheduledAt?: boolean
+  address?: boolean
+  locationLat?: boolean
+  locationLng?: boolean
+  finalCost?: boolean
+  paymentQR?: boolean
+  invoiceUrl?: boolean
+  rating?: boolean
   customer?: boolean | Prisma.UserDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["serviceBooking"]>
 
@@ -532,6 +819,13 @@ export type ServiceBookingSelectUpdateManyAndReturn<ExtArgs extends runtime.Type
   aiDiagnosis?: boolean
   status?: boolean
   scheduledAt?: boolean
+  address?: boolean
+  locationLat?: boolean
+  locationLng?: boolean
+  finalCost?: boolean
+  paymentQR?: boolean
+  invoiceUrl?: boolean
+  rating?: boolean
   customer?: boolean | Prisma.UserDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["serviceBooking"]>
 
@@ -543,9 +837,16 @@ export type ServiceBookingSelectScalar = {
   aiDiagnosis?: boolean
   status?: boolean
   scheduledAt?: boolean
+  address?: boolean
+  locationLat?: boolean
+  locationLng?: boolean
+  finalCost?: boolean
+  paymentQR?: boolean
+  invoiceUrl?: boolean
+  rating?: boolean
 }
 
-export type ServiceBookingOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "customerId" | "appliance" | "issue" | "aiDiagnosis" | "status" | "scheduledAt", ExtArgs["result"]["serviceBooking"]>
+export type ServiceBookingOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "customerId" | "appliance" | "issue" | "aiDiagnosis" | "status" | "scheduledAt" | "address" | "locationLat" | "locationLng" | "finalCost" | "paymentQR" | "invoiceUrl" | "rating", ExtArgs["result"]["serviceBooking"]>
 export type ServiceBookingInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   customer?: boolean | Prisma.UserDefaultArgs<ExtArgs>
 }
@@ -569,6 +870,13 @@ export type $ServiceBookingPayload<ExtArgs extends runtime.Types.Extensions.Inte
     aiDiagnosis: string | null
     status: $Enums.Status
     scheduledAt: Date
+    address: string | null
+    locationLat: number | null
+    locationLng: number | null
+    finalCost: number | null
+    paymentQR: string | null
+    invoiceUrl: string | null
+    rating: number | null
   }, ExtArgs["result"]["serviceBooking"]>
   composites: {}
 }
@@ -1000,6 +1308,13 @@ export interface ServiceBookingFieldRefs {
   readonly aiDiagnosis: Prisma.FieldRef<"ServiceBooking", 'String'>
   readonly status: Prisma.FieldRef<"ServiceBooking", 'Status'>
   readonly scheduledAt: Prisma.FieldRef<"ServiceBooking", 'DateTime'>
+  readonly address: Prisma.FieldRef<"ServiceBooking", 'String'>
+  readonly locationLat: Prisma.FieldRef<"ServiceBooking", 'Float'>
+  readonly locationLng: Prisma.FieldRef<"ServiceBooking", 'Float'>
+  readonly finalCost: Prisma.FieldRef<"ServiceBooking", 'Float'>
+  readonly paymentQR: Prisma.FieldRef<"ServiceBooking", 'String'>
+  readonly invoiceUrl: Prisma.FieldRef<"ServiceBooking", 'String'>
+  readonly rating: Prisma.FieldRef<"ServiceBooking", 'Int'>
 }
     
 

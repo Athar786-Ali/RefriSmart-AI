@@ -44,9 +44,11 @@ export type WarrantyType = (typeof WarrantyType)[keyof typeof WarrantyType]
 
 export const Status = {
   PENDING: 'PENDING',
-  IN_PROGRESS: 'IN_PROGRESS',
-  COMPLETED: 'COMPLETED',
-  CANCELLED: 'CANCELLED'
+  ASSIGNED: 'ASSIGNED',
+  OUT_FOR_REPAIR: 'OUT_FOR_REPAIR',
+  REPAIRING: 'REPAIRING',
+  FIXED: 'FIXED',
+  COMPLETED: 'COMPLETED'
 } as const
 
 export type Status = (typeof Status)[keyof typeof Status]

@@ -11,14 +11,19 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String?  
-  role      Role     @default(CUSTOMER)
-  products  Product[]
-  bookings  ServiceBooking[]
-  createdAt DateTime @default(now())
+  id                 String   @id @default(uuid())
+  name               String
+  email              String   @unique
+  password           String?
+  role               Role     @default(CUSTOMER)
+  verifyOtp          String?
+  verifyOtpExpiryAt  Float?
+  isAccountVerified  Boolean  @default(false)
+  resetOtp           String?
+  resetOtpExpiryAt   Float?
+  products           Product[]
+  bookings           ServiceBooking[]
+  createdAt          DateTime @default(now())
 }
 
 model Product {
@@ -50,6 +55,20 @@ model ServiceBooking {
   aiDiagnosis  String?
   status       Status   @default(PENDING)
   scheduledAt  DateTime
+  address      String?
+  locationLat  Float?
+  locationLng  Float?
+  finalCost    Float?
+  paymentQR    String?
+  invoiceUrl   String?
+  rating       Int?
+}
+
+model Gallery {
+  id        String   @id @default(uuid())
+  imageUrl  String
+  caption   String?
+  createdAt DateTime @default(now())
 }
 
 // Semicolons (;) hata kar space ya new line use karo
@@ -76,7 +95,9 @@ enum WarrantyType {
 
 enum Status { 
   PENDING 
-  IN_PROGRESS 
+  ASSIGNED
+  OUT_FOR_REPAIR
+  REPAIRING
+  FIXED
   COMPLETED 
-  CANCELLED 
 }
