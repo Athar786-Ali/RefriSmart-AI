@@ -19,6 +19,7 @@ type BookingFormState = {
   phoneNumber: string;
   issue: string;
   address: string;
+  pincode: string;
   lat: string;
   lng: string;
 };
@@ -92,6 +93,7 @@ export default function ServicePage() {
     phoneNumber: "",
     issue: "",
     address: "",
+    pincode: "",
     lat: "",
     lng: "",
   });
@@ -220,12 +222,8 @@ export default function ServicePage() {
 
   const onSubmitBooking = async (e: FormEvent) => {
     e.preventDefault();
-    if (!currentUser?.id) {
-      toast.error("Please login first.");
-      return;
-    }
-    if (!form.fullName.trim() || !form.phoneNumber.trim() || !form.issue.trim() || !form.address.trim()) {
-      toast.error("Full name, phone number, issue details and address are required.");
+    if (!form.fullName.trim() || !form.phoneNumber.trim() || !form.issue.trim() || !form.address.trim() || !form.pincode.trim()) {
+      toast.error("Name, phone, issue, address, and PIN code are required.");
       return;
     }
     if (!/^\d{10}$/.test(form.phoneNumber.replace(/\D/g, ""))) {
@@ -240,12 +238,15 @@ export default function ServicePage() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          userId: currentUser.id,
+          userId: currentUser?.id,
+          guestName: currentUser?.id ? undefined : form.fullName.trim(),
+          guestPhone: currentUser?.id ? undefined : form.phoneNumber.replace(/\D/g, ""),
           appliance: form.appliance,
           issue: form.issue,
           fullName: form.fullName,
           phoneNumber: form.phoneNumber.replace(/\D/g, ""),
           address: form.address,
+          pincode: form.pincode,
           lat: form.lat,
           lng: form.lng,
         }),
@@ -277,7 +278,9 @@ export default function ServicePage() {
       }
       setHasActiveBooking(true);
       setForm((prev) => ({ ...prev, issue: "" }));
-      void loadData(currentUser.id);
+      if (currentUser?.id) {
+        void loadData(currentUser.id);
+      }
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Booking failed.");
     } finally {
@@ -333,8 +336,8 @@ export default function ServicePage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-12 sm:px-6 md:py-16">
-      <div className="mx-auto max-w-7xl space-y-8">
+    <main className="min-h-screen pt-20 md:pt-24 pb-12 flex flex-col bg-slate-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col gap-8 md:gap-12">
         <ServiceActiveTrackerCard
           loading={loading}
           hasActiveBooking={hasActiveBooking}
@@ -348,12 +351,12 @@ export default function ServicePage() {
           upiId={SHOP_UPI_ID}
         />
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-6 md:gap-8">
           <h3 className="text-lg font-bold text-slate-900">Quick Booking Desk</h3>
           <p className="mt-1 text-sm text-slate-600">Book a technician with customer details, readable address, and GPS-assisted lookup.</p>
 
-          <form className="mt-4 space-y-4" onSubmit={onSubmitBooking}>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <form className="max-w-3xl mx-auto w-full flex flex-col gap-6" onSubmit={onSubmitBooking}>
+            <div className="grid grid-cols-2 gap-6 md:gap-8 sm:grid-cols-4">
               {APPLIANCE_OPTIONS.map((option) => {
                 const Icon = option.icon;
                 const selected = form.appliance === option.label;
@@ -375,7 +378,7 @@ export default function ServicePage() {
               })}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-6 md:gap-8 sm:grid-cols-2">
               <input
                 value={form.fullName}
                 onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
@@ -388,6 +391,14 @@ export default function ServicePage() {
                 onChange={(e) => setForm((prev) => ({ ...prev, phoneNumber: e.target.value }))}
                 className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500"
                 placeholder="Phone Number"
+                inputMode="numeric"
+                required
+              />
+              <input
+                value={form.pincode}
+                onChange={(e) => setForm((prev) => ({ ...prev, pincode: e.target.value }))}
+                className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500"
+                placeholder="PIN Code"
                 inputMode="numeric"
                 required
               />
@@ -409,7 +420,7 @@ export default function ServicePage() {
               required
             />
 
-            <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
+            <div className="grid gap-6 md:gap-8 sm:grid-cols-[auto_1fr]">
               <button
                 type="button"
                 onClick={onFetchMyAddress}
@@ -432,7 +443,7 @@ export default function ServicePage() {
             </button>
           </form>
 
-          <div className="mt-4 flex flex-wrap gap-2 text-xs">
+          <div className="flex flex-wrap gap-2 text-xs">
             <a href="tel:9060877595" className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">Call Technician</a>
             <a href="https://wa.me/919060877595" target="_blank" rel="noopener noreferrer" className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700">WhatsApp</a>
             <a href="sms:+919060877595" className="rounded-full border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700">Message</a>
@@ -441,8 +452,8 @@ export default function ServicePage() {
 
         <ServiceHistoryCard completedBookings={completedBookings} onDownloadInvoice={downloadInvoice} />
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-6 md:gap-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h3 className="text-xl font-bold text-slate-900">Verified Live Repairs</h3>
               <p className="text-sm text-slate-600">Recent on-site technician work gallery.</p>
@@ -452,7 +463,7 @@ export default function ServicePage() {
             </span>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-6 md:gap-8 sm:grid-cols-2 xl:grid-cols-4">
             {galleryItems.map((item) => (
               <article
                 key={item.id}

@@ -220,3 +220,33 @@ export const resetPassword = async (req, res) => {
         res.status(500).json({ error: "Failed to reset password.", details: error?.message || "Unknown error" });
     }
 };
+export const getMe = async (req, res) => {
+    try {
+        await ensureAuthSchema().catch(() => { });
+        const userId = req.userId;
+        if (!userId)
+            return res.status(401).json({ error: "Unauthorized." });
+        const user = (await prisma.user.findUnique({ where: { id: userId } }));
+        if (!user)
+            return res.status(404).json({ error: "User not found." });
+        const verificationRows = await prisma.$queryRaw `
+      SELECT COALESCE("isAccountVerified", FALSE) AS "isAccountVerified"
+      FROM "User"
+      WHERE "id" = ${userId}
+      LIMIT 1
+    `;
+        const isAccountVerified = Boolean(verificationRows[0]?.isAccountVerified);
+        res.json({
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                isAccountVerified,
+            },
+        });
+    }
+    catch (error) {
+        res.status(500).json({ error: "Failed to fetch profile.", details: error?.message || "Unknown error" });
+    }
+};

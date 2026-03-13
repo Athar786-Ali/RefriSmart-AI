@@ -4,14 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Menu, Settings, X } from "lucide-react";
-import { toast } from "sonner";
 import BrandLogo from "./BrandLogo";
-
-type UserSession = {
-  id?: string;
-  name?: string;
-  role?: string;
-} | null;
+import { useAuth } from "@/context/AuthContext";
 
 type NavLink = { href: string; label: string };
 
@@ -25,7 +19,7 @@ const NAV_LINKS: NavLink[] = [
 export default function Navbar() {
   const pathname = usePathname();
   const isAdminRoute = pathname?.startsWith("/admin");
-  const [user, setUser] = useState<UserSession>(null);
+  const { user, loading, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const links = useMemo(() => {
@@ -35,37 +29,13 @@ export default function Navbar() {
     return NAV_LINKS;
   }, [user?.role]);
 
-  const syncUser = () => {
-    const savedUser = localStorage.getItem("user");
-    try {
-      setUser(savedUser ? JSON.parse(savedUser) : null);
-    } catch {
-      setUser(null);
-    }
-  };
-
-  useEffect(() => {
-    syncUser();
-    window.addEventListener("storage", syncUser);
-    return () => window.removeEventListener("storage", syncUser);
-  }, []);
-
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
 
-  const handleLogout = () => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/logout`, {
-      method: "POST",
-      credentials: "include",
-    })
-      .catch(() => null)
-      .finally(() => {
-        localStorage.clear();
-        setUser(null);
-        toast.success("Logged out");
-        window.location.href = "/";
-      });
+  const handleLogout = async () => {
+    await logout();
+    window.location.href = "/";
   };
 
   const navShellClass = isAdminRoute
@@ -77,7 +47,7 @@ export default function Navbar() {
   return (
     <>
       <nav className={`sticky top-0 z-50 border-b backdrop-blur-xl ${navShellClass}`}>
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex items-center justify-between gap-3 py-4">
           <Link href="/" className="whitespace-nowrap">
             <BrandLogo compact />
           </Link>
@@ -95,7 +65,11 @@ export default function Navbar() {
           </div>
 
           <div className="hidden items-center gap-2 sm:gap-3 md:flex">
-            {user ? (
+            {loading ? (
+              <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${isAdminRoute ? "border border-slate-700 bg-slate-900 text-slate-200" : "border border-slate-200 bg-slate-100 text-slate-700"}`}>
+                Checking session...
+              </span>
+            ) : user ? (
               <>
                 <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${isAdminRoute ? "border border-slate-700 bg-slate-900 text-slate-200" : "border border-slate-200 bg-slate-100 text-slate-700"}`}>
                   Welcome, {user.name || "User"}
@@ -166,7 +140,11 @@ export default function Navbar() {
             </div>
 
             <div className="mt-6 border-t pt-4">
-              {user ? (
+              {loading ? (
+                <p className={`px-1 text-xs ${isAdminRoute ? "text-slate-400" : "text-slate-500"}`}>
+                  Checking session...
+                </p>
+              ) : user ? (
                 <div className="space-y-2">
                   <p className={`px-1 text-xs ${isAdminRoute ? "text-slate-400" : "text-slate-500"}`}>
                     Logged in as {user.name || "User"}
@@ -203,4 +181,3 @@ export default function Navbar() {
     </>
   );
 }
-

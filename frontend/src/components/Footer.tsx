@@ -4,7 +4,7 @@ import BrandLogo from "./BrandLogo";
 export default function Footer() {
   return (
     <footer className="bg-white border-t border-slate-200 py-12 md:py-14 mt-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-10">
         <div className="col-span-1 md:col-span-2">
           <div className="mb-4">
             <BrandLogo compact />
@@ -31,7 +31,7 @@ export default function Footer() {
           </ul>
         </div>
       </div>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-10 pt-7 border-t border-slate-100 text-center text-slate-500 text-xs">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full mt-10 pt-7 border-t border-slate-100 text-center text-slate-500 text-xs">
         © 2026 Golden Refrigeration. All rights reserved.
       </div>
     </footer>

@@ -163,7 +163,7 @@ export const createBooking = async (req: Request, res: Response) => {
 export const bookService = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const { userId, appliance, issue, address, lat, lng, slot, pincode, fullName, phoneNumber } = req.body as {
+    const { userId, appliance, issue, address, lat, lng, slot, pincode, fullName, phoneNumber, guestName, guestPhone } = req.body as {
       userId?: string;
       appliance?: string;
       issue?: string;
@@ -174,9 +174,18 @@ export const bookService = async (req: Request, res: Response) => {
       pincode?: string;
       fullName?: string;
       phoneNumber?: string;
+      guestName?: string;
+      guestPhone?: string;
     };
-    if (!userId || !appliance || !issue) {
-      return res.status(400).json({ error: "userId, appliance, issue are required." });
+    if (!appliance || !issue) {
+      return res.status(400).json({ error: "appliance and issue are required." });
+    }
+    if (!pincode || typeof pincode !== "string") {
+      return res.status(400).json({ error: "Pincode is required." });
+    }
+    const SERVICE_PIN_PREFIXES = ["500", "506"];
+    if (!SERVICE_PIN_PREFIXES.some((prefix) => pincode.trim().startsWith(prefix))) {
+      return res.status(400).json({ error: "Sorry, your location is outside our current service area." });
     }
 
     const scheduledAt = slot ? new Date(slot) : new Date(Date.now() + 2 * 60 * 60 * 1000);
@@ -195,16 +204,36 @@ export const bookService = async (req: Request, res: Response) => {
       techRows[0] ||
       { id: "tech-1", name: "Assigned Technician", phone: TECHNICIAN_PHONE, pincode: pincode || "N/A" };
 
-    const existingUser = await prisma.user.findUnique({ where: { id: userId } });
-    if (!existingUser) return res.status(404).json({ error: "User not found." });
-    const resolvedName = String(fullName || existingUser.name || "Customer").trim();
-    const resolvedPhone = String(phoneNumber || "").trim() || "Not provided";
+    let resolvedCustomerId: string | null = null;
+    let resolvedName = String(fullName || "").trim();
+    let resolvedPhone = String(phoneNumber || "").trim();
+    let resolvedGuestName = String(guestName || "").trim();
+    let resolvedGuestPhone = String(guestPhone || "").trim();
+
+    if (userId) {
+      const existingUser = await prisma.user.findUnique({ where: { id: userId } });
+      if (!existingUser) return res.status(404).json({ error: "User not found." });
+      resolvedCustomerId = userId;
+      resolvedName = resolvedName || existingUser.name || "Customer";
+      resolvedPhone = resolvedPhone || "Not provided";
+    } else {
+      resolvedGuestName = resolvedGuestName || resolvedName;
+      resolvedGuestPhone = resolvedGuestPhone || resolvedPhone;
+      if (!resolvedGuestName || !resolvedGuestPhone) {
+        return res.status(400).json({ error: "guestName and guestPhone are required." });
+      }
+      resolvedName = resolvedGuestName;
+      resolvedPhone = resolvedGuestPhone;
+    }
+
     const bookingId = createUuid();
     const inserted = await prisma.$queryRaw<Array<any>>`
       INSERT INTO "ServiceBooking"
       (
         "id",
         "customerId",
+        "guestName",
+        "guestPhone",
         "appliance",
         "issue",
         "status",
@@ -218,7 +247,9 @@ export const bookService = async (req: Request, res: Response) => {
       VALUES
       (
         ${bookingId},
-        ${userId},
+        ${resolvedCustomerId},
+        ${resolvedCustomerId ? null : resolvedName},
+        ${resolvedCustomerId ? null : resolvedPhone},
         ${appliance},
         ${issue},
         ${"PENDING"}::"Status",
@@ -848,6 +879,8 @@ export const getAdminServiceOverview = async (_req: Request, res: Response) => {
           address: string | null;
           contactName: string | null;
           contactPhone: string | null;
+          guestName: string | null;
+          guestPhone: string | null;
           customerName: string | null;
           customerEmail: string | null;
         }>
@@ -864,6 +897,8 @@ export const getAdminServiceOverview = async (_req: Request, res: Response) => {
           sb."address",
           sb."contactName",
           sb."contactPhone",
+          sb."guestName",
+          sb."guestPhone",
           u."name" AS "customerName",
           u."email" AS "customerEmail"
         FROM "ServiceBooking" sb
@@ -890,14 +925,16 @@ export const getAdminServiceOverview = async (_req: Request, res: Response) => {
       bookings: recentBookings.map((b) => {
         const assignment = assignmentMap.get(b.id);
         const tech = assignment ? techMap.get(assignment.technicianId) : null;
+        const resolvedName = b.contactName || b.guestName || b.customerName || "Unknown";
+        const resolvedPhone = b.contactPhone || b.guestPhone || null;
         return {
           ...b,
           customer: {
-            name: b.contactName || b.customerName || "Unknown",
+            name: resolvedName,
             email: b.customerEmail || "",
           },
-          contactName: b.contactName || b.customerName || null,
-          contactPhone: b.contactPhone || null,
+          contactName: resolvedName,
+          contactPhone: resolvedPhone,
           address: b.address || null,
           technician: tech || null,
           pincode: assignment?.pincode || null,

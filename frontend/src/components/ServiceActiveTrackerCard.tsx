@@ -72,7 +72,7 @@ export default function ServiceActiveTrackerCard({
   upiId,
 }: ServiceActiveTrackerCardProps) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-8 md:gap-12">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Service Hub</p>
@@ -87,7 +87,7 @@ export default function ServiceActiveTrackerCard({
       </div>
 
       {hasActiveBooking ? (
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
           {loading ? (
             <div className="grid min-h-24 place-items-center">
               <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
@@ -166,7 +166,7 @@ export default function ServiceActiveTrackerCard({
           )}
         </div>
       ) : (
-        <div className="mt-6 rounded-2xl border border-dashed border-blue-300 bg-blue-50/70 p-5">
+        <div className="rounded-2xl border border-dashed border-blue-300 bg-blue-50/70 p-5">
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-slate-600">
               <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
@@ -188,4 +188,3 @@ export default function ServiceActiveTrackerCard({
     </section>
   );
 }
-

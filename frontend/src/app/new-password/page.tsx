@@ -57,14 +57,14 @@ export default function NewPasswordPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100 sm:px-6">
-      <section className="mx-auto w-full max-w-xl rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-cyan-900/20 sm:p-10">
+    <main className="min-h-[calc(100vh-6rem)] flex items-center justify-center py-12 bg-slate-50 text-slate-900">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full max-w-md bg-white p-8 sm:p-10 shadow-xl shadow-slate-200/50 rounded-2xl border border-slate-100 [&_h1]:!text-slate-900 [&_p]:!text-slate-600 [&_span]:!text-blue-600">
         <h1 className="text-3xl font-black text-white">Set new password</h1>
         <p className="mt-2 text-sm text-slate-300">
           Email: <span className="font-semibold text-cyan-300">{email || "Not provided"}</span>
         </p>
 
-        <form onSubmit={handleResetPassword} className="mt-7 space-y-4">
+        <form onSubmit={handleResetPassword} className="flex flex-col gap-6">
           <label className="block">
             <span className="mb-1.5 inline-block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">6-Digit OTP</span>
             <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/80 px-4">

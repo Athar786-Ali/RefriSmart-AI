@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { Lock, Mail, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 
 type LoginResponse = {
   message?: string;
@@ -20,6 +21,7 @@ type LoginResponse = {
 
 export default function LoginPage() {
   const router = useRouter();
+  const { setUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -54,7 +56,13 @@ export default function LoginPage() {
           isAccountVerified: Boolean(data.user.isAccountVerified),
         }),
       );
-      window.dispatchEvent(new Event("storage"));
+      setUser({
+        id: data.user.id,
+        name: data.user.name,
+        email: data.user.email,
+        role: data.user.role,
+        isAccountVerified: Boolean(data.user.isAccountVerified),
+      });
 
       if (!data.user.isAccountVerified) {
         toast.info("Verify your account to continue.");
@@ -78,9 +86,9 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-12 text-slate-900 sm:px-6 md:py-20">
-      <section className="mx-auto grid w-full max-w-6xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/70 lg:grid-cols-[1.05fr_0.95fr]">
-        <div className="relative hidden flex-col justify-between border-r border-slate-200 bg-gradient-to-br from-blue-50 via-white to-cyan-50 p-10 lg:flex">
+    <main className="min-h-[calc(100vh-6rem)] flex items-center justify-center py-12 bg-slate-50 text-slate-900">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full max-w-md bg-white p-8 sm:p-10 shadow-xl shadow-slate-200/50 rounded-2xl border border-slate-100">
+        <div className="hidden">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(37,99,235,0.15),transparent_45%)]" />
           <div className="relative space-y-4">
             <p className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
@@ -96,11 +104,11 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="p-6 sm:p-10">
+        <div className="flex flex-col gap-6">
           <h2 className="text-3xl font-black text-slate-900">Sign In</h2>
           <p className="mt-2 text-sm text-slate-600">Use your account credentials to continue.</p>
 
-          <form onSubmit={handleLogin} className="mt-8 space-y-4">
+          <form onSubmit={handleLogin} className="flex flex-col gap-6">
             <label className="block">
               <span className="mb-1.5 inline-block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Email</span>
               <div className="flex min-h-[48px] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4">

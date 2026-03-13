@@ -38,6 +38,7 @@ model Product {
   warrantyType   WarrantyType?
   warrantyExpiry DateTime?
   warrantyCertificateUrl String?
+  serialNumber   String?       @unique
   images         String[]
   status         ProductStatus @default(AVAILABLE)
   sellerId       String
@@ -48,8 +49,10 @@ model Product {
 
 model ServiceBooking {
   id           String   @id @default(uuid())
-  customerId   String
-  customer     User     @relation(fields: [customerId], references: [id])
+  customerId   String?
+  customer     User?    @relation(fields: [customerId], references: [id])
+  guestName    String?
+  guestPhone   String?
   appliance    String
   issue        String
   aiDiagnosis  String?
@@ -100,4 +103,6 @@ enum Status {
   REPAIRING
   FIXED
   COMPLETED 
+  ESTIMATE_APPROVED
+  PAYMENT_PENDING
 }

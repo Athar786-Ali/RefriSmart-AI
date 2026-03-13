@@ -660,8 +660,8 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 px-4 py-8 sm:px-6">
-        <div className="mx-auto grid max-w-7xl gap-4">
+      <div className="h-screen overflow-hidden flex bg-slate-950 text-slate-200">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 w-full max-w-7xl mx-auto grid gap-6 md:gap-8">
           {Array.from({ length: 6 }, (_, i) => (
             <div key={`admin-skeleton-${i}`} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
               <div className="h-5 w-40 animate-pulse rounded bg-slate-700" />
@@ -686,15 +686,15 @@ export default function AdminDashboard() {
   const activeServiceCount = activeQueue.length;
   const fixedReadyCount = safeBookings.filter((booking) => booking.status === "FIXED").length;
   return (
-    <main className="min-h-screen px-4 sm:px-6 py-8 bg-[radial-gradient(circle_at_top_right,#0f172a_0%,#020617_45%,#000814_100%)]">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <section className="rounded-3xl border border-cyan-400/20 bg-slate-900/60 backdrop-blur-xl p-6 sm:p-8 shadow-2xl shadow-cyan-900/20">
+    <main className="h-screen overflow-hidden flex bg-slate-950 text-slate-200">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 w-full max-w-7xl mx-auto flex flex-col gap-8 md:gap-12 bg-[radial-gradient(circle_at_top_right,#0f172a_0%,#020617_45%,#000814_100%)]">
+        <section className="rounded-2xl border border-cyan-400/20 bg-slate-900/60 backdrop-blur-xl p-6 sm:p-8 shadow-2xl shadow-cyan-900/20 flex flex-col gap-4">
           <p className="text-xs uppercase tracking-[0.2em] font-semibold text-cyan-300 mb-2">Admin Control Center</p>
           <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">Golden Refrigeration Dashboard</h1>
           <p className="text-slate-300 mt-2 max-w-2xl">Manage products, monitor service consultations, and keep inventory operations in one place.</p>
         </section>
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 md:gap-8">
           <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-blue-950/30 transition-all hover:border-blue-500/40">
             <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">Active Services</p>
             <h2 className="mt-2 text-3xl font-black text-cyan-300">{activeServiceCount}</h2>
@@ -713,8 +713,8 @@ export default function AdminDashboard() {
           </article>
         </section>
 
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-blue-950/30">
-          <div className="mb-4 flex items-center justify-between">
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-blue-950/30 flex flex-col gap-6 md:gap-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] font-semibold text-cyan-300">E-Commerce Ops</p>
               <h3 className="text-xl font-black text-white mt-1">Live Orders Controller</h3>
@@ -786,7 +786,7 @@ export default function AdminDashboard() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <section className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8">
           <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-blue-950/30">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-black text-white">Live Service Controller</h3>
@@ -850,8 +850,8 @@ export default function AdminDashboard() {
             </div>
           </article>
 
-          <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-blue-950/30">
-            <div className="mb-4 flex items-center justify-between">
+          <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-blue-950/30 flex flex-col gap-6 md:gap-8">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <h3 className="text-lg font-black text-white">Completed Operations Log</h3>
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-300 bg-slate-800 border border-slate-700 px-3 py-1 rounded-full">
                 {completedOperations.length} completed
@@ -883,8 +883,8 @@ export default function AdminDashboard() {
           </article>
         </section>
 
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl shadow-blue-950/30">
-          <div className="mb-4 flex items-center justify-between">
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl shadow-blue-950/30 flex flex-col gap-6 md:gap-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] font-semibold text-cyan-300">Media Manager</p>
               <h3 className="text-xl font-black text-white mt-1">On-Site Work Showcase</h3>
@@ -896,7 +896,7 @@ export default function AdminDashboard() {
               Refresh
             </button>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
             <div className="lg:col-span-2 rounded-xl border border-dashed border-slate-600 bg-slate-900 p-5">
               <p className="text-sm text-slate-300 mb-3">Upload Live Repair Photos / Videos</p>
               <div
@@ -944,8 +944,8 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
-              <div className="mb-3 flex items-center justify-between">
+            <div className="rounded-xl border border-slate-700 bg-slate-900 p-4 flex flex-col gap-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs uppercase tracking-wide text-slate-300 font-semibold">Recent Uploads</p>
                 <span className="text-[11px] text-slate-400">{showcaseImages.length} media files</span>
               </div>
@@ -1000,7 +1000,7 @@ export default function AdminDashboard() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
           <div className="space-y-8 lg:col-span-3 lg:order-2">
             <div className="bg-slate-900/60 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
               <div className="px-5 sm:px-6 py-5 border-b border-slate-700 bg-gradient-to-r from-slate-900 to-slate-800">
@@ -1075,14 +1075,14 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="bg-slate-900/60 rounded-2xl border border-slate-700 p-6 shadow-xl">
-              <div className="flex items-center justify-between mb-5">
+            <div className="bg-slate-900/60 rounded-2xl border border-slate-700 p-6 shadow-xl flex flex-col gap-6 md:gap-8">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <h3 className="text-xl font-black text-white">Live inventory</h3>
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-300 bg-slate-800 border border-slate-700 px-3 py-1 rounded-full">
                   {stats?.latestProducts?.length || 0} products
                 </span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                   {safeLatestProducts.map((p) => {
                   const normalizedType = p.productType || (p.isUsed ? "REFURBISHED" : "NEW");
                   return (
@@ -1130,14 +1130,14 @@ export default function AdminDashboard() {
           </div>
 
           <div className="space-y-8 lg:col-span-3 lg:order-1">
-            <div className="bg-slate-900/60 p-6 rounded-2xl border border-slate-700 shadow-xl">
-              <h3 className="text-xl font-black text-white mb-5">Add product</h3>
+            <div className="bg-slate-900/60 p-6 rounded-2xl border border-slate-700 shadow-xl flex flex-col gap-6 md:gap-8">
+              <h3 className="text-xl font-black text-white">Add product</h3>
               <p className="text-xs text-slate-300 mb-4 leading-relaxed">
                 Required: Product title, Price, Product image.
                 <br />
                 Optional: Condition, Age, Warranty fields.
               </p>
-              <form onSubmit={handleAddProduct} className="space-y-4">
+              <form onSubmit={handleAddProduct} className="flex flex-col gap-6">
                 <input
                   type="text"
                   placeholder="Product title (Required)"
@@ -1160,7 +1160,7 @@ export default function AdminDashboard() {
                   onChange={(e) => setNewProd({ ...newProd, price: e.target.value })}
                   required
                 />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
                   <select
                     value={newProd.productType}
                     onChange={(e) => handleProductTypeChange(e.target.value as "NEW" | "REFURBISHED")}
@@ -1172,9 +1172,9 @@ export default function AdminDashboard() {
                 </div>
 
                 {newProd.productType === "NEW" ? (
-                  <section className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 space-y-3">
+                  <section className="rounded-2xl border border-slate-700 bg-slate-800/50 p-4 flex flex-col gap-4">
                     <h4 className="text-sm font-bold text-cyan-200 uppercase tracking-wide">New Product Section</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
                       <div>
                         <label className="text-xs text-slate-300 block mb-1.5">Warranty Type</label>
                         <select
@@ -1189,7 +1189,7 @@ export default function AdminDashboard() {
                       </div>
                       <div>
                         <label className="text-xs text-slate-300 block mb-1.5">Warranty Duration</label>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-6 md:gap-8">
                           <select
                             value={warrantyDuration}
                             onChange={(e) => setWarrantyDuration(e.target.value)}
@@ -1212,9 +1212,9 @@ export default function AdminDashboard() {
                     </div>
                   </section>
                 ) : (
-                  <section className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-4 space-y-3">
+                  <section className="rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-4 flex flex-col gap-4">
                     <h4 className="text-sm font-bold text-cyan-200 uppercase tracking-wide">Refurbished / Second-Hand Section</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
                       <div>
                         <label className="text-xs text-slate-300 block mb-1.5">Condition Score</label>
                         <select
@@ -1230,7 +1230,7 @@ export default function AdminDashboard() {
                       </div>
                       <div>
                         <label className="text-xs text-slate-300 block mb-1.5">Age of Product</label>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-6 md:gap-8">
                           <select
                             value={ageYears}
                             onChange={(e) => setAgeYears(e.target.value)}
@@ -1252,7 +1252,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
                       <div>
                         <label className="text-xs text-slate-300 block mb-1.5">Warranty Type</label>
                         <select
@@ -1266,7 +1266,7 @@ export default function AdminDashboard() {
                       </div>
                       <div>
                         <label className="text-xs text-slate-300 block mb-1.5">Warranty Duration</label>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-6 md:gap-8">
                           <select
                             value={warrantyDuration}
                             onChange={(e) => setWarrantyDuration(e.target.value)}
@@ -1308,7 +1308,7 @@ export default function AdminDashboard() {
                   {isSuggestingPrice ? "Suggesting..." : "AI Suggest Price (Bhaiya Final Decision)"}
                 </button>
 
-                <div className="border border-dashed border-slate-600 p-4 rounded-xl bg-gradient-to-br from-slate-900 to-slate-800">
+                <div className="border border-dashed border-slate-600 p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800">
                   <p className="text-xs uppercase tracking-wide font-semibold text-slate-300 mb-2">Product image</p>
                   <input
                     type="file"
@@ -1333,9 +1333,9 @@ export default function AdminDashboard() {
               </form>
             </div>
 
-            <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-blue-900 text-white p-6 rounded-2xl shadow-xl shadow-blue-900/30 border border-slate-700">
-              <h3 className="text-lg font-black mb-5 text-cyan-300">Appliance trend</h3>
-              <div className="space-y-4">
+            <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-blue-900 text-white p-6 rounded-2xl shadow-xl shadow-blue-900/30 border border-slate-700 flex flex-col gap-6 md:gap-8">
+              <h3 className="text-lg font-black text-cyan-300">Appliance trend</h3>
+              <div className="flex flex-col gap-6 md:gap-8">
                   {safeApplianceStats.map((s, i) => (
                   <div key={`${s.appliance}-${i}`}>
                     <div className="flex justify-between text-xs uppercase tracking-wide mb-1 text-slate-200">
@@ -1358,7 +1358,7 @@ export default function AdminDashboard() {
 
       {selectedLog && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-sm md:items-center md:p-4">
-          <div className="relative w-full max-w-xl rounded-t-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl sm:p-8 md:rounded-3xl">
+          <div className="relative w-full max-w-xl rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl sm:p-8 md:rounded-2xl">
             <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-slate-600 md:hidden" />
             <button
               onClick={() => setSelectedLog(null)}

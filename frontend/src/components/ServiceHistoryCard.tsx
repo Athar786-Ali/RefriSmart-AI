@@ -22,8 +22,8 @@ const formatDateTime = (value?: string | null) => {
 
 export default function ServiceHistoryCard({ completedBookings, onDownloadInvoice }: ServiceHistoryCardProps) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-6 md:gap-8">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <h3 className="text-lg font-bold text-slate-900">Service History</h3>
         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
           {completedBookings.length} completed
@@ -72,4 +72,3 @@ export default function ServiceHistoryCard({ completedBookings, onDownloadInvoic
     </section>
   );
 }
-

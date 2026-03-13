@@ -88,8 +88,8 @@ export default function VerifyOtpPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100 sm:px-6">
-      <section className="mx-auto w-full max-w-2xl rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-cyan-900/20 sm:p-10">
+    <main className="min-h-[calc(100vh-6rem)] flex items-center justify-center py-12 bg-slate-50 text-slate-900">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full max-w-md bg-white p-8 sm:p-10 shadow-xl shadow-slate-200/50 rounded-2xl border border-slate-100 [&_h1]:!text-slate-900 [&_p]:!text-slate-600">
         <div className="mb-8 space-y-3">
           <p className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
             <ShieldCheck className="h-3.5 w-3.5" /> Account Verification
@@ -108,7 +108,7 @@ export default function VerifyOtpPage() {
           {sending ? "Sending OTP..." : "Send OTP to Email"}
         </button>
 
-        <form onSubmit={handleVerify} className="mt-6 space-y-4">
+        <form onSubmit={handleVerify} className="flex flex-col gap-6">
           <input
             type="text"
             inputMode="numeric"
@@ -134,4 +134,3 @@ export default function VerifyOtpPage() {
     </main>
   );
 }
-

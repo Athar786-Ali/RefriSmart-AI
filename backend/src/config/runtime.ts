@@ -178,8 +178,10 @@ export const ensurePhase2Schema = async () => {
     BEGIN
       IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'Status') THEN
         ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'ASSIGNED';
+        ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'ESTIMATE_APPROVED';
         ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'OUT_FOR_REPAIR';
         ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'REPAIRING';
+        ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'PAYMENT_PENDING';
         ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'FIXED';
       END IF;
     END $$;
@@ -190,12 +192,19 @@ export const ensurePhase2Schema = async () => {
     ADD COLUMN IF NOT EXISTS "address" TEXT,
     ADD COLUMN IF NOT EXISTS "contactName" TEXT,
     ADD COLUMN IF NOT EXISTS "contactPhone" TEXT,
+    ADD COLUMN IF NOT EXISTS "guestName" TEXT,
+    ADD COLUMN IF NOT EXISTS "guestPhone" TEXT,
     ADD COLUMN IF NOT EXISTS "locationLat" DOUBLE PRECISION,
     ADD COLUMN IF NOT EXISTS "locationLng" DOUBLE PRECISION,
     ADD COLUMN IF NOT EXISTS "finalCost" DOUBLE PRECISION,
     ADD COLUMN IF NOT EXISTS "paymentQR" TEXT,
     ADD COLUMN IF NOT EXISTS "invoiceUrl" TEXT,
     ADD COLUMN IF NOT EXISTS "rating" INTEGER;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "ServiceBooking"
+    ALTER COLUMN "customerId" DROP NOT NULL;
   `);
 
   await prisma.$executeRawUnsafe(`

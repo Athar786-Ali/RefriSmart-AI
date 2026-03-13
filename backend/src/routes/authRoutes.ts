@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  getMe,
   login,
   logout,
   register,
@@ -15,6 +16,7 @@ const authRoutes = Router();
 authRoutes.post("/register", register);
 authRoutes.post("/login", login);
 authRoutes.post("/logout", logout);
+authRoutes.get("/me", userAuth, getMe);
 authRoutes.post("/send-verify-otp", userAuth, sendVerifyOtp);
 authRoutes.post("/verify-otp", userAuth, verifyOtp);
 authRoutes.post("/send-reset-otp", sendResetOtp);

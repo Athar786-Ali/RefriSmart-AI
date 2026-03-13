@@ -78,8 +78,8 @@ export default function OrdersPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-slate-950 px-4 py-12 text-slate-100">
-        <div className="mx-auto grid max-w-6xl gap-4">
+      <main className="min-h-screen pt-20 md:pt-24 pb-12 flex flex-col bg-slate-950 text-slate-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-12 md:py-16 grid gap-6 md:gap-8">
           {Array.from({ length: 3 }, (_, i) => (
             <div key={`order-skeleton-${i}`} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
               <div className="h-6 w-48 animate-pulse rounded bg-slate-700" />
@@ -98,25 +98,27 @@ export default function OrdersPage() {
 
   if (!user?.id) {
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-100 px-4 py-12">
-        <div className="max-w-4xl mx-auto rounded-3xl border border-slate-800 bg-slate-900/70 p-8 text-center">
+      <main className="min-h-screen pt-20 md:pt-24 pb-12 flex flex-col bg-slate-950 text-slate-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-12 md:py-16">
+          <div className="max-w-4xl mx-auto rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center">
           <h1 className="text-3xl font-black text-white">My Orders / Delivery Tracker</h1>
           <p className="mt-3 text-slate-300">Please login to view your product orders and live delivery status.</p>
+          </div>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 px-4 py-10">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
+    <main className="min-h-screen pt-20 md:pt-24 pb-12 flex flex-col bg-slate-950 text-slate-100">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col gap-8 md:gap-12">
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 flex flex-col gap-4">
           <p className="text-xs uppercase tracking-[0.18em] text-cyan-300 font-semibold">E-Commerce</p>
           <h1 className="text-3xl font-black mt-2">My Orders / Delivery Tracker</h1>
           <p className="text-sm text-slate-300 mt-2">Track each purchase from placement to final delivery.</p>
         </section>
 
-        <section className="space-y-4">
+        <section className="flex flex-col gap-6 md:gap-8">
           {orderedData.map((order) => {
             const stepIndex = getStepIndex(order.orderStatus);
             const isHighlighted = highlightId && highlightId === order.id;
