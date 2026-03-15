@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, type ComponentType, useEffect, useMemo, useState } from "react";
-import { AirVent, Loader2, MapPin, Microwave, Refrigerator, WashingMachine, Wrench } from "lucide-react";
+import { AirVent, Microwave, Refrigerator, WashingMachine, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import ServiceActiveTrackerCard, { type ServiceBooking } from "@/components/ServiceActiveTrackerCard";
 import ServiceHistoryCard from "@/components/ServiceHistoryCard";
@@ -20,8 +20,6 @@ type BookingFormState = {
   issue: string;
   address: string;
   pincode: string;
-  lat: string;
-  lng: string;
 };
 
 const API = process.env.NEXT_PUBLIC_API_URL;
@@ -83,9 +81,11 @@ export default function ServicePage() {
   const [hasActiveBooking, setHasActiveBooking] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
-  const [gpsLoading, setGpsLoading] = useState(false);
   const [ratingLoading, setRatingLoading] = useState(false);
   const [ratingValue, setRatingValue] = useState(0);
+  const [guestLookupLoading, setGuestLookupLoading] = useState(false);
+  const [guestLookup, setGuestLookup] = useState({ bookingId: "", phone: "" });
+  const [guestBooking, setGuestBooking] = useState<ServiceBooking | null>(null);
 
   const [form, setForm] = useState<BookingFormState>({
     appliance: "Refrigerator",
@@ -94,8 +94,6 @@ export default function ServicePage() {
     issue: "",
     address: "",
     pincode: "",
-    lat: "",
-    lng: "",
   });
 
   useEffect(() => {
@@ -128,7 +126,7 @@ export default function ServicePage() {
       const nextBookings = Array.isArray(bookingsPayload) ? (bookingsPayload as ServiceBooking[]) : [];
 
       setBookings(nextBookings);
-      setHasActiveBooking(nextBookings.some((booking) => booking.status !== "COMPLETED"));
+      setHasActiveBooking(nextBookings.some((booking) => !["COMPLETED", "CANCELLED"].includes(booking.status)));
       setGallery(Array.isArray(galleryPayload) ? galleryPayload.slice(0, 8) : []);
     } catch {
       setBookings([]);
@@ -146,12 +144,12 @@ export default function ServicePage() {
   }, [isHydrated, currentUser?.id]);
 
   const activeBooking = useMemo(
-    () => bookings.find((booking) => booking.status !== "COMPLETED") || null,
+    () => bookings.find((booking) => !["COMPLETED", "CANCELLED"].includes(booking.status)) || null,
     [bookings],
   );
 
   const completedBookings = useMemo(
-    () => bookings.filter((booking) => booking.status === "COMPLETED"),
+    () => bookings.filter((booking) => ["COMPLETED", "CANCELLED"].includes(booking.status)),
     [bookings],
   );
 
@@ -177,57 +175,26 @@ export default function ServicePage() {
     }));
   }, [currentUser?.name]);
 
-  const onFetchMyAddress = () => {
-    if (!navigator.geolocation) {
-      toast.error("Geolocation is not supported in this browser.");
-      return;
-    }
-
-    setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const latitude = String(position.coords.latitude.toFixed(6));
-        const longitude = String(position.coords.longitude.toFixed(6));
-        setForm((prev) => ({
-          ...prev,
-          lat: latitude,
-          lng: longitude,
-        }));
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`,
-            { headers: { Accept: "application/json" } },
-          );
-          const payload = await res.json().catch(() => ({}));
-          const resolvedAddress = String(payload?.display_name || "").trim();
-          if (resolvedAddress) {
-            setForm((prev) => ({ ...prev, address: resolvedAddress }));
-            toast.success("Address fetched from GPS.");
-          } else {
-            toast.info("GPS coordinates fetched. Please fill address manually.");
-          }
-        } catch {
-          toast.info("GPS fetched but address lookup failed. Please fill address manually.");
-        } finally {
-          setGpsLoading(false);
-        }
-      },
-      () => {
-        toast.error("Unable to fetch location. Please enter manually.");
-        setGpsLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
-  };
+  // GPS-based address lookup removed by request.
 
   const onSubmitBooking = async (e: FormEvent) => {
     e.preventDefault();
-    if (!form.fullName.trim() || !form.phoneNumber.trim() || !form.issue.trim() || !form.address.trim() || !form.pincode.trim()) {
+    const trimmedPincode = form.pincode.trim();
+    const SERVICE_PIN_PREFIXES = ["500", "506"];
+    if (!form.fullName.trim() || !form.phoneNumber.trim() || !form.issue.trim() || !form.address.trim() || !trimmedPincode) {
       toast.error("Name, phone, issue, address, and PIN code are required.");
       return;
     }
     if (!/^\d{10}$/.test(form.phoneNumber.replace(/\D/g, ""))) {
       toast.error("Please enter a valid 10-digit phone number.");
+      return;
+    }
+    if (!/^\d{6}$/.test(trimmedPincode)) {
+      toast.error("PIN code must be a 6-digit number.");
+      return;
+    }
+    if (!SERVICE_PIN_PREFIXES.some((prefix) => trimmedPincode.startsWith(prefix))) {
+      toast.error("Sorry, we currently do not serve this area.");
       return;
     }
 
@@ -246,9 +213,9 @@ export default function ServicePage() {
           fullName: form.fullName,
           phoneNumber: form.phoneNumber.replace(/\D/g, ""),
           address: form.address,
-          pincode: form.pincode,
-          lat: form.lat,
-          lng: form.lng,
+          pincode: trimmedPincode,
+          lat: undefined,
+          lng: undefined,
         }),
       });
 
@@ -309,6 +276,42 @@ export default function ServicePage() {
     }
   };
 
+  const onSubmitGuestLookup = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedBookingId = guestLookup.bookingId.trim();
+    const cleanedPhone = guestLookup.phone.replace(/\D/g, "");
+    if (!trimmedBookingId || cleanedPhone.length !== 10) {
+      toast.error("Booking ID and a valid 10-digit phone number are required.");
+      return;
+    }
+    if (!API) {
+      toast.error("Service API not configured.");
+      return;
+    }
+
+    setGuestLookupLoading(true);
+    setGuestBooking(null);
+    try {
+      const res = await fetch(
+        `${API}/service/guest-booking?bookingId=${encodeURIComponent(trimmedBookingId)}&phone=${encodeURIComponent(cleanedPhone)}`,
+        { credentials: "include" },
+      );
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error || "Unable to find booking.");
+      const booking = payload?.booking as ServiceBooking | undefined;
+      if (!booking) throw new Error("Booking details not available.");
+      setGuestBooking(booking);
+      if (!currentUser?.id) {
+        setBookings([booking]);
+        setHasActiveBooking(!["COMPLETED", "CANCELLED"].includes(booking.status));
+      }
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Unable to find booking.");
+    } finally {
+      setGuestLookupLoading(false);
+    }
+  };
+
   const downloadInvoice = async (booking: ServiceBooking) => {
     if (booking.invoiceUrl) {
       window.open(booking.invoiceUrl, "_blank", "noopener,noreferrer");
@@ -353,7 +356,7 @@ export default function ServicePage() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-6 md:gap-8">
           <h3 className="text-lg font-bold text-slate-900">Quick Booking Desk</h3>
-          <p className="mt-1 text-sm text-slate-600">Book a technician with customer details, readable address, and GPS-assisted lookup.</p>
+          <p className="mt-1 text-sm text-slate-600">Book a technician with customer details and full address.</p>
 
           <form className="max-w-3xl mx-auto w-full flex flex-col gap-6" onSubmit={onSubmitBooking}>
             <div className="grid grid-cols-2 gap-6 md:gap-8 sm:grid-cols-4">
@@ -420,18 +423,8 @@ export default function ServicePage() {
               required
             />
 
-            <div className="grid gap-6 md:gap-8 sm:grid-cols-[auto_1fr]">
-              <button
-                type="button"
-                onClick={onFetchMyAddress}
-                className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-3 py-3 text-xs font-semibold text-blue-700 transition-transform hover:bg-blue-100 active:scale-95"
-              >
-                {gpsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
-                Fetch My Address
-              </button>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
-                GPS Coordinates: {form.lat && form.lng ? `${form.lat}, ${form.lng}` : "Not fetched yet"}
-              </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
+              Please enter your full service address with landmark for quick technician reach.
             </div>
 
             <button
@@ -449,6 +442,56 @@ export default function ServicePage() {
             <a href="sms:+919060877595" className="rounded-full border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700">Message</a>
           </div>
         </section>
+
+        {!currentUser?.id && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-6 md:gap-8">
+            <div className="flex flex-col gap-2">
+              <h3 className="text-lg font-bold text-slate-900">Track Guest Booking</h3>
+              <p className="text-sm text-slate-600">Enter your booking ID and phone number to view status updates.</p>
+            </div>
+
+            <form className="max-w-3xl mx-auto w-full flex flex-col gap-6" onSubmit={onSubmitGuestLookup}>
+              <div className="grid gap-6 md:gap-8 sm:grid-cols-2">
+                <input
+                  value={guestLookup.bookingId}
+                  onChange={(e) => setGuestLookup((prev) => ({ ...prev, bookingId: e.target.value }))}
+                  className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500"
+                  placeholder="Booking ID"
+                  required
+                />
+                <input
+                  value={guestLookup.phone}
+                  onChange={(e) => setGuestLookup((prev) => ({ ...prev, phone: e.target.value }))}
+                  className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500"
+                  placeholder="Phone Number"
+                  inputMode="numeric"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={guestLookupLoading}
+                className="min-h-[48px] w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition-transform hover:bg-blue-700 active:scale-95 disabled:opacity-60"
+              >
+                {guestLookupLoading ? "Checking..." : "Track Booking"}
+              </button>
+            </form>
+
+            {guestBooking && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <div className="grid gap-2 md:grid-cols-2">
+                  <p><span className="text-slate-500">Appliance:</span> {guestBooking.appliance}</p>
+                  <p><span className="text-slate-500">Status:</span> {guestBooking.status.replace(/_/g, " ")}</p>
+                  <p><span className="text-slate-500">Issue:</span> {guestBooking.issue}</p>
+                  <p><span className="text-slate-500">Scheduled:</span> {new Date(guestBooking.scheduledAt).toLocaleString("en-IN")}</p>
+                  <p className="md:col-span-2"><span className="text-slate-500">Address:</span> {guestBooking.address || "Not provided"}</p>
+                  <p className="md:col-span-2"><span className="text-slate-500">Technician:</span> {guestBooking.technician?.name || "Auto-assigned shortly"}</p>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
 
         <ServiceHistoryCard completedBookings={completedBookings} onDownloadInvoice={downloadInvoice} />
 

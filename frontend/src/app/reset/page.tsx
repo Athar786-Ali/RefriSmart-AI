@@ -7,6 +7,7 @@ import { Mail } from "lucide-react";
 type ResetOtpResponse = {
   message?: string;
   error?: string;
+  otpPreview?: string;
 };
 
 export default function ResetPage() {
@@ -33,7 +34,12 @@ export default function ResetPage() {
         setError(data.error || "Failed to send reset OTP.");
         return;
       }
-      setMessage(data.message || "Reset OTP sent.");
+      if (data.otpPreview) {
+        localStorage.setItem("resetOtpPreview", data.otpPreview);
+        setMessage(`${data.message || "OTP generated."} OTP (dev): ${data.otpPreview}`);
+      } else {
+        setMessage(data.message || "Reset OTP sent.");
+      }
       router.push(`/new-password?email=${encodeURIComponent(email)}`);
     } catch {
       setError("Unable to process your request right now.");

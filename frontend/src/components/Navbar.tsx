@@ -46,7 +46,11 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className={`sticky top-0 z-50 border-b backdrop-blur-xl ${navShellClass}`}>
+      <nav
+        className={`${
+          isAdminRoute ? "sticky top-0" : "fixed top-0 inset-x-0"
+        } z-50 border-b backdrop-blur-xl ${navShellClass}`}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex items-center justify-between gap-3 py-4">
           <Link href="/" className="whitespace-nowrap">
             <BrandLogo compact />
@@ -92,10 +96,18 @@ export default function Navbar() {
               </>
             ) : (
               <>
-                <Link href="/login" className={`min-h-[48px] rounded-full px-4 py-2 text-sm font-semibold transition-transform active:scale-95 ${isAdminRoute ? "text-slate-200 hover:bg-slate-900" : "text-slate-700 hover:bg-slate-100"}`}>
+                <Link
+                  href="/login"
+                  className={`inline-flex min-h-[44px] items-center justify-center rounded-full px-4 text-sm font-semibold transition-transform active:scale-95 ${
+                    isAdminRoute ? "text-slate-200 hover:bg-slate-900" : "text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
                   Login
                 </Link>
-                <Link href="/signup" className="min-h-[48px] rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-blue-200 transition-transform hover:bg-blue-700 active:scale-95">
+                <Link
+                  href="/signup"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition-transform hover:from-blue-700 hover:to-cyan-600 active:scale-95"
+                >
                   Get Started
                 </Link>
               </>

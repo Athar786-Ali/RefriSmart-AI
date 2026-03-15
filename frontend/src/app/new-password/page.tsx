@@ -18,11 +18,14 @@ export default function NewPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [otpPreview, setOtpPreview] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     setEmail(params.get("email") || "");
+    const storedOtp = window.localStorage.getItem("resetOtpPreview") || "";
+    if (storedOtp) setOtpPreview(storedOtp);
   }, []);
 
   const handleResetPassword = async (e: FormEvent<HTMLFormElement>) => {
@@ -106,6 +109,11 @@ export default function NewPasswordPage() {
           </button>
         </form>
 
+        {otpPreview ? (
+          <p className="mt-4 rounded-xl border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-sm text-blue-300">
+            OTP (dev): {otpPreview}
+          </p>
+        ) : null}
         {message ? <p className="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">{message}</p> : null}
         {error ? <p className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p> : null}
       </section>

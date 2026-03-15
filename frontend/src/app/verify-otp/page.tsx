@@ -2,16 +2,21 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import { MailCheck, ShieldCheck } from "lucide-react";
+import { MailCheck, Phone, ShieldCheck } from "lucide-react";
 
 type VerifyResponse = {
   message?: string;
   error?: string;
+  otpPreview?: string;
+  whatsappLink?: string;
 };
 
 export default function VerifyOtpPage() {
   const router = useRouter();
   const [otp, setOtp] = useState("");
+  const [channel, setChannel] = useState<"email" | "phone">("email");
+  const [phone, setPhone] = useState("");
+  const [whatsappLink, setWhatsappLink] = useState("");
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [message, setMessage] = useState("");
@@ -24,8 +29,9 @@ export default function VerifyOtpPage() {
       return;
     }
     try {
-      const parsed = JSON.parse(rawUser) as { isAccountVerified?: boolean };
-      if (parsed.isAccountVerified) router.replace("/");
+      const parsed = JSON.parse(rawUser) as { isAccountVerified?: boolean; isPhoneVerified?: boolean; phone?: string | null };
+      if (parsed.isAccountVerified || parsed.isPhoneVerified) router.replace("/");
+      if (parsed.phone) setPhone(String(parsed.phone));
     } catch {
       router.replace("/login");
     }
@@ -34,18 +40,38 @@ export default function VerifyOtpPage() {
   const handleSendOtp = async () => {
     setError("");
     setMessage("");
+    if (channel === "phone") {
+      const cleaned = phone.replace(/\D/g, "");
+      if (cleaned.length !== 10) {
+        setError("Please enter a valid 10-digit mobile number.");
+        return;
+      }
+    }
+    setWhatsappLink("");
     setSending(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/send-verify-otp`, {
-        method: "POST",
-        credentials: "include",
-      });
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/${channel === "email" ? "auth/send-verify-otp" : "auth/send-whatsapp-otp"}`,
+        {
+          method: "POST",
+          headers: channel === "phone" ? { "Content-Type": "application/json" } : undefined,
+          credentials: "include",
+          body: channel === "phone" ? JSON.stringify({ phone: phone.trim() }) : undefined,
+        },
+      );
       const data = (await res.json()) as VerifyResponse;
       if (!res.ok) {
         setError(data.error || "Unable to send OTP.");
         return;
       }
-      setMessage(data.message || "OTP sent to your email.");
+      if (data && data.whatsappLink) {
+        setWhatsappLink(data.whatsappLink);
+      }
+      if (data && data.otpPreview) {
+        setMessage(`${data.message || "OTP generated."} OTP (dev): ${data.otpPreview}`);
+      } else {
+        setMessage(data.message || "OTP sent.");
+      }
     } catch {
       setError("Failed to send OTP. Please try again.");
     } finally {
@@ -59,12 +85,15 @@ export default function VerifyOtpPage() {
     setMessage("");
     setVerifying(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/verify-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ otp: otp.trim() }),
-      });
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/${channel === "email" ? "auth/verify-otp" : "auth/verify-phone-otp"}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ otp: otp.trim() }),
+        },
+      );
       const data = (await res.json()) as VerifyResponse;
       if (!res.ok) {
         setError(data.error || "OTP verification failed.");
@@ -74,7 +103,13 @@ export default function VerifyOtpPage() {
       const rawUser = localStorage.getItem("user");
       if (rawUser) {
         const parsed = JSON.parse(rawUser) as { [key: string]: unknown };
-        localStorage.setItem("user", JSON.stringify({ ...parsed, isAccountVerified: true }));
+        localStorage.setItem(
+          "user",
+          JSON.stringify({
+            ...parsed,
+            ...(channel === "email" ? { isAccountVerified: true } : { isPhoneVerified: true, phone: phone.trim() }),
+          }),
+        );
       }
       window.dispatchEvent(new Event("storage"));
       setMessage(data.message || "Account verified.");
@@ -95,18 +130,66 @@ export default function VerifyOtpPage() {
             <ShieldCheck className="h-3.5 w-3.5" /> Account Verification
           </p>
           <h1 className="text-3xl font-black text-white">Verify your account</h1>
-          <p className="text-slate-300">Your account needs email OTP verification before full access.</p>
+          <p className="text-slate-300">Verify via email or mobile OTP to unlock full access.</p>
         </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setChannel("email")}
+            className={`inline-flex min-h-[40px] items-center gap-2 rounded-full px-3 text-xs font-semibold uppercase tracking-[0.14em] ${
+              channel === "email" ? "bg-cyan-500/20 text-cyan-200 border border-cyan-400/50" : "border border-slate-700 text-slate-400"
+            }`}
+          >
+            <MailCheck className="h-3.5 w-3.5" />
+            Email OTP
+          </button>
+          <button
+            type="button"
+            onClick={() => setChannel("phone")}
+            className={`inline-flex min-h-[40px] items-center gap-2 rounded-full px-3 text-xs font-semibold uppercase tracking-[0.14em] ${
+              channel === "phone" ? "bg-cyan-500/20 text-cyan-200 border border-cyan-400/50" : "border border-slate-700 text-slate-400"
+            }`}
+          >
+            <Phone className="h-3.5 w-3.5" />
+            WhatsApp OTP
+          </button>
+        </div>
+
+        {channel === "phone" && (
+          <label className="block text-sm font-semibold text-slate-700">
+            Mobile Number
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="10-digit mobile number"
+              className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              inputMode="numeric"
+              required
+            />
+          </label>
+        )}
 
         <button
           type="button"
           onClick={handleSendOtp}
-          disabled={sending}
+          disabled={sending || (channel === "phone" && phone.trim().length < 10)}
           className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-70"
         >
           <MailCheck className="h-4 w-4" />
-          {sending ? "Sending OTP..." : "Send OTP to Email"}
+          {sending ? "Sending OTP..." : channel === "email" ? "Send OTP to Email" : "Send OTP to WhatsApp"}
         </button>
+
+        {channel === "phone" && whatsappLink ? (
+          <a
+            href={whatsappLink}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+          >
+            Open WhatsApp to View OTP
+          </a>
+        ) : null}
 
         <form onSubmit={handleVerify} className="flex flex-col gap-6">
           <input

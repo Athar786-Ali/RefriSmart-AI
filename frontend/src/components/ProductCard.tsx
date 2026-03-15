@@ -54,6 +54,8 @@ export default function ProductCard({ product }: ProductCardProps) {
   const router = useRouter();
   const { user } = useAuth();
   const imageUrl = transformCloudinaryImage(getImageUrl(product.images));
+  const isOutOfStock =
+    product.normalizedType === "NEW" && typeof product.stockQty === "number" && product.stockQty <= 0;
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<1 | 2>(1);
   const [fullName, setFullName] = useState("");
@@ -80,6 +82,10 @@ export default function ProductCard({ product }: ProductCardProps) {
   }, [product.price, product.title]);
 
   const openCheckout = () => {
+    if (isOutOfStock) {
+      toast.error("This product is currently out of stock.");
+      return;
+    }
     if (!user?.id) {
       toast.error("Please login first to buy products.");
       router.push("/login");
@@ -127,7 +133,6 @@ export default function ProductCard({ product }: ProductCardProps) {
           deliveryAddress: address.trim(),
           deliveryPhone: phone.replace(/\D/g, ""),
           fullName: fullName.trim(),
-          paymentConfirmed: true,
         }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -182,8 +187,14 @@ export default function ProductCard({ product }: ProductCardProps) {
         </div>
 
         <div className="p-4 md:p-5">
-          <span className="inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-            Available
+          <span
+            className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+              isOutOfStock
+                ? "border-red-200 bg-red-50 text-red-600"
+                : "border-emerald-100 bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            {isOutOfStock ? "Out of Stock" : "Available"}
           </span>
           <h2 className="mt-3 line-clamp-2 text-lg font-bold leading-tight text-slate-900 md:text-xl">{product.title}</h2>
           <p className="mt-2 min-h-9 line-clamp-2 text-sm text-slate-600">

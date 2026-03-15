@@ -65,9 +65,6 @@ export default function AIDiagnosis() {
   const [bookingPhone, setBookingPhone] = useState("");
   const [bookingAddress, setBookingAddress] = useState("");
   const [bookingPincode, setBookingPincode] = useState("");
-  const [bookingLat, setBookingLat] = useState("");
-  const [bookingLng, setBookingLng] = useState("");
-  const [gpsLoading, setGpsLoading] = useState(false);
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
 
   useEffect(() => {
@@ -159,30 +156,12 @@ export default function AIDiagnosis() {
     }
   };
 
-  const handleUseCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error("Geolocation is not supported in this browser.");
-      return;
-    }
+  // GPS removed by request; keep state for backward compatibility if needed.
 
-    setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setBookingLat(String(position.coords.latitude.toFixed(6)));
-        setBookingLng(String(position.coords.longitude.toFixed(6)));
-        setGpsLoading(false);
-        toast.success("GPS location fetched.");
-      },
-      () => {
-        setGpsLoading(false);
-        toast.error("Unable to fetch location. Please enter location manually.");
-      },
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
+  const isServiceablePincode = (value: string) => {
+    const cleaned = value.trim();
+    return /^\d{6}$/.test(cleaned) && SERVICE_PIN_PREFIXES.some((prefix) => cleaned.startsWith(prefix));
   };
-
-  const isServiceablePincode = (value: string) =>
-    SERVICE_PIN_PREFIXES.some((prefix) => value.trim().startsWith(prefix));
 
   const openBooking = () => {
     setBookingOpen(true);
@@ -199,6 +178,10 @@ export default function AIDiagnosis() {
     }
     if (!/^[0-9]{10}$/.test(bookingPhone.replace(/\D/g, ""))) {
       toast.error("Please enter a valid 10-digit phone number.");
+      return;
+    }
+    if (!/^\d{6}$/.test(bookingPincode.trim())) {
+      toast.error("PIN code must be a 6-digit number.");
       return;
     }
     if (!isServiceablePincode(bookingPincode)) {
@@ -221,8 +204,8 @@ export default function AIDiagnosis() {
           fullName: bookingFullName.trim(),
           phoneNumber: bookingPhone.replace(/\D/g, ""),
           address: bookingAddress.trim(),
-          lat: bookingLat || undefined,
-          lng: bookingLng || undefined,
+          lat: undefined,
+          lng: undefined,
           pincode: bookingPincode.trim(),
         }),
       });
@@ -491,20 +474,6 @@ export default function AIDiagnosis() {
                   placeholder="House no, street, locality, city"
                 />
               </label>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleUseCurrentLocation}
-                  disabled={gpsLoading}
-                  className="min-h-[48px] rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 disabled:opacity-60"
-                >
-                  {gpsLoading ? "Fetching GPS..." : "📍 Use Current Location"}
-                </button>
-                {bookingLat && bookingLng ? (
-                  <span className="text-xs text-slate-600">GPS: {bookingLat}, {bookingLng}</span>
-                ) : null}
-              </div>
 
               <button
                 type="button"

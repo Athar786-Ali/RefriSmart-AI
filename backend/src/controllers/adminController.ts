@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { cloudinary } from "../config/cloudinary.js";
 import { prisma } from "../config/prisma.js";
+import type { AuthenticatedRequest } from "../middlewares/authMiddleware.js";
 import {
   SHOP_UPI_ID,
   TECHNICIAN_PHONE,
@@ -45,9 +46,17 @@ const getBookingsWithAssignment = async (customerId: string) => {
   });
 };
 
-export const getHistory = async (req: Request, res: Response) => {
+export const getHistory = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = String(req.params.userId || "");
+    const requesterId = req.userId;
+    if (requesterId) {
+      const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+      if (!requester) return res.status(403).json({ error: "Forbidden." });
+      if (requester.role !== "ADMIN" && requesterId !== userId) {
+        return res.status(403).json({ error: "Forbidden." });
+      }
+    }
     const history = await prisma.serviceBooking.findMany({
       where: { customerId: userId },
       orderBy: { scheduledAt: "desc" },
@@ -65,8 +74,8 @@ export const getBookingSlots = async (req: Request, res: Response) => {
     const dateParam = String(req.query.date || "").trim();
     const targetDate = dateParam ? new Date(dateParam) : undefined;
 
-    const techRows = await prisma.$queryRaw<Array<{ id: string; name: string; phone: string; pincode: string }>>`
-      SELECT "id", "name", "phone", "pincode"
+    const techRows = await prisma.$queryRaw<Array<{ id: string; name: string; pincode: string }>>`
+      SELECT "id", "name", "pincode"
       FROM "Technician"
       WHERE "active" = TRUE
       ORDER BY "id" ASC
@@ -76,9 +85,12 @@ export const getBookingSlots = async (req: Request, res: Response) => {
       : techRows;
     const slots = generateSuggestedSlots(targetDate).map((slot) => ({
       ...slot,
-      technician: technicians[0] || null,
+      technician: technicians[0] ? { id: technicians[0].id, name: technicians[0].name } : null,
     }));
-    res.json({ slots, technicians: technicians.slice(0, 5) });
+    res.json({
+      slots,
+      technicians: technicians.slice(0, 5).map((t) => ({ id: t.id, name: t.name })),
+    });
   } catch {
     res.status(500).json({ error: "Failed to fetch slots." });
   }
@@ -103,24 +115,30 @@ export const createBooking = async (req: Request, res: Response) => {
       lng?: number | string;
     };
 
-    if (!appliance || !issue) {
+    const trimmedAppliance = String(appliance || "").trim();
+    const trimmedIssue = String(issue || "").trim();
+    const trimmedFullName = String(fullName || "").trim();
+    const trimmedAddress = String(address || "").trim();
+    const trimmedPincode = String(pincode || "").trim();
+
+    if (!trimmedAppliance || !trimmedIssue) {
       return res.status(400).json({ error: "appliance and issue are required." });
     }
-    if (!fullName || !String(fullName).trim()) {
+    if (!trimmedFullName) {
       return res.status(400).json({ error: "Full name is required." });
     }
     const cleanedPhone = String(phoneNumber || "").replace(/\D/g, "");
     if (!cleanedPhone || cleanedPhone.length !== 10) {
       return res.status(400).json({ error: "A valid 10-digit phone number is required." });
     }
-    if (!address || !String(address).trim()) {
+    if (!trimmedAddress) {
       return res.status(400).json({ error: "Full address is required." });
     }
-    if (!pincode || typeof pincode !== "string") {
-      return res.status(400).json({ error: "Pincode is required." });
+    if (!/^\d{6}$/.test(trimmedPincode)) {
+      return res.status(400).json({ error: "Pincode must be a 6-digit number." });
     }
     const SERVICE_PIN_PREFIXES = ["500", "506"];
-    if (!SERVICE_PIN_PREFIXES.some((prefix) => pincode.trim().startsWith(prefix))) {
+    if (!SERVICE_PIN_PREFIXES.some((prefix) => trimmedPincode.startsWith(prefix))) {
       return res.status(400).json({ error: "Sorry, your location is outside our current service area." });
     }
 
@@ -138,7 +156,6 @@ export const createBooking = async (req: Request, res: Response) => {
     if (!techRows.length) {
       return res.status(503).json({ error: "No technicians are available right now. Please try again later." });
     }
-    const trimmedPincode = pincode.trim();
     const matchingTechs = techRows.filter(
       (t) => trimmedPincode && (t.pincode === trimmedPincode || t.pincode.slice(0, 3) === trimmedPincode.slice(0, 3)),
     );
@@ -148,7 +165,7 @@ export const createBooking = async (req: Request, res: Response) => {
     const selectedTech = matchingTechs[0];
 
     let resolvedCustomerId: string | null = null;
-    let resolvedName = String(fullName || "").trim();
+    let resolvedName = trimmedFullName;
     let resolvedPhone = cleanedPhone;
     let resolvedGuestName = String(guestName || "").trim();
     let resolvedGuestPhone = String(guestPhone || "").replace(/\D/g, "");
@@ -174,8 +191,8 @@ export const createBooking = async (req: Request, res: Response) => {
         customerId: resolvedCustomerId,
         guestName: resolvedCustomerId ? null : resolvedName,
         guestPhone: resolvedCustomerId ? null : resolvedPhone,
-        appliance,
-        issue,
+        appliance: trimmedAppliance,
+        issue: trimmedIssue,
         aiDiagnosis: aiDiagnosis || null,
         status: "PENDING",
         scheduledAt,
@@ -186,7 +203,7 @@ export const createBooking = async (req: Request, res: Response) => {
 
     await prisma.$executeRaw`
       INSERT INTO "ServiceAssignment" ("bookingId", "technicianId", "pincode", "routeNote")
-      VALUES (${booking.id}, ${selectedTech.id}, ${pincode || selectedTech.pincode}, ${"Auto allocated by pincode and availability"})
+      VALUES (${booking.id}, ${selectedTech.id}, ${trimmedPincode || selectedTech.pincode}, ${"Auto allocated by pincode and availability"})
       ON CONFLICT ("bookingId") DO UPDATE
       SET "technicianId" = EXCLUDED."technicianId",
           "pincode" = EXCLUDED."pincode",
@@ -234,24 +251,30 @@ export const bookService = async (req: Request, res: Response) => {
       guestName?: string;
       guestPhone?: string;
     };
-    if (!appliance || !issue) {
+    const trimmedAppliance = String(appliance || "").trim();
+    const trimmedIssue = String(issue || "").trim();
+    const trimmedFullName = String(fullName || "").trim();
+    const trimmedAddress = String(address || "").trim();
+    const trimmedPincode = String(pincode || "").trim();
+
+    if (!trimmedAppliance || !trimmedIssue) {
       return res.status(400).json({ error: "appliance and issue are required." });
     }
-    if (!fullName || !String(fullName).trim()) {
+    if (!trimmedFullName) {
       return res.status(400).json({ error: "Full name is required." });
     }
     const cleanedPhone = String(phoneNumber || "").replace(/\D/g, "");
     if (!cleanedPhone || cleanedPhone.length !== 10) {
       return res.status(400).json({ error: "A valid 10-digit phone number is required." });
     }
-    if (!address || !String(address).trim()) {
+    if (!trimmedAddress) {
       return res.status(400).json({ error: "Full address is required." });
     }
-    if (!pincode || typeof pincode !== "string") {
-      return res.status(400).json({ error: "Pincode is required." });
+    if (!/^\d{6}$/.test(trimmedPincode)) {
+      return res.status(400).json({ error: "Pincode must be a 6-digit number." });
     }
     const SERVICE_PIN_PREFIXES = ["500", "506"];
-    if (!SERVICE_PIN_PREFIXES.some((prefix) => pincode.trim().startsWith(prefix))) {
+    if (!SERVICE_PIN_PREFIXES.some((prefix) => trimmedPincode.startsWith(prefix))) {
       return res.status(400).json({ error: "Sorry, your location is outside our current service area." });
     }
 
@@ -269,7 +292,6 @@ export const bookService = async (req: Request, res: Response) => {
     if (!techRows.length) {
       return res.status(503).json({ error: "No technicians are available right now. Please try again later." });
     }
-    const trimmedPincode = pincode.trim();
     const matchingTechs = techRows.filter(
       (t) => trimmedPincode && (t.pincode === trimmedPincode || t.pincode.slice(0, 3) === trimmedPincode.slice(0, 3)),
     );
@@ -279,7 +301,7 @@ export const bookService = async (req: Request, res: Response) => {
     const selectedTech = matchingTechs[0];
 
     let resolvedCustomerId: string | null = null;
-    let resolvedName = String(fullName || "").trim();
+    let resolvedName = trimmedFullName;
     let resolvedPhone = cleanedPhone;
     let resolvedGuestName = String(guestName || "").trim();
     let resolvedGuestPhone = String(guestPhone || "").replace(/\D/g, "");
@@ -324,11 +346,11 @@ export const bookService = async (req: Request, res: Response) => {
         ${resolvedCustomerId},
         ${resolvedCustomerId ? null : resolvedName},
         ${resolvedCustomerId ? null : resolvedPhone},
-        ${appliance},
-        ${issue},
+        ${trimmedAppliance},
+        ${trimmedIssue},
         ${"PENDING"}::"Status",
         ${scheduledAt},
-        ${address || null},
+        ${trimmedAddress || null},
         ${resolvedName},
         ${resolvedPhone},
         ${lat !== undefined && lat !== null && String(lat) !== "" ? Number(lat) : null},
@@ -340,7 +362,7 @@ export const bookService = async (req: Request, res: Response) => {
 
     await prisma.$executeRaw`
       INSERT INTO "ServiceAssignment" ("bookingId", "technicianId", "pincode", "routeNote")
-      VALUES (${booking.id}, ${selectedTech.id}, ${pincode || selectedTech.pincode}, ${"Auto allocated by pincode and availability"})
+      VALUES (${booking.id}, ${selectedTech.id}, ${trimmedPincode || selectedTech.pincode}, ${"Auto allocated by pincode and availability"})
       ON CONFLICT ("bookingId") DO UPDATE
       SET "technicianId" = EXCLUDED."technicianId",
           "pincode" = EXCLUDED."pincode",
@@ -456,6 +478,17 @@ export const getBookingTimeline = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
     const { bookingId } = req.params;
+    if (!bookingId) return res.status(400).json({ error: "bookingId is required." });
+    const requesterId = (req as AuthenticatedRequest).userId;
+    if (!requesterId) return res.status(401).json({ error: "Unauthorized." });
+    const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+    if (!requester) return res.status(403).json({ error: "Forbidden." });
+    if (requester.role !== "ADMIN") {
+      const booking = await prisma.serviceBooking.findUnique({ where: { id: bookingId } });
+      if (!booking || booking.customerId !== requesterId) {
+        return res.status(403).json({ error: "Forbidden." });
+      }
+    }
     const events = await prisma.$queryRaw<Array<{ status: string; note: string; createdAt: Date }>>`
       SELECT "status", COALESCE("note", '') AS "note", "createdAt"
       FROM "ServiceEvent"
@@ -546,10 +579,18 @@ export const verifyBookingOtp = async (req: Request, res: Response) => {
   }
 };
 
-export const getMyBookingsByPath = async (req: Request, res: Response) => {
+export const getMyBookingsByPath = async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
     const userId = String(req.params.userId || "");
+    const requesterId = req.userId;
+    if (requesterId) {
+      const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+      if (!requester) return res.status(403).json({ error: "Forbidden." });
+      if (requester.role !== "ADMIN" && requesterId !== userId) {
+        return res.status(403).json({ error: "Forbidden." });
+      }
+    }
     const bookings = await getBookingsWithAssignment(userId);
     res.json(bookings);
   } catch (error: any) {
@@ -557,15 +598,69 @@ export const getMyBookingsByPath = async (req: Request, res: Response) => {
   }
 };
 
-export const getMyBookingsByQuery = async (req: Request, res: Response) => {
+export const getMyBookingsByQuery = async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
     const userId = String(req.query.userId || "").trim();
     if (!userId) return res.status(400).json({ error: "userId is required." });
+    const requesterId = req.userId;
+    if (requesterId) {
+      const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+      if (!requester) return res.status(403).json({ error: "Forbidden." });
+      if (requester.role !== "ADMIN" && requesterId !== userId) {
+        return res.status(403).json({ error: "Forbidden." });
+      }
+    }
     const bookings = await getBookingsWithAssignment(userId);
     res.json(bookings);
   } catch (error: any) {
     res.status(500).json({ error: "Failed to fetch bookings.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const getGuestBooking = async (req: Request, res: Response) => {
+  try {
+    await ensurePhase2Schema().catch(() => {});
+    const bookingId = String(req.query.bookingId || "").trim();
+    const phone = String(req.query.phone || "").replace(/\D/g, "");
+    if (!bookingId || phone.length !== 10) {
+      return res.status(400).json({ error: "bookingId and valid 10-digit phone are required." });
+    }
+
+    const booking = await prisma.serviceBooking.findUnique({ where: { id: bookingId } });
+    if (!booking || !booking.guestPhone) return res.status(404).json({ error: "Booking not found." });
+    if (booking.guestPhone.replace(/\D/g, "") !== phone) {
+      return res.status(403).json({ error: "Forbidden." });
+    }
+
+    const assignmentRows = await prisma.$queryRaw<Array<{ bookingId: string; technicianId: string; pincode: string; routeNote: string }>>`
+      SELECT "bookingId", "technicianId", COALESCE("pincode",'') AS "pincode", COALESCE("routeNote",'') AS "routeNote"
+      FROM "ServiceAssignment"
+      WHERE "bookingId" = ${bookingId}
+      LIMIT 1
+    `;
+    const assignment = assignmentRows[0];
+    let technician: { id: string; name: string; phone?: string } | null = null;
+    if (assignment?.technicianId) {
+      const techRows = await prisma.$queryRaw<Array<{ id: string; name: string; phone: string }>>`
+        SELECT "id", "name", "phone"
+        FROM "Technician"
+        WHERE "id" = ${assignment.technicianId}
+        LIMIT 1
+      `;
+      technician = techRows[0] || null;
+    }
+
+    res.json({
+      booking: {
+        ...booking,
+        technician,
+        pincode: assignment?.pincode || null,
+        routeNote: assignment?.routeNote || null,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to fetch booking.", details: error?.message || "Unknown error" });
   }
 };
 
@@ -695,6 +790,18 @@ export const uploadGalleryItem = async (req: Request, res: Response) => {
 
     if (fileData?.startsWith("data:video/")) resolvedMediaType = "video";
     if (fileData?.startsWith("data:image/")) resolvedMediaType = "image";
+    if (fileData && !fileData.startsWith("data:image/") && !fileData.startsWith("data:video/")) {
+      return res.status(400).json({ error: "Invalid media payload." });
+    }
+    if (fileData) {
+      const base64 = fileData.split(",")[1] || "";
+      const padding = (base64.match(/=+$/) || [""])[0].length;
+      const bytes = Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+      const MAX_BYTES = 5 * 1024 * 1024;
+      if (bytes > MAX_BYTES) {
+        return res.status(413).json({ error: "File too large. Max size is 5MB." });
+      }
+    }
 
     if (!finalUrl && fileData && (fileData.startsWith("data:image/") || fileData.startsWith("data:video/"))) {
       const uploaded = await cloudinary.uploader.upload(fileData, {

@@ -17,6 +17,8 @@ export type AuthUser = {
   email?: string;
   role?: string;
   isAccountVerified?: boolean;
+  isPhoneVerified?: boolean;
+  phone?: string | null;
 };
 
 type AuthContextValue = {

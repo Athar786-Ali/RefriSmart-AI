@@ -16,6 +16,8 @@ type LoginResponse = {
     email: string;
     role: string;
     isAccountVerified?: boolean;
+    isPhoneVerified?: boolean;
+    phone?: string | null;
   };
 };
 
@@ -54,6 +56,8 @@ export default function LoginPage() {
           email: data.user.email,
           role: data.user.role,
           isAccountVerified: Boolean(data.user.isAccountVerified),
+          isPhoneVerified: Boolean(data.user.isPhoneVerified),
+          phone: data.user.phone ?? null,
         }),
       );
       setUser({
@@ -62,9 +66,11 @@ export default function LoginPage() {
         email: data.user.email,
         role: data.user.role,
         isAccountVerified: Boolean(data.user.isAccountVerified),
+        isPhoneVerified: Boolean(data.user.isPhoneVerified),
+        phone: data.user.phone ?? null,
       });
 
-      if (!data.user.isAccountVerified) {
+      if (!data.user.isAccountVerified && !data.user.isPhoneVerified) {
         toast.info("Verify your account to continue.");
         router.push("/verify-otp");
         return;

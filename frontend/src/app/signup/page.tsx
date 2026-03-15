@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { Lock, Mail, User } from "lucide-react";
+import { Lock, Mail, Phone, User } from "lucide-react";
 import { toast } from "sonner";
 
 type RegisterResponse = {
@@ -15,6 +15,7 @@ export default function SignupPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -28,7 +29,7 @@ export default function SignupPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, phone }),
       });
       const data = (await res.json()) as RegisterResponse;
       if (!res.ok) {
@@ -95,6 +96,21 @@ export default function SignupPage() {
                   placeholder="you@example.com"
                   className="h-12 w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
                   required
+                />
+              </div>
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 inline-block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Phone (Optional)</span>
+              <div className="flex min-h-[48px] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4">
+                <Phone className="h-4 w-4 text-blue-600" />
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="10-digit mobile number"
+                  className="h-12 w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  inputMode="numeric"
                 />
               </div>
             </label>

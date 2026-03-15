@@ -3,7 +3,16 @@
 import QRCode from "react-qr-code";
 import { CalendarClock, Loader2, Star } from "lucide-react";
 
-export type BookingStatus = "PENDING" | "ASSIGNED" | "OUT_FOR_REPAIR" | "REPAIRING" | "FIXED" | "COMPLETED";
+export type BookingStatus =
+  | "PENDING"
+  | "ASSIGNED"
+  | "ESTIMATE_APPROVED"
+  | "OUT_FOR_REPAIR"
+  | "REPAIRING"
+  | "PAYMENT_PENDING"
+  | "FIXED"
+  | "COMPLETED"
+  | "CANCELLED";
 
 export type ServiceBooking = {
   id: string;
@@ -34,15 +43,18 @@ type ServiceActiveTrackerCardProps = {
 const STATUS_STEPS: Array<{ key: BookingStatus; label: string }> = [
   { key: "PENDING", label: "Pending" },
   { key: "ASSIGNED", label: "Assigned" },
+  { key: "ESTIMATE_APPROVED", label: "Estimate Approved" },
   { key: "OUT_FOR_REPAIR", label: "On Way" },
   { key: "REPAIRING", label: "Repairing" },
-  { key: "FIXED", label: "Fixed" },
+  { key: "PAYMENT_PENDING", label: "Payment Pending" },
 ];
 
 const getStepIndex = (status: BookingStatus) => {
   const idx = STATUS_STEPS.findIndex((step) => step.key === status);
   if (idx >= 0) return idx;
+  if (status === "FIXED") return STATUS_STEPS.findIndex((step) => step.key === "PAYMENT_PENDING");
   if (status === "COMPLETED") return STATUS_STEPS.length - 1;
+  if (status === "CANCELLED") return STATUS_STEPS.length - 1;
   return 0;
 };
 
@@ -94,7 +106,7 @@ export default function ServiceActiveTrackerCard({
             </div>
           ) : !activeBooking ? (
             <p className="text-sm text-slate-600">Fetching active tracker...</p>
-          ) : activeBooking.status === "FIXED" ? (
+          ) : ["FIXED", "PAYMENT_PENDING"].includes(activeBooking.status) ? (
             <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
               <div className="space-y-3">
                 <h3 className="text-base font-semibold text-slate-900">Payment & Invoice</h3>

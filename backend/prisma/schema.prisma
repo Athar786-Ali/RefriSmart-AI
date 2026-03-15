@@ -44,6 +44,7 @@ model Product {
   warrantyType   WarrantyType?
   warrantyExpiry DateTime?
   warrantyCertificateUrl String?
+  stockQty       Int           @default(1)
   serialNumber   String?       @unique
   images         String[]
   status         ProductStatus @default(AVAILABLE)
@@ -165,7 +166,7 @@ model DocumentLog {
 model ProductOrder {
   id              String        @id @default(uuid())
   productId       String
-  customerId      String
+  customerId      String?
   productTitle    String
   productImageUrl String?
   price           Float
@@ -179,7 +180,7 @@ model ProductOrder {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   product         Product       @relation(fields: [productId], references: [id])
-  customer        User          @relation(fields: [customerId], references: [id])
+  customer        User?         @relation(fields: [customerId], references: [id])
 }
 
 // Semicolons (;) hata kar space ya new line use karo

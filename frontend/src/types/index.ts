@@ -13,6 +13,7 @@ export type Product = {
   warrantyType?: "BRAND" | "SHOP" | null;
   warrantyExpiry?: string | null;
   warrantyCertificateUrl?: string | null;
+  stockQty?: number | null;
   createdAt?: string | null;
 };
 

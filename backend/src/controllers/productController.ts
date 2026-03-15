@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { cloudinary } from "../config/cloudinary.js";
 import { prisma } from "../config/prisma.js";
+import type { AuthenticatedRequest } from "../middlewares/authMiddleware.js";
 import {
   ORDER_STATUS_FLOW,
   SHOP_UPI_ID,
@@ -95,8 +96,10 @@ export const createOrder = async (req: Request, res: Response) => {
       deliveryPhone?: string;
       fullName?: string;
     };
-    if (!userId || !productId || !deliveryAddress || !deliveryPhone || !fullName) {
-      return res.status(400).json({ error: "userId, productId, fullName, deliveryAddress, and deliveryPhone are required." });
+    const trimmedName = String(fullName || "").trim();
+    const trimmedAddress = String(deliveryAddress || "").trim();
+    if (!productId || !trimmedName || !trimmedAddress || !deliveryPhone) {
+      return res.status(400).json({ error: "productId, fullName, deliveryAddress, and deliveryPhone are required." });
     }
     const cleanedPhone = String(deliveryPhone || "").replace(/\D/g, "");
     if (!cleanedPhone || cleanedPhone.length !== 10) {
@@ -104,8 +107,8 @@ export const createOrder = async (req: Request, res: Response) => {
     }
 
     const inserted = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({ where: { id: userId } });
-      if (!user) {
+      const user = userId ? await tx.user.findUnique({ where: { id: userId } }) : null;
+      if (userId && !user) {
         throw new Error("Customer not found.");
       }
       const product = await tx.product.findUnique({ where: { id: productId } });
@@ -113,16 +116,31 @@ export const createOrder = async (req: Request, res: Response) => {
         throw new Error("Product not found.");
       }
 
-      const updated = await tx.product.updateMany({
-        where: { id: productId, status: "AVAILABLE" },
-        data: { status: "SOLD" },
-      });
-      if (!updated.count) {
+      const normalizedType = product.productType || (product.isUsed ? "REFURBISHED" : "NEW");
+      if (product.status !== "AVAILABLE") {
         throw new Error("Product is not available for order.");
+      }
+      if (normalizedType === "NEW") {
+        const stockQty = Number(product.stockQty ?? 1);
+        if (!Number.isFinite(stockQty) || stockQty <= 0) {
+          throw new Error("Product is out of stock.");
+        }
+        const reservationCutoff = new Date(Date.now() - 30 * 60 * 1000);
+        const pendingRows = await tx.$queryRaw<Array<{ count: number }>>`
+          SELECT COUNT(*)::int AS count
+          FROM "ProductOrder"
+          WHERE "productId" = ${product.id}
+            AND COALESCE("paymentStatus",'PENDING') <> 'PAID'
+            AND "createdAt" >= ${reservationCutoff}
+        `;
+        const pendingCount = Number(pendingRows[0]?.count || 0);
+        if (pendingCount >= stockQty) {
+          throw new Error("All units are currently reserved. Please try later.");
+        }
       }
 
       const productImageUrl = Array.isArray(product.images) && product.images[0] ? String(product.images[0]) : "";
-      const safeCustomerName = String(fullName || user.name || "Customer").trim() || "Customer";
+      const safeCustomerName = trimmedName || String(user?.name || "Customer").trim() || "Customer";
       const amount = Number(product.price || 0);
       const paymentQR = `upi://pay?pa=${SHOP_UPI_ID}&pn=Golden%20Refrigeration&am=${amount}&cu=INR`;
       const orderId = createUuid();
@@ -147,13 +165,13 @@ export const createOrder = async (req: Request, res: Response) => {
         (
           ${orderId},
           ${product.id},
-          ${user.id},
+          ${user?.id ?? null},
           ${product.title},
           ${productImageUrl ? cloudinaryOptimizeUrl(productImageUrl) : null},
           ${amount},
           ${safeCustomerName},
           ${cleanedPhone},
-          ${String(deliveryAddress).trim()},
+          ${trimmedAddress},
           ${"ORDER_PLACED"},
           ${"PENDING"},
           ${paymentQR},
@@ -184,11 +202,11 @@ export const createOrder = async (req: Request, res: Response) => {
   }
 };
 
-export const getMyOrders = async (req: Request, res: Response) => {
+export const getMyOrders = async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const userId = String(req.query.userId || "").trim();
-    if (!userId) return res.status(400).json({ error: "userId is required." });
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized." });
     const rows = await prisma.$queryRaw<Array<any>>`
       SELECT *
       FROM "ProductOrder"
@@ -229,16 +247,97 @@ export const updateAdminOrderStatus = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Valid orderStatus is required." });
     }
 
+    const existing = await prisma.$queryRaw<Array<any>>`
+      SELECT "id", "paymentStatus"
+      FROM "ProductOrder"
+      WHERE "id" = ${id}
+      LIMIT 1
+    `;
+    if (!existing.length) return res.status(404).json({ error: "Order not found." });
+    const paymentStatus = String(existing[0]?.paymentStatus || "PENDING");
+    if (orderStatus !== "ORDER_PLACED" && paymentStatus !== "PAID") {
+      return res.status(400).json({ error: "Payment not confirmed yet." });
+    }
+
     const updated = await prisma.$queryRaw<Array<any>>`
       UPDATE "ProductOrder"
       SET "orderStatus" = ${orderStatus}, "updatedAt" = ${new Date()}
       WHERE "id" = ${id}
       RETURNING *
     `;
-    if (!updated.length) return res.status(404).json({ error: "Order not found." });
     res.json({ order: updated[0] });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to update order status.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const confirmOrderPayment = async (req: Request, res: Response) => {
+  try {
+    await ensurePhase2Schema().catch(() => {});
+    const { id } = req.params;
+    const updated = await prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<Array<any>>`
+        SELECT "id", "productId", "paymentStatus"
+        FROM "ProductOrder"
+        WHERE "id" = ${id}
+        LIMIT 1
+      `;
+      if (!rows.length) throw new Error("Order not found.");
+      const order = rows[0];
+      if (String(order.paymentStatus) === "PAID") {
+        return order;
+      }
+
+      const product = await tx.product.findUnique({ where: { id: order.productId } });
+      if (!product) throw new Error("Product not found.");
+      const normalizedType = product.productType || (product.isUsed ? "REFURBISHED" : "NEW");
+
+      await tx.$queryRaw`
+        UPDATE "ProductOrder"
+        SET "paymentStatus" = ${"PAID"}, "updatedAt" = ${new Date()}
+        WHERE "id" = ${id}
+      `;
+
+      if (normalizedType === "REFURBISHED") {
+        await tx.product.updateMany({
+          where: { id: order.productId },
+          data: { status: "SOLD", stockQty: 0 },
+        });
+      } else {
+        const currentStock = Number(product.stockQty ?? 1);
+        if (!Number.isFinite(currentStock) || currentStock <= 0) {
+          throw new Error("Stock is already depleted.");
+        }
+        const nextStock = currentStock - 1;
+        await tx.product.update({
+          where: { id: order.productId },
+          data: {
+            stockQty: nextStock,
+            status: nextStock <= 0 ? "SOLD" : "AVAILABLE",
+          },
+        });
+      }
+      const refreshed = await tx.$queryRaw<Array<any>>`
+        SELECT *
+        FROM "ProductOrder"
+        WHERE "id" = ${id}
+        LIMIT 1
+      `;
+      return refreshed[0];
+    });
+
+    res.json({ order: updated });
+  } catch (error: any) {
+    if (error?.message?.includes("Order not found")) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+    if (error?.message?.includes("Product not found")) {
+      return res.status(404).json({ error: "Product not found." });
+    }
+    if (error?.message?.includes("Stock")) {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: "Failed to confirm payment.", details: error?.message || "Unknown error" });
   }
 };
 
@@ -302,11 +401,57 @@ export const downloadOrderInvoice = async (req: Request, res: Response) => {
   }
 };
 
+export const downloadCustomerOrderInvoice = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await ensurePhase2Schema().catch(() => {});
+    const { orderId } = req.params;
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized." });
+
+    const rows = await prisma.$queryRaw<Array<any>>`
+      SELECT *
+      FROM "ProductOrder"
+      WHERE "id" = ${orderId}
+      LIMIT 1
+    `;
+    if (!rows.length) return res.status(404).json({ error: "Order not found." });
+    const order = rows[0];
+    if (!order.customerId || order.customerId !== userId) {
+      return res.status(403).json({ error: "Forbidden." });
+    }
+
+    const lines = [
+      `Order ID: ${order.id}`,
+      `Date: ${new Date(order.createdAt).toLocaleString("en-IN")}`,
+      `Customer: ${order.customerName || "Customer"}`,
+      `Phone: ${order.deliveryPhone || "N/A"}`,
+      `Address: ${order.deliveryAddress || "N/A"}`,
+      `Product: ${order.productTitle || "N/A"}`,
+      `Order Status: ${order.orderStatus || "ORDER_PLACED"}`,
+      `Amount: ₹${Number(order.price || 0).toLocaleString("en-IN")}`,
+      `Payment Status: ${order.paymentStatus || "PENDING"}`,
+    ];
+    const pdfBuffer = makeSimplePdfBuffer("Golden Refrigeration - Product Invoice", lines);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="order-invoice-${orderId}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to generate order invoice.", details: error?.message || "Unknown error" });
+  }
+};
+
 export const uploadProductImage = async (req: Request, res: Response) => {
   try {
     const { fileData } = req.body as { fileData?: string };
     if (!fileData || typeof fileData !== "string" || !fileData.startsWith("data:image/")) {
       return res.status(400).json({ error: "Invalid image payload." });
+    }
+    const base64 = fileData.split(",")[1] || "";
+    const padding = (base64.match(/=+$/) || [""])[0].length;
+    const bytes = Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+    const MAX_BYTES = 5 * 1024 * 1024;
+    if (bytes > MAX_BYTES) {
+      return res.status(413).json({ error: "File too large. Max size is 5MB." });
     }
 
     const uploaded = await cloudinary.uploader.upload(fileData, {
@@ -453,6 +598,7 @@ export const addProduct = async (req: Request, res: Response) => {
       warrantyExpiry,
       warrantyCertificateUrl,
       serialNumber,
+      stockQty,
     } = req.body as {
       title?: string;
       description?: string;
@@ -466,16 +612,24 @@ export const addProduct = async (req: Request, res: Response) => {
       warrantyExpiry?: string;
       warrantyCertificateUrl?: string;
       serialNumber?: string;
+      stockQty?: number | string;
     };
 
-    if (!title || !price || !sellerId) {
+    const trimmedTitle = String(title || "").trim();
+    const trimmedDescription = String(description || "").trim();
+    const parsedPrice = Number(price);
+    if (!trimmedTitle || !sellerId) {
       return res.status(400).json({ error: "Missing details!" });
+    }
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      return res.status(400).json({ error: "Price must be a positive number." });
     }
 
     const normalizedProductType = productType === "REFURBISHED" ? "REFURBISHED" : "NEW";
     const optimizedImageUrl = imageUrl ? cloudinaryOptimizeUrl(imageUrl) : "";
     const conditionRaw = parseOptionalNumber(conditionScore);
     const ageRaw = parseOptionalNumber(ageMonths);
+    const stockRaw = parseOptionalNumber(stockQty);
     const parsedCondition = conditionRaw === null ? null : Math.min(10, Math.max(1, Math.round(conditionRaw)));
     const parsedAge = ageRaw === null ? null : Math.max(0, Math.round(ageRaw));
     const parsedWarrantyExpiry = parseFlexibleDate(warrantyExpiry);
@@ -495,17 +649,26 @@ export const addProduct = async (req: Request, res: Response) => {
     if (ageRaw !== null && Number.isNaN(ageRaw)) {
       return res.status(400).json({ error: "Age in months must be a valid number." });
     }
+    if (stockRaw !== null && Number.isNaN(stockRaw)) {
+      return res.status(400).json({ error: "Stock quantity must be a valid number." });
+    }
+
+    const normalizedStock =
+      normalizedProductType === "REFURBISHED"
+        ? 1
+        : Math.max(1, Math.round(Number.isFinite(stockRaw as number) ? Number(stockRaw) : 1));
 
     const normalizedSerial = String(serialNumber || "").trim();
     const baseData = {
-      title,
-      description: description || "",
-      price: parseFloat(String(price)),
+      title: trimmedTitle,
+      description: trimmedDescription,
+      price: parsedPrice,
       sellerId,
       isUsed: normalizedProductType === "REFURBISHED",
       images: optimizedImageUrl ? [optimizedImageUrl] : [],
       status: "AVAILABLE" as const,
       serialNumber: normalizedSerial || null,
+      stockQty: normalizedStock,
     };
 
     let newProduct: any;

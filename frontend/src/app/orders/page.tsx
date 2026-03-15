@@ -59,7 +59,7 @@ export default function OrdersPage() {
         return;
       }
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/my?userId=${user.id}`);
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/my`, { credentials: "include" });
         const payload = await res.json().catch(() => []);
         setOrders(Array.isArray(payload) ? payload : []);
       } catch {
@@ -143,7 +143,7 @@ export default function OrdersPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          const url = order.invoiceUrl || `${process.env.NEXT_PUBLIC_API_URL}/docs/order-invoice/${order.id}`;
+                          const url = order.invoiceUrl || `${process.env.NEXT_PUBLIC_API_URL}/orders/my/invoice/${order.id}`;
                           window.open(url, "_blank", "noopener,noreferrer");
                         }}
                         className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/20"
