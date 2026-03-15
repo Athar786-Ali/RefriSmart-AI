@@ -87,17 +87,41 @@ export const getBookingSlots = async (req: Request, res: Response) => {
 export const createBooking = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const { userId, appliance, issue, aiDiagnosis, slot, pincode } = req.body as {
+    const { userId, appliance, issue, aiDiagnosis, slot, pincode, fullName, phoneNumber, guestName, guestPhone, address, lat, lng } = req.body as {
       userId?: string;
       appliance?: string;
       issue?: string;
       aiDiagnosis?: string;
       slot?: string;
       pincode?: string;
+      fullName?: string;
+      phoneNumber?: string;
+      guestName?: string;
+      guestPhone?: string;
+      address?: string;
+      lat?: number | string;
+      lng?: number | string;
     };
 
-    if (!userId || !appliance || !issue) {
-      return res.status(400).json({ error: "userId, appliance and issue are required." });
+    if (!appliance || !issue) {
+      return res.status(400).json({ error: "appliance and issue are required." });
+    }
+    if (!fullName || !String(fullName).trim()) {
+      return res.status(400).json({ error: "Full name is required." });
+    }
+    const cleanedPhone = String(phoneNumber || "").replace(/\D/g, "");
+    if (!cleanedPhone || cleanedPhone.length !== 10) {
+      return res.status(400).json({ error: "A valid 10-digit phone number is required." });
+    }
+    if (!address || !String(address).trim()) {
+      return res.status(400).json({ error: "Full address is required." });
+    }
+    if (!pincode || typeof pincode !== "string") {
+      return res.status(400).json({ error: "Pincode is required." });
+    }
+    const SERVICE_PIN_PREFIXES = ["500", "506"];
+    if (!SERVICE_PIN_PREFIXES.some((prefix) => pincode.trim().startsWith(prefix))) {
+      return res.status(400).json({ error: "Sorry, your location is outside our current service area." });
     }
 
     const scheduledAt = slot ? new Date(slot) : new Date(Date.now() + 2 * 60 * 60 * 1000);
@@ -116,14 +140,40 @@ export const createBooking = async (req: Request, res: Response) => {
       techRows[0] ||
       { id: "tech-1", name: "Assigned Technician", phone: TECHNICIAN_PHONE, pincode: pincode || "N/A" };
 
+    let resolvedCustomerId: string | null = null;
+    let resolvedName = String(fullName || "").trim();
+    let resolvedPhone = cleanedPhone;
+    let resolvedGuestName = String(guestName || "").trim();
+    let resolvedGuestPhone = String(guestPhone || "").replace(/\D/g, "");
+
+    if (userId) {
+      const existingUser = await prisma.user.findUnique({ where: { id: userId } });
+      if (!existingUser) return res.status(404).json({ error: "User not found." });
+      resolvedCustomerId = userId;
+      resolvedName = resolvedName || existingUser.name || "Customer";
+      resolvedPhone = resolvedPhone || "Not provided";
+    } else {
+      resolvedGuestName = resolvedGuestName || resolvedName;
+      resolvedGuestPhone = resolvedGuestPhone || resolvedPhone;
+      if (!resolvedGuestName || !resolvedGuestPhone) {
+        return res.status(400).json({ error: "guestName and guestPhone are required." });
+      }
+      resolvedName = resolvedGuestName;
+      resolvedPhone = resolvedGuestPhone;
+    }
+
     const booking = await prisma.serviceBooking.create({
       data: {
-        customer: { connect: { id: userId } },
+        customerId: resolvedCustomerId,
+        guestName: resolvedCustomerId ? null : resolvedName,
+        guestPhone: resolvedCustomerId ? null : resolvedPhone,
         appliance,
         issue,
         aiDiagnosis: aiDiagnosis || null,
         status: "PENDING",
         scheduledAt,
+        contactName: resolvedName,
+        contactPhone: resolvedPhone,
       },
     });
 
@@ -180,6 +230,16 @@ export const bookService = async (req: Request, res: Response) => {
     if (!appliance || !issue) {
       return res.status(400).json({ error: "appliance and issue are required." });
     }
+    if (!fullName || !String(fullName).trim()) {
+      return res.status(400).json({ error: "Full name is required." });
+    }
+    const cleanedPhone = String(phoneNumber || "").replace(/\D/g, "");
+    if (!cleanedPhone || cleanedPhone.length !== 10) {
+      return res.status(400).json({ error: "A valid 10-digit phone number is required." });
+    }
+    if (!address || !String(address).trim()) {
+      return res.status(400).json({ error: "Full address is required." });
+    }
     if (!pincode || typeof pincode !== "string") {
       return res.status(400).json({ error: "Pincode is required." });
     }
@@ -206,9 +266,9 @@ export const bookService = async (req: Request, res: Response) => {
 
     let resolvedCustomerId: string | null = null;
     let resolvedName = String(fullName || "").trim();
-    let resolvedPhone = String(phoneNumber || "").trim();
+    let resolvedPhone = cleanedPhone;
     let resolvedGuestName = String(guestName || "").trim();
-    let resolvedGuestPhone = String(guestPhone || "").trim();
+    let resolvedGuestPhone = String(guestPhone || "").replace(/\D/g, "");
 
     if (userId) {
       const existingUser = await prisma.user.findUnique({ where: { id: userId } });
@@ -296,9 +356,29 @@ export const updateBookingStatus = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
     const id = String(req.params.id || "");
-    const { status } = req.body as { status?: "PENDING" | "ASSIGNED" | "OUT_FOR_REPAIR" | "REPAIRING" | "FIXED" | "COMPLETED" };
-    if (!status || !["PENDING", "ASSIGNED", "OUT_FOR_REPAIR", "REPAIRING", "FIXED", "COMPLETED"].includes(status)) {
+    const { status } = req.body as {
+      status?:
+        | "PENDING"
+        | "ASSIGNED"
+        | "ESTIMATE_APPROVED"
+        | "OUT_FOR_REPAIR"
+        | "REPAIRING"
+        | "PAYMENT_PENDING"
+        | "FIXED"
+        | "COMPLETED"
+        | "CANCELLED";
+    };
+    if (
+      !status ||
+      !["PENDING", "ASSIGNED", "ESTIMATE_APPROVED", "OUT_FOR_REPAIR", "REPAIRING", "PAYMENT_PENDING", "FIXED", "COMPLETED", "CANCELLED"].includes(status)
+    ) {
       return res.status(400).json({ error: "Valid status is required." });
+    }
+
+    const existing = await prisma.serviceBooking.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: "Booking not found." });
+    if (["FIXED", "PAYMENT_PENDING", "COMPLETED"].includes(status) && (!existing.finalCost || existing.finalCost <= 0)) {
+      return res.status(400).json({ error: "Final cost must be set before requesting payment or completing the booking." });
     }
 
     const updated = await prisma.serviceBooking.update({
@@ -346,13 +426,13 @@ export const cancelBooking = async (req: Request, res: Response) => {
     const id = String(req.params.id || "");
     const updated = await prisma.serviceBooking.update({
       where: { id },
-      data: { status: "COMPLETED" },
+      data: { status: "CANCELLED" },
     });
     await prisma.$executeRaw`
       INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
-      VALUES (${createUuid()}, ${id}, ${"COMPLETED"}, ${"Closed by user/admin"})
+      VALUES (${createUuid()}, ${id}, ${"CANCELLED"}, ${"Cancelled by user/admin"})
     `;
-    res.json({ booking: updated, message: "Booking closed." });
+    res.json({ booking: updated, message: "Booking cancelled." });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to cancel booking.", details: error?.message || "Unknown error" });
   }
@@ -378,6 +458,14 @@ export const sendBookingOtp = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
     const { id } = req.params;
+    const booking = await prisma.serviceBooking.findUnique({ where: { id } });
+    if (!booking) return res.status(404).json({ error: "Booking not found." });
+    if (!["FIXED", "PAYMENT_PENDING"].includes(String(booking.status))) {
+      return res.status(400).json({ error: "OTP can be generated only after the repair is marked fixed." });
+    }
+    if (!booking.finalCost || booking.finalCost <= 0) {
+      return res.status(400).json({ error: "Final cost must be set before generating the completion OTP." });
+    }
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     await prisma.$executeRaw`
@@ -404,6 +492,18 @@ export const verifyBookingOtp = async (req: Request, res: Response) => {
     const { otp } = req.body as { otp?: string };
     if (!otp) return res.status(400).json({ error: "otp is required." });
 
+    const booking = await prisma.serviceBooking.findUnique({ where: { id } });
+    if (!booking) return res.status(404).json({ error: "Booking not found." });
+    if (["CANCELLED", "COMPLETED"].includes(String(booking.status))) {
+      return res.status(400).json({ error: "Booking is already closed." });
+    }
+    if (!["FIXED", "PAYMENT_PENDING"].includes(String(booking.status))) {
+      return res.status(400).json({ error: "OTP verification is allowed only after repair is fixed." });
+    }
+    if (!booking.finalCost || booking.finalCost <= 0) {
+      return res.status(400).json({ error: "Final cost must be set before completing the booking." });
+    }
+
     const rows = await prisma.$queryRaw<Array<{ id: string; otp: string; expiresAt: Date; verified: boolean }>>`
       SELECT "id", "otp", "expiresAt", "verified"
       FROM "ServiceOtp"
@@ -418,7 +518,7 @@ export const verifyBookingOtp = async (req: Request, res: Response) => {
     if (String(latest.otp) !== String(otp)) return res.status(400).json({ error: "Invalid OTP." });
 
     await prisma.$executeRaw`UPDATE "ServiceOtp" SET "verified" = TRUE WHERE "id" = ${latest.id}`;
-    const booking = await prisma.serviceBooking.update({
+    const updatedBooking = await prisma.serviceBooking.update({
       where: { id },
       data: { status: "COMPLETED" },
     });
@@ -426,7 +526,7 @@ export const verifyBookingOtp = async (req: Request, res: Response) => {
       INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
       VALUES (${createUuid()}, ${id}, ${"COMPLETED"}, ${"OTP verified and service completed"})
     `;
-    res.json({ message: "OTP verified. Service marked completed.", booking });
+    res.json({ message: "OTP verified. Service marked completed.", booking: updatedBooking });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to verify OTP.", details: error?.message || "Unknown error" });
   }
@@ -458,12 +558,15 @@ export const getMyBookingsByQuery = async (req: Request, res: Response) => {
 export const updateAdminService = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const id = String(req.params.id || "");
-    const { status, finalCost } = req.body as {
-      status?: "PENDING" | "ASSIGNED" | "OUT_FOR_REPAIR" | "REPAIRING" | "FIXED" | "COMPLETED";
+  const id = String(req.params.id || "");
+  const { status, finalCost } = req.body as {
+      status?: "PENDING" | "ASSIGNED" | "ESTIMATE_APPROVED" | "OUT_FOR_REPAIR" | "REPAIRING" | "PAYMENT_PENDING" | "FIXED" | "COMPLETED" | "CANCELLED";
       finalCost?: number | string;
-    };
-    if (!status || !["PENDING", "ASSIGNED", "OUT_FOR_REPAIR", "REPAIRING", "FIXED", "COMPLETED"].includes(status)) {
+  };
+    if (
+      !status ||
+      !["PENDING", "ASSIGNED", "ESTIMATE_APPROVED", "OUT_FOR_REPAIR", "REPAIRING", "PAYMENT_PENDING", "FIXED", "COMPLETED", "CANCELLED"].includes(status)
+    ) {
       return res.status(400).json({ error: "Valid status is required." });
     }
 
@@ -475,17 +578,31 @@ export const updateAdminService = async (req: Request, res: Response) => {
     const booking = (await prisma.serviceBooking.findUnique({ where: { id } })) as any;
     if (!booking) return res.status(404).json({ error: "Booking not found." });
 
-    const amountToUse = status === "FIXED" ? Number(parsedCost ?? booking.finalCost ?? 0) : Number(booking.finalCost ?? 0);
-    const paymentQR = status === "FIXED" && amountToUse > 0
+    const isPaymentStatus = status === "FIXED" || status === "PAYMENT_PENDING";
+    const isCancelled = status === "CANCELLED";
+    const amountToUse = isPaymentStatus ? Number(parsedCost ?? booking.finalCost ?? 0) : Number(booking.finalCost ?? 0);
+    if (isPaymentStatus && (!amountToUse || amountToUse <= 0)) {
+      return res.status(400).json({ error: "Final cost must be set before requesting payment." });
+    }
+    if (status === "COMPLETED" && (!booking.finalCost || booking.finalCost <= 0)) {
+      return res.status(400).json({ error: "Final cost must be set before completing the booking." });
+    }
+    const paymentQR = isPaymentStatus && amountToUse > 0
       ? `upi://pay?pa=${SHOP_UPI_ID}&pn=MD%20ATHAR%20ALI&am=${amountToUse}&cu=INR`
-      : booking.paymentQR;
-    const invoiceUrl = status === "FIXED" ? `${req.protocol}://${req.get("host")}/api/docs/invoice/${id}` : booking.invoiceUrl;
+      : isCancelled
+        ? null
+        : booking.paymentQR;
+    const invoiceUrl = isPaymentStatus
+      ? `${req.protocol}://${req.get("host")}/api/docs/invoice/${id}`
+      : isCancelled
+        ? null
+        : booking.invoiceUrl;
 
     const updated = await prisma.$queryRaw<Array<any>>`
       UPDATE "ServiceBooking"
       SET
         "status" = ${status}::"Status",
-        "finalCost" = ${status === "FIXED" ? amountToUse : parsedCost ?? booking.finalCost},
+        "finalCost" = ${isCancelled ? null : isPaymentStatus ? amountToUse : parsedCost ?? booking.finalCost},
         "paymentQR" = ${paymentQR || null},
         "invoiceUrl" = ${invoiceUrl || null}
       WHERE "id" = ${id}
@@ -497,7 +614,11 @@ export const updateAdminService = async (req: Request, res: Response) => {
         ${createUuid()},
         ${id},
         ${status},
-        ${status === "FIXED" ? `Final estimate locked at ₹${amountToUse}. Payment request generated.` : `Admin updated status to ${status}`}
+        ${status === "CANCELLED"
+          ? "Booking cancelled by admin"
+          : isPaymentStatus
+            ? `Final estimate locked at ₹${amountToUse}. Payment request generated.`
+            : `Admin updated status to ${status}`}
       )
     `;
 
@@ -518,6 +639,12 @@ export const saveServiceRating = async (req: Request, res: Response) => {
     const rating = Number(req.body?.rating);
     if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
       return res.status(400).json({ error: "rating must be between 1 and 5." });
+    }
+
+    const booking = await prisma.serviceBooking.findUnique({ where: { id } });
+    if (!booking) return res.status(404).json({ error: "Booking not found." });
+    if (String(booking.status) !== "COMPLETED") {
+      return res.status(400).json({ error: "Rating can be submitted only after service completion." });
     }
 
     const updated = await prisma.$queryRaw<Array<any>>`
@@ -687,11 +814,19 @@ export const updateTechnicianJobStatus = async (req: Request, res: Response) => 
       note?: string;
     };
     if (!status) return res.status(400).json({ error: "status is required." });
-    const normalizedStatus = status === "IN_PROGRESS" ? "REPAIRING" : status === "CANCELLED" ? "COMPLETED" : status;
+    if (status === "CANCELLED") {
+      return res.status(400).json({ error: "Cancelled bookings must be handled by admin approval." });
+    }
+    const normalizedStatus = status === "IN_PROGRESS" ? "REPAIRING" : status;
     if (!["PENDING", "ASSIGNED", "OUT_FOR_REPAIR", "REPAIRING", "FIXED", "COMPLETED"].includes(normalizedStatus)) {
       return res.status(400).json({ error: "Invalid status update." });
     }
 
+    const existing = await prisma.serviceBooking.findUnique({ where: { id: bookingId } });
+    if (!existing) return res.status(404).json({ error: "Booking not found." });
+    if (normalizedStatus === "COMPLETED" && (!existing.finalCost || existing.finalCost <= 0)) {
+      return res.status(400).json({ error: "Final cost must be set before completing the booking." });
+    }
     const booking = await prisma.serviceBooking.update({
       where: { id: bookingId },
       data: { status: normalizedStatus as any },

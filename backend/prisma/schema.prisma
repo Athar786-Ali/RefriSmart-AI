@@ -14,11 +14,15 @@ model User {
   id                 String   @id @default(uuid())
   name               String
   email              String   @unique
+  phone              String?  @unique
   password           String?
   role               Role     @default(CUSTOMER)
   verifyOtp          String?
   verifyOtpExpiryAt  Float?
   isAccountVerified  Boolean  @default(false)
+  phoneVerifyOtp     String?
+  phoneVerifyOtpExpiryAt Float?
+  isPhoneVerified    Boolean  @default(false)
   resetOtp           String?
   resetOtpExpiryAt   Float?
   products           Product[]
@@ -53,6 +57,8 @@ model ServiceBooking {
   customer     User?    @relation(fields: [customerId], references: [id])
   guestName    String?
   guestPhone   String?
+  contactName  String?
+  contactPhone String?
   appliance    String
   issue        String
   aiDiagnosis  String?
@@ -105,4 +111,5 @@ enum Status {
   COMPLETED 
   ESTIMATE_APPROVED
   PAYMENT_PENDING
+  CANCELLED
 }

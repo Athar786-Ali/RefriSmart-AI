@@ -156,7 +156,8 @@ export const ensurePhase1ProductSchema = async () => {
     ADD COLUMN IF NOT EXISTS "ageMonths" INTEGER,
     ADD COLUMN IF NOT EXISTS "warrantyType" "WarrantyType",
     ADD COLUMN IF NOT EXISTS "warrantyExpiry" TIMESTAMP(3),
-    ADD COLUMN IF NOT EXISTS "warrantyCertificateUrl" TEXT;
+    ADD COLUMN IF NOT EXISTS "warrantyCertificateUrl" TEXT,
+    ADD COLUMN IF NOT EXISTS "serialNumber" TEXT;
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -183,6 +184,7 @@ export const ensurePhase2Schema = async () => {
         ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'REPAIRING';
         ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'PAYMENT_PENDING';
         ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'FIXED';
+        ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'CANCELLED';
       END IF;
     END $$;
   `);
@@ -344,6 +346,10 @@ export const ensureAuthSchema = async () => {
     ADD COLUMN IF NOT EXISTS "verifyOtp" TEXT,
     ADD COLUMN IF NOT EXISTS "verifyOtpExpiryAt" DOUBLE PRECISION,
     ADD COLUMN IF NOT EXISTS "isAccountVerified" BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS "phone" TEXT,
+    ADD COLUMN IF NOT EXISTS "phoneVerifyOtp" TEXT,
+    ADD COLUMN IF NOT EXISTS "phoneVerifyOtpExpiryAt" DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS "isPhoneVerified" BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS "resetOtp" TEXT,
     ADD COLUMN IF NOT EXISTS "resetOtpExpiryAt" DOUBLE PRECISION;
   `);
@@ -365,6 +371,10 @@ export const sendEmail = async (to: string, subject: string, html: string, text?
     html,
   });
 };
+
+export const isEmailConfigured = () => Boolean(SMTP_USER && SMTP_PASS);
+
+// WhatsApp fallback uses a "click to chat" deep link and does not require server-side credentials.
 
 export const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export const TECHNICIAN_PHONE = "9060877595";

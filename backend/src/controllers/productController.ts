@@ -25,6 +25,7 @@ export const getProducts = async (_req: Request, res: Response) => {
   try {
     await ensurePhase1ProductSchema().catch(() => {});
     const products = await prisma.product.findMany({
+      where: { status: "AVAILABLE" },
       orderBy: { id: "desc" },
     });
     const normalized = products.map((p: any) => {
@@ -58,6 +59,7 @@ export const getProducts = async (_req: Request, res: Response) => {
       >`
         SELECT "id", "title", "description", "price", "isUsed", "images", "status", "sellerId", "createdAt"
         FROM "Product"
+        WHERE "status" = 'AVAILABLE'
         ORDER BY "id" DESC
       `;
 
@@ -86,73 +88,99 @@ export const createOrder = async (req: Request, res: Response) => {
   try {
     await ensurePhase1ProductSchema().catch(() => {});
     await ensurePhase2Schema().catch(() => {});
-    const { userId, productId, deliveryAddress, deliveryPhone, fullName, paymentConfirmed } = req.body as {
+    const { userId, productId, deliveryAddress, deliveryPhone, fullName } = req.body as {
       userId?: string;
       productId?: string;
       deliveryAddress?: string;
       deliveryPhone?: string;
       fullName?: string;
-      paymentConfirmed?: boolean;
     };
-    if (!userId || !productId || !deliveryAddress || !deliveryPhone) {
-      return res.status(400).json({ error: "userId, productId, deliveryAddress, and deliveryPhone are required." });
+    if (!userId || !productId || !deliveryAddress || !deliveryPhone || !fullName) {
+      return res.status(400).json({ error: "userId, productId, fullName, deliveryAddress, and deliveryPhone are required." });
+    }
+    const cleanedPhone = String(deliveryPhone || "").replace(/\D/g, "");
+    if (!cleanedPhone || cleanedPhone.length !== 10) {
+      return res.status(400).json({ error: "A valid 10-digit phone number is required for delivery." });
     }
 
-    const [user, product] = await Promise.all([
-      prisma.user.findUnique({ where: { id: userId } }),
-      prisma.product.findUnique({ where: { id: productId } }),
-    ]);
-    if (!user) return res.status(404).json({ error: "Customer not found." });
-    if (!product) return res.status(404).json({ error: "Product not found." });
-    if (product.status !== "AVAILABLE") return res.status(400).json({ error: "Product is not available for order." });
+    const inserted = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        throw new Error("Customer not found.");
+      }
+      const product = await tx.product.findUnique({ where: { id: productId } });
+      if (!product) {
+        throw new Error("Product not found.");
+      }
 
-    const productImageUrl = Array.isArray(product.images) && product.images[0] ? String(product.images[0]) : "";
-    const amount = Number(product.price || 0);
-    const paymentQR = `upi://pay?pa=${SHOP_UPI_ID}&pn=Golden%20Refrigeration&am=${amount}&cu=INR`;
-    const orderId = createUuid();
-    const inserted = await prisma.$queryRaw<Array<any>>`
-      INSERT INTO "ProductOrder"
-      (
-        "id",
-        "productId",
-        "customerId",
-        "productTitle",
-        "productImageUrl",
-        "price",
-        "customerName",
-        "deliveryPhone",
-        "deliveryAddress",
-        "orderStatus",
-        "paymentStatus",
-        "paymentQR",
-        "updatedAt"
-      )
-      VALUES
-      (
-        ${orderId},
-        ${product.id},
-        ${user.id},
-        ${product.title},
-        ${productImageUrl ? cloudinaryOptimizeUrl(productImageUrl) : null},
-        ${amount},
-        ${String(fullName || user.name || "Customer").trim() || "Customer"},
-        ${String(deliveryPhone).trim()},
-        ${String(deliveryAddress).trim()},
-        ${"ORDER_PLACED"},
-        ${paymentConfirmed ? "PAID" : "PENDING"},
-        ${paymentQR},
-        ${new Date()}
-      )
-      RETURNING *
-    `;
+      const updated = await tx.product.updateMany({
+        where: { id: productId, status: "AVAILABLE" },
+        data: { status: "SOLD" },
+      });
+      if (!updated.count) {
+        throw new Error("Product is not available for order.");
+      }
+
+      const productImageUrl = Array.isArray(product.images) && product.images[0] ? String(product.images[0]) : "";
+      const safeCustomerName = String(fullName || user.name || "Customer").trim() || "Customer";
+      const amount = Number(product.price || 0);
+      const paymentQR = `upi://pay?pa=${SHOP_UPI_ID}&pn=Golden%20Refrigeration&am=${amount}&cu=INR`;
+      const orderId = createUuid();
+      const rows = await tx.$queryRaw<Array<any>>`
+        INSERT INTO "ProductOrder"
+        (
+          "id",
+          "productId",
+          "customerId",
+          "productTitle",
+          "productImageUrl",
+          "price",
+          "customerName",
+          "deliveryPhone",
+          "deliveryAddress",
+          "orderStatus",
+          "paymentStatus",
+          "paymentQR",
+          "updatedAt"
+        )
+        VALUES
+        (
+          ${orderId},
+          ${product.id},
+          ${user.id},
+          ${product.title},
+          ${productImageUrl ? cloudinaryOptimizeUrl(productImageUrl) : null},
+          ${amount},
+          ${safeCustomerName},
+          ${cleanedPhone},
+          ${String(deliveryAddress).trim()},
+          ${"ORDER_PLACED"},
+          ${"PENDING"},
+          ${paymentQR},
+          ${new Date()}
+        )
+        RETURNING *
+      `;
+      return { order: rows[0] || null, paymentQR };
+    });
 
     res.status(201).json({
-      order: inserted[0] || null,
-      paymentQR,
+      order: inserted.order,
+      paymentQR: inserted.paymentQR,
       statusFlow: ORDER_STATUS_FLOW,
     });
   } catch (error: any) {
-    res.status(500).json({ error: "Failed to place order.", details: error?.message || "Unknown error" });
+    const message = error?.message || "Unknown error";
+    if (message.includes("Customer not found")) {
+      return res.status(404).json({ error: message });
+    }
+    if (message.includes("Product not found")) {
+      return res.status(404).json({ error: message });
+    }
+    if (message.includes("not available")) {
+      return res.status(400).json({ error: message });
+    }
+    res.status(500).json({ error: "Failed to place order.", details: message });
   }
 };
 
@@ -424,6 +452,7 @@ export const addProduct = async (req: Request, res: Response) => {
       warrantyType,
       warrantyExpiry,
       warrantyCertificateUrl,
+      serialNumber,
     } = req.body as {
       title?: string;
       description?: string;
@@ -436,6 +465,7 @@ export const addProduct = async (req: Request, res: Response) => {
       warrantyType?: "BRAND" | "SHOP";
       warrantyExpiry?: string;
       warrantyCertificateUrl?: string;
+      serialNumber?: string;
     };
 
     if (!title || !price || !sellerId) {
@@ -466,6 +496,7 @@ export const addProduct = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Age in months must be a valid number." });
     }
 
+    const normalizedSerial = String(serialNumber || "").trim();
     const baseData = {
       title,
       description: description || "",
@@ -474,6 +505,7 @@ export const addProduct = async (req: Request, res: Response) => {
       isUsed: normalizedProductType === "REFURBISHED",
       images: optimizedImageUrl ? [optimizedImageUrl] : [],
       status: "AVAILABLE" as const,
+      serialNumber: normalizedSerial || null,
     };
 
     let newProduct: any;
