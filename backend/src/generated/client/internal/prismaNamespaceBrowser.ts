@@ -54,7 +54,15 @@ export const ModelName = {
   User: 'User',
   Product: 'Product',
   ServiceBooking: 'ServiceBooking',
-  Gallery: 'Gallery'
+  Gallery: 'Gallery',
+  Technician: 'Technician',
+  ServiceAssignment: 'ServiceAssignment',
+  ServiceEvent: 'ServiceEvent',
+  ServiceOtp: 'ServiceOtp',
+  SellRequest: 'SellRequest',
+  SellOffer: 'SellOffer',
+  DocumentLog: 'DocumentLog',
+  ProductOrder: 'ProductOrder'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -77,8 +85,17 @@ export const UserScalarFieldEnum = {
   id: 'id',
   name: 'name',
   email: 'email',
+  phone: 'phone',
   password: 'password',
   role: 'role',
+  verifyOtp: 'verifyOtp',
+  verifyOtpExpiryAt: 'verifyOtpExpiryAt',
+  isAccountVerified: 'isAccountVerified',
+  phoneVerifyOtp: 'phoneVerifyOtp',
+  phoneVerifyOtpExpiryAt: 'phoneVerifyOtpExpiryAt',
+  isPhoneVerified: 'isPhoneVerified',
+  resetOtp: 'resetOtp',
+  resetOtpExpiryAt: 'resetOtpExpiryAt',
   createdAt: 'createdAt'
 } as const
 
@@ -97,6 +114,7 @@ export const ProductScalarFieldEnum = {
   warrantyType: 'warrantyType',
   warrantyExpiry: 'warrantyExpiry',
   warrantyCertificateUrl: 'warrantyCertificateUrl',
+  serialNumber: 'serialNumber',
   images: 'images',
   status: 'status',
   sellerId: 'sellerId',
@@ -109,6 +127,10 @@ export type ProductScalarFieldEnum = (typeof ProductScalarFieldEnum)[keyof typeo
 export const ServiceBookingScalarFieldEnum = {
   id: 'id',
   customerId: 'customerId',
+  guestName: 'guestName',
+  guestPhone: 'guestPhone',
+  contactName: 'contactName',
+  contactPhone: 'contactPhone',
   appliance: 'appliance',
   issue: 'issue',
   aiDiagnosis: 'aiDiagnosis',
@@ -129,11 +151,119 @@ export type ServiceBookingScalarFieldEnum = (typeof ServiceBookingScalarFieldEnu
 export const GalleryScalarFieldEnum = {
   id: 'id',
   imageUrl: 'imageUrl',
+  mediaType: 'mediaType',
   caption: 'caption',
   createdAt: 'createdAt'
 } as const
 
 export type GalleryScalarFieldEnum = (typeof GalleryScalarFieldEnum)[keyof typeof GalleryScalarFieldEnum]
+
+
+export const TechnicianScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  phone: 'phone',
+  role: 'role',
+  pincode: 'pincode',
+  active: 'active',
+  createdAt: 'createdAt'
+} as const
+
+export type TechnicianScalarFieldEnum = (typeof TechnicianScalarFieldEnum)[keyof typeof TechnicianScalarFieldEnum]
+
+
+export const ServiceAssignmentScalarFieldEnum = {
+  bookingId: 'bookingId',
+  technicianId: 'technicianId',
+  pincode: 'pincode',
+  routeNote: 'routeNote',
+  assignedAt: 'assignedAt'
+} as const
+
+export type ServiceAssignmentScalarFieldEnum = (typeof ServiceAssignmentScalarFieldEnum)[keyof typeof ServiceAssignmentScalarFieldEnum]
+
+
+export const ServiceEventScalarFieldEnum = {
+  id: 'id',
+  bookingId: 'bookingId',
+  status: 'status',
+  note: 'note',
+  createdAt: 'createdAt'
+} as const
+
+export type ServiceEventScalarFieldEnum = (typeof ServiceEventScalarFieldEnum)[keyof typeof ServiceEventScalarFieldEnum]
+
+
+export const ServiceOtpScalarFieldEnum = {
+  id: 'id',
+  bookingId: 'bookingId',
+  otp: 'otp',
+  expiresAt: 'expiresAt',
+  verified: 'verified',
+  createdAt: 'createdAt'
+} as const
+
+export type ServiceOtpScalarFieldEnum = (typeof ServiceOtpScalarFieldEnum)[keyof typeof ServiceOtpScalarFieldEnum]
+
+
+export const SellRequestScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  applianceType: 'applianceType',
+  brandModel: 'brandModel',
+  conditionNote: 'conditionNote',
+  expectedPrice: 'expectedPrice',
+  pincode: 'pincode',
+  imageUrl: 'imageUrl',
+  status: 'status',
+  createdAt: 'createdAt'
+} as const
+
+export type SellRequestScalarFieldEnum = (typeof SellRequestScalarFieldEnum)[keyof typeof SellRequestScalarFieldEnum]
+
+
+export const SellOfferScalarFieldEnum = {
+  id: 'id',
+  requestId: 'requestId',
+  offerPrice: 'offerPrice',
+  pickupSlot: 'pickupSlot',
+  status: 'status',
+  createdAt: 'createdAt'
+} as const
+
+export type SellOfferScalarFieldEnum = (typeof SellOfferScalarFieldEnum)[keyof typeof SellOfferScalarFieldEnum]
+
+
+export const DocumentLogScalarFieldEnum = {
+  id: 'id',
+  docType: 'docType',
+  bookingId: 'bookingId',
+  meta: 'meta',
+  createdAt: 'createdAt'
+} as const
+
+export type DocumentLogScalarFieldEnum = (typeof DocumentLogScalarFieldEnum)[keyof typeof DocumentLogScalarFieldEnum]
+
+
+export const ProductOrderScalarFieldEnum = {
+  id: 'id',
+  productId: 'productId',
+  customerId: 'customerId',
+  productTitle: 'productTitle',
+  productImageUrl: 'productImageUrl',
+  price: 'price',
+  customerName: 'customerName',
+  deliveryPhone: 'deliveryPhone',
+  deliveryAddress: 'deliveryAddress',
+  orderStatus: 'orderStatus',
+  paymentStatus: 'paymentStatus',
+  paymentQR: 'paymentQR',
+  invoiceUrl: 'invoiceUrl',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ProductOrderScalarFieldEnum = (typeof ProductOrderScalarFieldEnum)[keyof typeof ProductOrderScalarFieldEnum]
 
 
 export const SortOrder = {

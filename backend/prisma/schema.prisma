@@ -27,6 +27,8 @@ model User {
   resetOtpExpiryAt   Float?
   products           Product[]
   bookings           ServiceBooking[]
+  orders             ProductOrder[]
+  sellRequests       SellRequest[]
   createdAt          DateTime @default(now())
 }
 
@@ -47,6 +49,7 @@ model Product {
   status         ProductStatus @default(AVAILABLE)
   sellerId       String
   seller         User          @relation(fields: [sellerId], references: [id])
+  orders         ProductOrder[]
   createdAt      DateTime      @default(now()) // 🔥 Add this line
 }
 
@@ -71,13 +74,112 @@ model ServiceBooking {
   paymentQR    String?
   invoiceUrl   String?
   rating       Int?
+  assignment   ServiceAssignment?
+  events       ServiceEvent[]
+  otps         ServiceOtp[]
+  documents    DocumentLog[]
 }
 
 model Gallery {
   id        String   @id @default(uuid())
   imageUrl  String
+  mediaType String   @default("image")
   caption   String?
   createdAt DateTime @default(now())
+}
+
+model Technician {
+  id         String              @id @default(uuid())
+  name       String
+  phone      String              @unique
+  role       Role                @default(TECHNICIAN)
+  pincode    String
+  active     Boolean             @default(true)
+  createdAt  DateTime            @default(now())
+  assignments ServiceAssignment[]
+}
+
+model ServiceAssignment {
+  bookingId    String    @id
+  technicianId String
+  pincode      String?
+  routeNote    String?
+  assignedAt   DateTime  @default(now())
+  booking      ServiceBooking @relation(fields: [bookingId], references: [id])
+  technician   Technician     @relation(fields: [technicianId], references: [id])
+}
+
+model ServiceEvent {
+  id        String   @id @default(uuid())
+  bookingId String
+  status    String
+  note      String?
+  createdAt DateTime @default(now())
+  booking   ServiceBooking @relation(fields: [bookingId], references: [id])
+}
+
+model ServiceOtp {
+  id        String   @id @default(uuid())
+  bookingId String
+  otp       String
+  expiresAt DateTime
+  verified  Boolean @default(false)
+  createdAt DateTime @default(now())
+  booking   ServiceBooking @relation(fields: [bookingId], references: [id])
+}
+
+model SellRequest {
+  id            String            @id @default(uuid())
+  userId        String
+  applianceType String
+  brandModel    String
+  conditionNote String
+  expectedPrice Float?
+  pincode       String?
+  imageUrl      String?
+  status        SellRequestStatus @default(REQUESTED)
+  createdAt     DateTime          @default(now())
+  user          User              @relation(fields: [userId], references: [id])
+  offers        SellOffer[]
+}
+
+model SellOffer {
+  id         String           @id @default(uuid())
+  requestId  String
+  offerPrice Float
+  pickupSlot DateTime?
+  status     SellOfferStatus  @default(PENDING)
+  createdAt  DateTime         @default(now())
+  request    SellRequest      @relation(fields: [requestId], references: [id])
+}
+
+model DocumentLog {
+  id        String   @id @default(uuid())
+  docType   String
+  bookingId String?
+  meta      String?
+  createdAt DateTime @default(now())
+  booking   ServiceBooking? @relation(fields: [bookingId], references: [id])
+}
+
+model ProductOrder {
+  id              String        @id @default(uuid())
+  productId       String
+  customerId      String
+  productTitle    String
+  productImageUrl String?
+  price           Float
+  customerName    String?
+  deliveryPhone   String
+  deliveryAddress String
+  orderStatus     OrderStatus   @default(ORDER_PLACED)
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentQR       String?
+  invoiceUrl      String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  product         Product       @relation(fields: [productId], references: [id])
+  customer        User          @relation(fields: [customerId], references: [id])
 }
 
 // Semicolons (;) hata kar space ya new line use karo
@@ -112,4 +214,30 @@ enum Status {
   ESTIMATE_APPROVED
   PAYMENT_PENDING
   CANCELLED
+}
+
+enum OrderStatus {
+  ORDER_PLACED
+  DISPATCHED
+  OUT_FOR_DELIVERY
+  DELIVERED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+}
+
+enum SellRequestStatus {
+  REQUESTED
+  OFFER_SENT
+  ACCEPTED
+  REJECTED
+  REFURBISHED_LISTED
+}
+
+enum SellOfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
 }

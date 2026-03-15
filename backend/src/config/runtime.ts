@@ -135,37 +135,18 @@ export const decodeCompatMetaFromDescription = (description: string | null | und
 let phase1SchemaEnsured = false;
 export const ensurePhase1ProductSchema = async () => {
   if (phase1SchemaEnsured) return;
-
-  await prisma.$executeRawUnsafe(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ProductType') THEN
-        CREATE TYPE "ProductType" AS ENUM ('NEW', 'REFURBISHED');
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'WarrantyType') THEN
-        CREATE TYPE "WarrantyType" AS ENUM ('BRAND', 'SHOP');
-      END IF;
-    END $$;
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE "Product"
-    ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    ADD COLUMN IF NOT EXISTS "productType" "ProductType" NOT NULL DEFAULT 'NEW',
-    ADD COLUMN IF NOT EXISTS "conditionScore" INTEGER,
-    ADD COLUMN IF NOT EXISTS "ageMonths" INTEGER,
-    ADD COLUMN IF NOT EXISTS "warrantyType" "WarrantyType",
-    ADD COLUMN IF NOT EXISTS "warrantyExpiry" TIMESTAMP(3),
-    ADD COLUMN IF NOT EXISTS "warrantyCertificateUrl" TEXT,
-    ADD COLUMN IF NOT EXISTS "serialNumber" TEXT;
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    UPDATE "Product"
-    SET "productType" = CASE WHEN "isUsed" = true THEN 'REFURBISHED'::"ProductType" ELSE 'NEW'::"ProductType" END
-    WHERE ("isUsed" = true AND "productType" <> 'REFURBISHED'::"ProductType")
-       OR ("isUsed" = false AND "productType" <> 'NEW'::"ProductType");
-  `);
+  try {
+    await prisma.product.updateMany({
+      where: { isUsed: true, productType: { not: "REFURBISHED" } },
+      data: { productType: "REFURBISHED" },
+    });
+    await prisma.product.updateMany({
+      where: { isUsed: false, productType: { not: "NEW" } },
+      data: { productType: "NEW" },
+    });
+  } catch {
+    // Ignore if schema not yet migrated.
+  }
 
   phase1SchemaEnsured = true;
 };
@@ -173,165 +154,45 @@ export const ensurePhase1ProductSchema = async () => {
 let phase2SchemaEnsured = false;
 export const ensurePhase2Schema = async () => {
   if (phase2SchemaEnsured) return;
-
-  await prisma.$executeRawUnsafe(`
-    DO $$
-    BEGIN
-      IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'Status') THEN
-        ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'ASSIGNED';
-        ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'ESTIMATE_APPROVED';
-        ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'OUT_FOR_REPAIR';
-        ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'REPAIRING';
-        ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'PAYMENT_PENDING';
-        ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'FIXED';
-        ALTER TYPE "Status" ADD VALUE IF NOT EXISTS 'CANCELLED';
-      END IF;
-    END $$;
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE "ServiceBooking"
-    ADD COLUMN IF NOT EXISTS "address" TEXT,
-    ADD COLUMN IF NOT EXISTS "contactName" TEXT,
-    ADD COLUMN IF NOT EXISTS "contactPhone" TEXT,
-    ADD COLUMN IF NOT EXISTS "guestName" TEXT,
-    ADD COLUMN IF NOT EXISTS "guestPhone" TEXT,
-    ADD COLUMN IF NOT EXISTS "locationLat" DOUBLE PRECISION,
-    ADD COLUMN IF NOT EXISTS "locationLng" DOUBLE PRECISION,
-    ADD COLUMN IF NOT EXISTS "finalCost" DOUBLE PRECISION,
-    ADD COLUMN IF NOT EXISTS "paymentQR" TEXT,
-    ADD COLUMN IF NOT EXISTS "invoiceUrl" TEXT,
-    ADD COLUMN IF NOT EXISTS "rating" INTEGER;
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE "ServiceBooking"
-    ALTER COLUMN "customerId" DROP NOT NULL;
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "Gallery" (
-      "id" TEXT PRIMARY KEY,
-      "imageUrl" TEXT NOT NULL,
-      "mediaType" TEXT NOT NULL DEFAULT 'image',
-      "caption" TEXT,
-      "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE "Gallery"
-    ADD COLUMN IF NOT EXISTS "mediaType" TEXT NOT NULL DEFAULT 'image';
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "Technician" (
-      "id" TEXT PRIMARY KEY,
-      "name" TEXT NOT NULL,
-      "phone" TEXT NOT NULL UNIQUE,
-      "role" TEXT NOT NULL DEFAULT 'TECHNICIAN',
-      "pincode" TEXT NOT NULL,
-      "active" BOOLEAN NOT NULL DEFAULT TRUE,
-      "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "ServiceAssignment" (
-      "bookingId" TEXT PRIMARY KEY,
-      "technicianId" TEXT NOT NULL,
-      "pincode" TEXT,
-      "routeNote" TEXT,
-      "assignedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "ServiceEvent" (
-      "id" TEXT PRIMARY KEY,
-      "bookingId" TEXT NOT NULL,
-      "status" TEXT NOT NULL,
-      "note" TEXT,
-      "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "ServiceOtp" (
-      "id" TEXT PRIMARY KEY,
-      "bookingId" TEXT NOT NULL,
-      "otp" TEXT NOT NULL,
-      "expiresAt" TIMESTAMP NOT NULL,
-      "verified" BOOLEAN NOT NULL DEFAULT FALSE,
-      "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "SellRequest" (
-      "id" TEXT PRIMARY KEY,
-      "userId" TEXT NOT NULL,
-      "applianceType" TEXT NOT NULL,
-      "brandModel" TEXT NOT NULL,
-      "conditionNote" TEXT NOT NULL,
-      "expectedPrice" DOUBLE PRECISION,
-      "pincode" TEXT,
-      "imageUrl" TEXT,
-      "status" TEXT NOT NULL DEFAULT 'REQUESTED',
-      "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "SellOffer" (
-      "id" TEXT PRIMARY KEY,
-      "requestId" TEXT NOT NULL,
-      "offerPrice" DOUBLE PRECISION NOT NULL,
-      "pickupSlot" TIMESTAMP,
-      "status" TEXT NOT NULL DEFAULT 'PENDING',
-      "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "DocumentLog" (
-      "id" TEXT PRIMARY KEY,
-      "docType" TEXT NOT NULL,
-      "bookingId" TEXT,
-      "meta" TEXT,
-      "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "ProductOrder" (
-      "id" TEXT PRIMARY KEY,
-      "productId" TEXT NOT NULL,
-      "customerId" TEXT NOT NULL,
-      "productTitle" TEXT NOT NULL,
-      "productImageUrl" TEXT,
-      "price" DOUBLE PRECISION NOT NULL,
-      "customerName" TEXT,
-      "deliveryPhone" TEXT NOT NULL,
-      "deliveryAddress" TEXT NOT NULL,
-      "orderStatus" TEXT NOT NULL DEFAULT 'ORDER_PLACED',
-      "paymentStatus" TEXT NOT NULL DEFAULT 'PENDING',
-      "paymentQR" TEXT,
-      "invoiceUrl" TEXT,
-      "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  const existingTech = await prisma.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Technician" LIMIT 1`;
-  if (!existingTech.length) {
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "Technician" ("id", "name", "phone", "role", "pincode", "active")
-      VALUES
-      ('tech-1', 'Ravi Kumar', '9060877595', 'TECHNICIAN', '800001', TRUE),
-      ('tech-2', 'Anil Singh', '9060877596', 'TECHNICIAN', '800020', TRUE)
-      ON CONFLICT DO NOTHING;
-    `);
+  try {
+    await prisma.technician.upsert({
+      where: { id: "tech-1" },
+      update: {
+        name: "Ravi Kumar",
+        phone: "9060877595",
+        role: "TECHNICIAN",
+        pincode: "506001",
+        active: true,
+      },
+      create: {
+        id: "tech-1",
+        name: "Ravi Kumar",
+        phone: "9060877595",
+        role: "TECHNICIAN",
+        pincode: "506001",
+        active: true,
+      },
+    });
+    await prisma.technician.upsert({
+      where: { id: "tech-2" },
+      update: {
+        name: "Anil Singh",
+        phone: "9060877596",
+        role: "TECHNICIAN",
+        pincode: "500001",
+        active: true,
+      },
+      create: {
+        id: "tech-2",
+        name: "Anil Singh",
+        phone: "9060877596",
+        role: "TECHNICIAN",
+        pincode: "500001",
+        active: true,
+      },
+    });
+  } catch {
+    // Ignore if schema not yet migrated.
   }
 
   phase2SchemaEnsured = true;
@@ -340,19 +201,6 @@ export const ensurePhase2Schema = async () => {
 let authSchemaEnsured = false;
 export const ensureAuthSchema = async () => {
   if (authSchemaEnsured) return;
-
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE "User"
-    ADD COLUMN IF NOT EXISTS "verifyOtp" TEXT,
-    ADD COLUMN IF NOT EXISTS "verifyOtpExpiryAt" DOUBLE PRECISION,
-    ADD COLUMN IF NOT EXISTS "isAccountVerified" BOOLEAN NOT NULL DEFAULT FALSE,
-    ADD COLUMN IF NOT EXISTS "phone" TEXT,
-    ADD COLUMN IF NOT EXISTS "phoneVerifyOtp" TEXT,
-    ADD COLUMN IF NOT EXISTS "phoneVerifyOtpExpiryAt" DOUBLE PRECISION,
-    ADD COLUMN IF NOT EXISTS "isPhoneVerified" BOOLEAN NOT NULL DEFAULT FALSE,
-    ADD COLUMN IF NOT EXISTS "resetOtp" TEXT,
-    ADD COLUMN IF NOT EXISTS "resetOtpExpiryAt" DOUBLE PRECISION;
-  `);
 
   authSchemaEnsured = true;
 };

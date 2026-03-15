@@ -27,6 +27,7 @@ export type AggregateGallery = {
 export type GalleryMinAggregateOutputType = {
   id: string | null
   imageUrl: string | null
+  mediaType: string | null
   caption: string | null
   createdAt: Date | null
 }
@@ -34,6 +35,7 @@ export type GalleryMinAggregateOutputType = {
 export type GalleryMaxAggregateOutputType = {
   id: string | null
   imageUrl: string | null
+  mediaType: string | null
   caption: string | null
   createdAt: Date | null
 }
@@ -41,6 +43,7 @@ export type GalleryMaxAggregateOutputType = {
 export type GalleryCountAggregateOutputType = {
   id: number
   imageUrl: number
+  mediaType: number
   caption: number
   createdAt: number
   _all: number
@@ -50,6 +53,7 @@ export type GalleryCountAggregateOutputType = {
 export type GalleryMinAggregateInputType = {
   id?: true
   imageUrl?: true
+  mediaType?: true
   caption?: true
   createdAt?: true
 }
@@ -57,6 +61,7 @@ export type GalleryMinAggregateInputType = {
 export type GalleryMaxAggregateInputType = {
   id?: true
   imageUrl?: true
+  mediaType?: true
   caption?: true
   createdAt?: true
 }
@@ -64,6 +69,7 @@ export type GalleryMaxAggregateInputType = {
 export type GalleryCountAggregateInputType = {
   id?: true
   imageUrl?: true
+  mediaType?: true
   caption?: true
   createdAt?: true
   _all?: true
@@ -144,6 +150,7 @@ export type GalleryGroupByArgs<ExtArgs extends runtime.Types.Extensions.Internal
 export type GalleryGroupByOutputType = {
   id: string
   imageUrl: string
+  mediaType: string
   caption: string | null
   createdAt: Date
   _count: GalleryCountAggregateOutputType | null
@@ -172,6 +179,7 @@ export type GalleryWhereInput = {
   NOT?: Prisma.GalleryWhereInput | Prisma.GalleryWhereInput[]
   id?: Prisma.StringFilter<"Gallery"> | string
   imageUrl?: Prisma.StringFilter<"Gallery"> | string
+  mediaType?: Prisma.StringFilter<"Gallery"> | string
   caption?: Prisma.StringNullableFilter<"Gallery"> | string | null
   createdAt?: Prisma.DateTimeFilter<"Gallery"> | Date | string
 }
@@ -179,6 +187,7 @@ export type GalleryWhereInput = {
 export type GalleryOrderByWithRelationInput = {
   id?: Prisma.SortOrder
   imageUrl?: Prisma.SortOrder
+  mediaType?: Prisma.SortOrder
   caption?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
@@ -189,6 +198,7 @@ export type GalleryWhereUniqueInput = Prisma.AtLeast<{
   OR?: Prisma.GalleryWhereInput[]
   NOT?: Prisma.GalleryWhereInput | Prisma.GalleryWhereInput[]
   imageUrl?: Prisma.StringFilter<"Gallery"> | string
+  mediaType?: Prisma.StringFilter<"Gallery"> | string
   caption?: Prisma.StringNullableFilter<"Gallery"> | string | null
   createdAt?: Prisma.DateTimeFilter<"Gallery"> | Date | string
 }, "id">
@@ -196,6 +206,7 @@ export type GalleryWhereUniqueInput = Prisma.AtLeast<{
 export type GalleryOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
   imageUrl?: Prisma.SortOrder
+  mediaType?: Prisma.SortOrder
   caption?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   _count?: Prisma.GalleryCountOrderByAggregateInput
@@ -209,6 +220,7 @@ export type GalleryScalarWhereWithAggregatesInput = {
   NOT?: Prisma.GalleryScalarWhereWithAggregatesInput | Prisma.GalleryScalarWhereWithAggregatesInput[]
   id?: Prisma.StringWithAggregatesFilter<"Gallery"> | string
   imageUrl?: Prisma.StringWithAggregatesFilter<"Gallery"> | string
+  mediaType?: Prisma.StringWithAggregatesFilter<"Gallery"> | string
   caption?: Prisma.StringNullableWithAggregatesFilter<"Gallery"> | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Gallery"> | Date | string
 }
@@ -216,6 +228,7 @@ export type GalleryScalarWhereWithAggregatesInput = {
 export type GalleryCreateInput = {
   id?: string
   imageUrl: string
+  mediaType?: string
   caption?: string | null
   createdAt?: Date | string
 }
@@ -223,6 +236,7 @@ export type GalleryCreateInput = {
 export type GalleryUncheckedCreateInput = {
   id?: string
   imageUrl: string
+  mediaType?: string
   caption?: string | null
   createdAt?: Date | string
 }
@@ -230,6 +244,7 @@ export type GalleryUncheckedCreateInput = {
 export type GalleryUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   imageUrl?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.StringFieldUpdateOperationsInput | string
   caption?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -237,6 +252,7 @@ export type GalleryUpdateInput = {
 export type GalleryUncheckedUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   imageUrl?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.StringFieldUpdateOperationsInput | string
   caption?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -244,6 +260,7 @@ export type GalleryUncheckedUpdateInput = {
 export type GalleryCreateManyInput = {
   id?: string
   imageUrl: string
+  mediaType?: string
   caption?: string | null
   createdAt?: Date | string
 }
@@ -251,6 +268,7 @@ export type GalleryCreateManyInput = {
 export type GalleryUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   imageUrl?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.StringFieldUpdateOperationsInput | string
   caption?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -258,6 +276,7 @@ export type GalleryUpdateManyMutationInput = {
 export type GalleryUncheckedUpdateManyInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   imageUrl?: Prisma.StringFieldUpdateOperationsInput | string
+  mediaType?: Prisma.StringFieldUpdateOperationsInput | string
   caption?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -265,6 +284,7 @@ export type GalleryUncheckedUpdateManyInput = {
 export type GalleryCountOrderByAggregateInput = {
   id?: Prisma.SortOrder
   imageUrl?: Prisma.SortOrder
+  mediaType?: Prisma.SortOrder
   caption?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
@@ -272,6 +292,7 @@ export type GalleryCountOrderByAggregateInput = {
 export type GalleryMaxOrderByAggregateInput = {
   id?: Prisma.SortOrder
   imageUrl?: Prisma.SortOrder
+  mediaType?: Prisma.SortOrder
   caption?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
@@ -279,6 +300,7 @@ export type GalleryMaxOrderByAggregateInput = {
 export type GalleryMinOrderByAggregateInput = {
   id?: Prisma.SortOrder
   imageUrl?: Prisma.SortOrder
+  mediaType?: Prisma.SortOrder
   caption?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
@@ -288,6 +310,7 @@ export type GalleryMinOrderByAggregateInput = {
 export type GallerySelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
   imageUrl?: boolean
+  mediaType?: boolean
   caption?: boolean
   createdAt?: boolean
 }, ExtArgs["result"]["gallery"]>
@@ -295,6 +318,7 @@ export type GallerySelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
 export type GallerySelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
   imageUrl?: boolean
+  mediaType?: boolean
   caption?: boolean
   createdAt?: boolean
 }, ExtArgs["result"]["gallery"]>
@@ -302,6 +326,7 @@ export type GallerySelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exten
 export type GallerySelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
   imageUrl?: boolean
+  mediaType?: boolean
   caption?: boolean
   createdAt?: boolean
 }, ExtArgs["result"]["gallery"]>
@@ -309,11 +334,12 @@ export type GallerySelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exten
 export type GallerySelectScalar = {
   id?: boolean
   imageUrl?: boolean
+  mediaType?: boolean
   caption?: boolean
   createdAt?: boolean
 }
 
-export type GalleryOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "imageUrl" | "caption" | "createdAt", ExtArgs["result"]["gallery"]>
+export type GalleryOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "imageUrl" | "mediaType" | "caption" | "createdAt", ExtArgs["result"]["gallery"]>
 
 export type $GalleryPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "Gallery"
@@ -321,6 +347,7 @@ export type $GalleryPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
     imageUrl: string
+    mediaType: string
     caption: string | null
     createdAt: Date
   }, ExtArgs["result"]["gallery"]>
@@ -748,6 +775,7 @@ export interface Prisma__GalleryClient<T, Null = never, ExtArgs extends runtime.
 export interface GalleryFieldRefs {
   readonly id: Prisma.FieldRef<"Gallery", 'String'>
   readonly imageUrl: Prisma.FieldRef<"Gallery", 'String'>
+  readonly mediaType: Prisma.FieldRef<"Gallery", 'String'>
   readonly caption: Prisma.FieldRef<"Gallery", 'String'>
   readonly createdAt: Prisma.FieldRef<"Gallery", 'DateTime'>
 }

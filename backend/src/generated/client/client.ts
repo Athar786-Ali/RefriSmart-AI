@@ -61,3 +61,43 @@ export type ServiceBooking = Prisma.ServiceBookingModel
  * 
  */
 export type Gallery = Prisma.GalleryModel
+/**
+ * Model Technician
+ * 
+ */
+export type Technician = Prisma.TechnicianModel
+/**
+ * Model ServiceAssignment
+ * 
+ */
+export type ServiceAssignment = Prisma.ServiceAssignmentModel
+/**
+ * Model ServiceEvent
+ * 
+ */
+export type ServiceEvent = Prisma.ServiceEventModel
+/**
+ * Model ServiceOtp
+ * 
+ */
+export type ServiceOtp = Prisma.ServiceOtpModel
+/**
+ * Model SellRequest
+ * 
+ */
+export type SellRequest = Prisma.SellRequestModel
+/**
+ * Model SellOffer
+ * 
+ */
+export type SellOffer = Prisma.SellOfferModel
+/**
+ * Model DocumentLog
+ * 
+ */
+export type DocumentLog = Prisma.DocumentLogModel
+/**
+ * Model ProductOrder
+ * 
+ */
+export type ProductOrder = Prisma.ProductOrderModel

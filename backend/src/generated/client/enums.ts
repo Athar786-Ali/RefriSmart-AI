@@ -48,7 +48,48 @@ export const Status = {
   OUT_FOR_REPAIR: 'OUT_FOR_REPAIR',
   REPAIRING: 'REPAIRING',
   FIXED: 'FIXED',
-  COMPLETED: 'COMPLETED'
+  COMPLETED: 'COMPLETED',
+  ESTIMATE_APPROVED: 'ESTIMATE_APPROVED',
+  PAYMENT_PENDING: 'PAYMENT_PENDING',
+  CANCELLED: 'CANCELLED'
 } as const
 
 export type Status = (typeof Status)[keyof typeof Status]
+
+
+export const OrderStatus = {
+  ORDER_PLACED: 'ORDER_PLACED',
+  DISPATCHED: 'DISPATCHED',
+  OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
+  DELIVERED: 'DELIVERED'
+} as const
+
+export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus]
+
+
+export const PaymentStatus = {
+  PENDING: 'PENDING',
+  PAID: 'PAID'
+} as const
+
+export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus]
+
+
+export const SellRequestStatus = {
+  REQUESTED: 'REQUESTED',
+  OFFER_SENT: 'OFFER_SENT',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  REFURBISHED_LISTED: 'REFURBISHED_LISTED'
+} as const
+
+export type SellRequestStatus = (typeof SellRequestStatus)[keyof typeof SellRequestStatus]
+
+
+export const SellOfferStatus = {
+  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED'
+} as const
+
+export type SellOfferStatus = (typeof SellOfferStatus)[keyof typeof SellOfferStatus]

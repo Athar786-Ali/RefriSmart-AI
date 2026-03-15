@@ -135,10 +135,17 @@ export const createBooking = async (req: Request, res: Response) => {
       WHERE "active" = TRUE
       ORDER BY "id" ASC
     `;
-    const selectedTech =
-      techRows.find((t) => pincode && (t.pincode === pincode || t.pincode.slice(0, 3) === pincode.slice(0, 3))) ||
-      techRows[0] ||
-      { id: "tech-1", name: "Assigned Technician", phone: TECHNICIAN_PHONE, pincode: pincode || "N/A" };
+    if (!techRows.length) {
+      return res.status(503).json({ error: "No technicians are available right now. Please try again later." });
+    }
+    const trimmedPincode = pincode.trim();
+    const matchingTechs = techRows.filter(
+      (t) => trimmedPincode && (t.pincode === trimmedPincode || t.pincode.slice(0, 3) === trimmedPincode.slice(0, 3)),
+    );
+    if (!matchingTechs.length) {
+      return res.status(400).json({ error: "No technician available for this area right now." });
+    }
+    const selectedTech = matchingTechs[0];
 
     let resolvedCustomerId: string | null = null;
     let resolvedName = String(fullName || "").trim();
@@ -259,10 +266,17 @@ export const bookService = async (req: Request, res: Response) => {
       WHERE "active" = TRUE
       ORDER BY "id" ASC
     `;
-    const selectedTech =
-      techRows.find((t) => pincode && (t.pincode === pincode || t.pincode.slice(0, 3) === pincode.slice(0, 3))) ||
-      techRows[0] ||
-      { id: "tech-1", name: "Assigned Technician", phone: TECHNICIAN_PHONE, pincode: pincode || "N/A" };
+    if (!techRows.length) {
+      return res.status(503).json({ error: "No technicians are available right now. Please try again later." });
+    }
+    const trimmedPincode = pincode.trim();
+    const matchingTechs = techRows.filter(
+      (t) => trimmedPincode && (t.pincode === trimmedPincode || t.pincode.slice(0, 3) === trimmedPincode.slice(0, 3)),
+    );
+    if (!matchingTechs.length) {
+      return res.status(400).json({ error: "No technician available for this area right now." });
+    }
+    const selectedTech = matchingTechs[0];
 
     let resolvedCustomerId: string | null = null;
     let resolvedName = String(fullName || "").trim();
