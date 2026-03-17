@@ -3,6 +3,7 @@ import {
   addProduct,
   confirmOrderPayment,
   createOrder,
+  createRazorpayOrder,
   deleteProduct,
   downloadCustomerOrderInvoice,
   downloadOrderInvoice,
@@ -14,6 +15,7 @@ import {
   suggestPrice,
   updateAdminOrderStatus,
   uploadProductImage,
+  verifyRazorpayPayment,
 } from "../controllers/productController.js";
 import { adminAuth, userAuth } from "../middlewares/authMiddleware.js";
 
@@ -23,6 +25,8 @@ productRoutes.get("/products", getProducts);
 productRoutes.post("/orders", createOrder);
 productRoutes.get("/orders/my", userAuth, getMyOrders);
 productRoutes.get("/orders/my/invoice/:orderId", userAuth, downloadCustomerOrderInvoice);
+productRoutes.post("/orders/:orderId/razorpay", userAuth, createRazorpayOrder);
+productRoutes.post("/orders/:orderId/razorpay/verify", userAuth, verifyRazorpayPayment);
 
 productRoutes.get("/admin/orders", adminAuth, getAdminOrders);
 productRoutes.patch("/admin/orders/:id", adminAuth, updateAdminOrderStatus);

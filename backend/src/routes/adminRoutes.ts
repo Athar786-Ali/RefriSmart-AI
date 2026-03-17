@@ -1,8 +1,11 @@
 import { Router } from "express";
 import {
   bookService,
+  cancelServiceBooking,
   cancelBooking,
+  confirmManualPayment,
   createBooking,
+  createServiceRazorpayOrder,
   createSellRequest,
   deleteGalleryItem,
   generateDocument,
@@ -32,6 +35,7 @@ import {
   updateBookingStatus,
   updateTechnicianJobStatus,
   uploadGalleryItem,
+  verifyServiceRazorpayPayment,
   verifyBookingOtp,
 } from "../controllers/adminController.js";
 import { adminAuth, userAuth } from "../middlewares/authMiddleware.js";
@@ -49,6 +53,10 @@ adminRoutes.patch("/booking/:id/cancel", adminAuth, cancelBooking);
 adminRoutes.get("/booking/timeline/:bookingId", userAuth, getBookingTimeline);
 adminRoutes.post("/booking/:id/send-otp", adminAuth, sendBookingOtp);
 adminRoutes.post("/booking/:id/verify-otp", adminAuth, verifyBookingOtp);
+adminRoutes.post("/booking/:id/razorpay", userAuth, createServiceRazorpayOrder);
+adminRoutes.post("/booking/:id/razorpay/verify", userAuth, verifyServiceRazorpayPayment);
+adminRoutes.post("/bookings/:bookingId/confirm-payment", userAuth, confirmManualPayment);
+adminRoutes.post("/bookings/:bookingId/cancel", userAuth, cancelServiceBooking);
 adminRoutes.get("/booking/:id/reminders", adminAuth, getBookingReminders);
 
 adminRoutes.get("/service/my-bookings/:userId", userAuth, getMyBookingsByPath);

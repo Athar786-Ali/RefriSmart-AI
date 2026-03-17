@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu, Settings, X } from "lucide-react";
 import BrandLogo from "./BrandLogo";
 import { useAuth } from "@/context/AuthContext";
@@ -22,12 +22,7 @@ export default function Navbar() {
   const { user, loading, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const links = useMemo(() => {
-    if (user?.role === "ADMIN") {
-      return [...NAV_LINKS, { href: "/admin", label: "Admin" }];
-    }
-    return NAV_LINKS;
-  }, [user?.role]);
+  const links = NAV_LINKS;
 
   useEffect(() => {
     setMobileOpen(false);

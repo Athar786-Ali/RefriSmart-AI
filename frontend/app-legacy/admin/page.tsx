@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 type DiagnosisItem = {
   id: string;
@@ -121,6 +122,7 @@ export default function AdminDashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSuggestingPrice, setIsSuggestingPrice] = useState(false);
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
 
   const resetProductForm = () => {
     setNewProd(initialProduct);
@@ -159,18 +161,13 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    const checkAdmin = () => {
-      const savedUser = localStorage.getItem("user");
-      const user = savedUser ? JSON.parse(savedUser) : null;
-      if (!user || (user.email !== "mdatharsbr@gmail.com" && user.role !== "ADMIN")) {
-        router.push("/");
-        return false;
-      }
-      return true;
-    };
+    if (authLoading) return;
+    if (!user || user.role !== "ADMIN") {
+      router.replace("/");
+      return;
+    }
 
     const fetchAdminData = async () => {
-      if (!checkAdmin()) return;
 
       try {
         const [dataRes, statsRes] = await Promise.all([
@@ -206,7 +203,7 @@ export default function AdminDashboard() {
     };
 
     fetchAdminData();
-  }, [router]);
+  }, [authLoading, router, user]);
 
   const uploadViaBackend = async (file: File): Promise<UploadResult> => {
     try {
@@ -288,8 +285,6 @@ export default function AdminDashboard() {
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    const savedUser = localStorage.getItem("user");
-    const user = savedUser ? JSON.parse(savedUser) : null;
     if (!user) return alert("Login required.");
     if (!newProd.imageUrl) return alert("Please upload a product image first.");
     const isRefurbished = newProd.productType === "REFURBISHED";

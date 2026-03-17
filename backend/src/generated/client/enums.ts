@@ -61,7 +61,8 @@ export const OrderStatus = {
   ORDER_PLACED: 'ORDER_PLACED',
   DISPATCHED: 'DISPATCHED',
   OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
-  DELIVERED: 'DELIVERED'
+  DELIVERED: 'DELIVERED',
+  CANCELLED: 'CANCELLED'
 } as const
 
 export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus]

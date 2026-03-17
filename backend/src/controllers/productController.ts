@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { cloudinary } from "../config/cloudinary.js";
 import { prisma } from "../config/prisma.js";
+import { razorpay, razorpayKeyId, razorpayKeySecret } from "../config/razorpay.js";
 import type { AuthenticatedRequest } from "../middlewares/authMiddleware.js";
 import {
   ORDER_STATUS_FLOW,
@@ -26,13 +28,16 @@ export const getProducts = async (_req: Request, res: Response) => {
   try {
     await ensurePhase1ProductSchema().catch(() => {});
     const products = await prisma.product.findMany({
-      where: { status: "AVAILABLE" },
+      where: {
+        AND: [{ stockQty: { gt: 0 } }, { isDeleted: false }],
+      },
       orderBy: { id: "desc" },
     });
     const normalized = products.map((p: any) => {
       const { cleanDescription, meta } = decodeCompatMetaFromDescription(p.description);
       return {
         ...p,
+        stockQty: p.stockQty ?? 0,
         description: cleanDescription,
         productType: p.productType || meta.productType || (p.isUsed ? "REFURBISHED" : "NEW"),
         conditionScore: p.conditionScore ?? meta.conditionScore ?? null,
@@ -45,40 +50,50 @@ export const getProducts = async (_req: Request, res: Response) => {
     res.json(normalized);
   } catch {
     try {
-      const legacyProducts = await prisma.$queryRaw<
-        Array<{
-          id: string;
-          title: string;
-          description: string;
-          price: number;
-          isUsed: boolean;
-          images: string[];
-          status: string;
-          sellerId: string;
-          createdAt: Date;
-        }>
-      >`
-        SELECT "id", "title", "description", "price", "isUsed", "images", "status", "sellerId", "createdAt"
-        FROM "Product"
-        WHERE "status" = 'AVAILABLE'
-        ORDER BY "id" DESC
-      `;
+      try {
+        const legacyProducts = await prisma.$queryRaw<
+          Array<{
+            id: string;
+            title: string;
+            description: string;
+            price: number;
+            isUsed: boolean;
+            images: string[];
+            stockQty: number | null;
+            status: string;
+            sellerId: string;
+            createdAt: Date;
+          }>
+        >`
+          SELECT "id", "title", "description", "price", "isUsed", "images",
+            COALESCE("stockQty", 0) AS "stockQty",
+            "status", "sellerId", "createdAt"
+          FROM "Product"
+          WHERE COALESCE("isDeleted", false) = false
+            AND COALESCE("stockQty", 0) > 0
+          ORDER BY "id" DESC
+        `;
 
-      res.json(
-        legacyProducts.map((p) => {
-          const { cleanDescription, meta } = decodeCompatMetaFromDescription(p.description);
-          return {
-            ...p,
-            description: cleanDescription,
-            productType: meta.productType || (p.isUsed ? "REFURBISHED" : "NEW"),
-            conditionScore: meta.conditionScore ?? null,
-            ageMonths: meta.ageMonths ?? null,
-            warrantyType: meta.warrantyType ?? null,
-            warrantyExpiry: meta.warrantyExpiry ?? null,
-            warrantyCertificateUrl: meta.warrantyCertificateUrl ?? null,
-          };
-        }),
-      );
+        return res.json(
+          legacyProducts.map((p) => {
+            const { cleanDescription, meta } = decodeCompatMetaFromDescription(p.description);
+            return {
+              ...p,
+              description: cleanDescription,
+              productType: meta.productType || (p.isUsed ? "REFURBISHED" : "NEW"),
+              conditionScore: meta.conditionScore ?? null,
+              ageMonths: meta.ageMonths ?? null,
+              warrantyType: meta.warrantyType ?? null,
+              warrantyExpiry: meta.warrantyExpiry ?? null,
+              warrantyCertificateUrl: meta.warrantyCertificateUrl ?? null,
+            };
+          }),
+        );
+      } catch {
+        return res.status(500).json({
+          error: "Product schema is out of sync. Please run `npx prisma db push` and `npx prisma generate`.",
+        });
+      }
     } catch {
       res.status(500).json({ error: "Database error" });
     }
@@ -208,10 +223,13 @@ export const getMyOrders = async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "Unauthorized." });
     const rows = await prisma.$queryRaw<Array<any>>`
-      SELECT *
-      FROM "ProductOrder"
-      WHERE "customerId" = ${userId}
-      ORDER BY "createdAt" DESC
+      SELECT
+        o.*,
+        p."stockQty" AS "stockQty"
+      FROM "ProductOrder" o
+      LEFT JOIN "Product" p ON p."id" = o."productId"
+      WHERE o."customerId" = ${userId}
+      ORDER BY o."createdAt" DESC
     `;
     res.json(rows);
   } catch (error: any) {
@@ -243,7 +261,8 @@ export const updateAdminOrderStatus = async (req: Request, res: Response) => {
     await ensurePhase2Schema().catch(() => {});
     const { id } = req.params;
     const { orderStatus } = req.body as { orderStatus?: string };
-    if (!orderStatus || !ORDER_STATUS_FLOW.includes(orderStatus as any)) {
+    const allowedStatuses = new Set<string>([...ORDER_STATUS_FLOW, "CANCELLED"]);
+    if (!orderStatus || !allowedStatuses.has(orderStatus)) {
       return res.status(400).json({ error: "Valid orderStatus is required." });
     }
 
@@ -271,6 +290,189 @@ export const updateAdminOrderStatus = async (req: Request, res: Response) => {
   }
 };
 
+export const createRazorpayOrder = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await ensurePhase2Schema().catch(() => {});
+    const { orderId } = req.params as { orderId?: string };
+    const userId = req.userId;
+    if (!orderId) return res.status(400).json({ error: "orderId is required." });
+    if (!userId) return res.status(401).json({ error: "Unauthorized." });
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      return res.status(500).json({ error: "Razorpay keys are not configured." });
+    }
+
+    const rows = await prisma.$queryRaw<Array<any>>`
+      SELECT "id", "customerId", "price", "paymentStatus", "productId"
+      FROM "ProductOrder"
+      WHERE "id" = ${orderId}
+      LIMIT 1
+    `;
+    if (!rows.length) return res.status(404).json({ error: "Order not found." });
+    const order = rows[0];
+    if (order.customerId && order.customerId !== userId) {
+      return res.status(403).json({ error: "Forbidden." });
+    }
+    if (String(order.paymentStatus || "PENDING") === "PAID") {
+      return res.status(400).json({ error: "Order already paid." });
+    }
+
+    const product = await prisma.product.findUnique({ where: { id: order.productId } });
+    if (!product) return res.status(404).json({ error: "Product not found." });
+    const normalizedType = product.productType || (product.isUsed ? "REFURBISHED" : "NEW");
+    const currentStock = Number(product.stockQty ?? 0);
+    if (
+      (normalizedType === "NEW" && currentStock <= 0) ||
+      (normalizedType === "REFURBISHED" && (currentStock <= 0 || product.status === "SOLD"))
+    ) {
+      return res.status(409).json({ error: "Item is out of stock." });
+    }
+
+    const amount = Math.round(Number(order.price || 0) * 100);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: "Invalid order amount." });
+    }
+
+    const razorpayOrder = await razorpay.orders.create({
+      amount,
+      currency: "INR",
+      receipt: orderId,
+    });
+
+    res.json({ razorpayOrder, keyId: razorpayKeyId });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to create Razorpay order.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const verifyRazorpayPayment = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await ensurePhase2Schema().catch(() => {});
+    const { orderId } = req.params as { orderId?: string };
+    const userId = req.userId;
+    if (!orderId) return res.status(400).json({ error: "orderId is required." });
+    if (!userId) return res.status(401).json({ error: "Unauthorized." });
+    if (!razorpayKeySecret) {
+      return res.status(500).json({ error: "Razorpay keys are not configured." });
+    }
+
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body as {
+      razorpay_order_id?: string;
+      razorpay_payment_id?: string;
+      razorpay_signature?: string;
+    };
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ error: "razorpay_order_id, razorpay_payment_id, and razorpay_signature are required." });
+    }
+
+    const expectedSignature = createHmac("sha256", razorpayKeySecret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+    const providedSignature = String(razorpay_signature);
+    const signaturesMatch =
+      expectedSignature.length === providedSignature.length &&
+      timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(providedSignature));
+    if (!signaturesMatch) {
+      return res.status(400).json({ error: "Invalid payment signature." });
+    }
+
+    const outcome = await prisma.$transaction(async (tx) => {
+      const order = await tx.productOrder.findUnique({ where: { id: orderId } });
+      if (!order) throw new Error("Order not found.");
+      if (order.customerId && order.customerId !== userId) {
+        throw new Error("Forbidden.");
+      }
+      if (order.orderStatus === "CANCELLED") {
+        return {
+          success: false,
+          order,
+          message: "Order Cancelled: Item went out of stock. Refund initiated.",
+        };
+      }
+      if (String(order.paymentStatus || "PENDING") === "PAID") {
+        return { success: true, order };
+      }
+
+      const product = await tx.product.findUnique({ where: { id: order.productId } });
+      if (!product) throw new Error("Product not found.");
+      const normalizedType = product.productType || (product.isUsed ? "REFURBISHED" : "NEW");
+      const currentStock = Number(product.stockQty ?? 0);
+
+      const cancelOrder = async () => {
+        const cancelled = await tx.productOrder.update({
+          where: { id: orderId },
+          data: {
+            orderStatus: "CANCELLED",
+            paymentStatus: "PAID",
+            internalNote: "System: Payment received but stock depleted. Refund needed.",
+          },
+        });
+        return {
+          success: false,
+          order: cancelled,
+          message: "Order Cancelled: Item went out of stock. Refund initiated.",
+        };
+      };
+
+      if (
+        (normalizedType === "NEW" && currentStock <= 0) ||
+        (normalizedType === "REFURBISHED" && (currentStock <= 0 || product.status === "SOLD"))
+      ) {
+        return await cancelOrder();
+      }
+
+      const paidOrder = await tx.productOrder.update({
+        where: { id: orderId },
+        data: {
+          paymentStatus: "PAID",
+          orderStatus: (order.orderStatus as any) || "ORDER_PLACED",
+        },
+      });
+
+      if (normalizedType === "REFURBISHED") {
+        await tx.product.update({
+          where: { id: order.productId },
+          data: { status: "SOLD", stockQty: 0 },
+        });
+      } else {
+        const nextStock = currentStock - 1;
+        await tx.product.update({
+          where: { id: order.productId },
+          data: {
+            stockQty: nextStock,
+            status: nextStock <= 0 ? "SOLD" : "AVAILABLE",
+          },
+        });
+      }
+
+      return { success: true, order: paidOrder };
+    });
+
+    if (!outcome.success) {
+      return res.status(200).json({
+        success: false,
+        message: outcome.message,
+        order: outcome.order,
+      });
+    }
+
+    res.json({ success: true, order: outcome.order });
+  } catch (error: any) {
+    if (error?.message?.includes("Order not found")) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+    if (error?.message?.includes("Product not found")) {
+      return res.status(404).json({ error: "Product not found." });
+    }
+    if (error?.message?.includes("Forbidden")) {
+      return res.status(403).json({ error: "Forbidden." });
+    }
+    if (error?.message?.includes("Stock")) {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: "Failed to verify payment.", details: error?.message || "Unknown error" });
+  }
+};
+
 export const confirmOrderPayment = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
@@ -284,8 +486,14 @@ export const confirmOrderPayment = async (req: Request, res: Response) => {
       `;
       if (!rows.length) throw new Error("Order not found.");
       const order = rows[0];
-      if (String(order.paymentStatus) === "PAID") {
-        return order;
+      if (String(order.paymentStatus || "PENDING") === "PAID") {
+        const refreshed = await tx.$queryRaw<Array<any>>`
+          SELECT *
+          FROM "ProductOrder"
+          WHERE "id" = ${id}
+          LIMIT 1
+        `;
+        return refreshed[0] || order;
       }
 
       const product = await tx.product.findUnique({ where: { id: order.productId } });
@@ -652,6 +860,9 @@ export const addProduct = async (req: Request, res: Response) => {
     if (stockRaw !== null && Number.isNaN(stockRaw)) {
       return res.status(400).json({ error: "Stock quantity must be a valid number." });
     }
+    if (normalizedProductType === "NEW" && (stockRaw === null || !Number.isFinite(Number(stockRaw)) || Number(stockRaw) < 1)) {
+      return res.status(400).json({ error: "Stock quantity is required for new products." });
+    }
 
     const normalizedStock =
       normalizedProductType === "REFURBISHED"
@@ -785,10 +996,56 @@ export const seedDemoProducts = async (req: Request, res: Response) => {
 export const deleteProduct = async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id || "");
-    await prisma.product.delete({ where: { id } });
-    res.json({ message: "Product deleted successfully." });
-  } catch {
-    res.status(500).json({ error: "Failed to delete product." });
+    const updated = await prisma.product.update({
+      where: { id },
+      data: { isDeleted: true, stockQty: 0, status: "SOLD" },
+    });
+    const products = await prisma.product.findMany({
+      where: { isDeleted: false },
+      orderBy: { id: "desc" },
+    });
+    res.json({
+      message: "Product removed from inventory.",
+      product: updated,
+      products,
+      totalProducts: products.length,
+    });
+  } catch (error: any) {
+    if (error?.code === "P2025") {
+      return res.status(404).json({ error: "Product not found." });
+    }
+
+    const message = String(error?.message || "");
+    const isSchemaMismatch =
+      message.includes("Unknown argument `isDeleted`") ||
+      (message.includes("isDeleted") && message.includes("column"));
+
+    if (isSchemaMismatch) {
+      try {
+        const id = String(req.params.id || "");
+        const updated = await prisma.product.update({
+          where: { id },
+          data: { stockQty: 0, status: "SOLD" },
+        });
+        const products = await prisma.product.findMany({
+          orderBy: { id: "desc" },
+        });
+        return res.json({
+          message: "Product removed (legacy schema). Please run `npx prisma db push` and `npx prisma generate`.",
+          product: updated,
+          products,
+          totalProducts: products.length,
+          legacy: true,
+        });
+      } catch (inner: any) {
+        return res.status(500).json({
+          error: "Failed to delete product.",
+          details: String(inner?.message || ""),
+        });
+      }
+    }
+
+    res.status(500).json({ error: "Failed to delete product.", details: message });
   }
 };
 

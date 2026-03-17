@@ -77,6 +77,12 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Invalid Credentials" });
     }
 
+    const adminEmail = (process.env.ADMIN_EMAIL || "mdatharsbr@gmail.com").toLowerCase().trim();
+    const effectiveUser =
+      adminEmail && user.email.toLowerCase() === adminEmail && user.role !== "ADMIN"
+        ? await prisma.user.update({ where: { id: user.id }, data: { role: "ADMIN" } })
+        : user;
+
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
     const isProd = process.env.NODE_ENV === "production";
 
@@ -101,13 +107,13 @@ export const login = async (req: Request, res: Response) => {
     res.json({
       message: "Login successful.",
       user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
+        id: effectiveUser.id,
+        name: effectiveUser.name,
+        email: effectiveUser.email,
+        role: effectiveUser.role,
         isAccountVerified,
         isPhoneVerified,
-        phone: user.phone,
+        phone: effectiveUser.phone,
       },
     });
   } catch (error: any) {

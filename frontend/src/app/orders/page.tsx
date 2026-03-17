@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { toast as hotToast } from "react-hot-toast";
+import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/razorpay";
 
-type OrderStatus = "ORDER_PLACED" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED";
+type OrderStatus = "ORDER_PLACED" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
 
 type ProductOrder = {
   id: string;
@@ -14,6 +17,8 @@ type ProductOrder = {
   deliveryAddress: string;
   orderStatus: OrderStatus;
   paymentStatus?: string;
+  stockQty?: number | null;
+  internalNote?: string | null;
   invoiceUrl?: string | null;
   createdAt: string;
 };
@@ -26,15 +31,19 @@ const STATUS_STEPS: Array<{ key: OrderStatus; label: string }> = [
 ];
 
 const getStepIndex = (status: OrderStatus) => {
+  if (status === "CANCELLED") return 0;
   const index = STATUS_STEPS.findIndex((step) => step.key === status);
   return index >= 0 ? index : 0;
 };
+
+const API = process.env.NEXT_PUBLIC_API_URL;
 
 export default function OrdersPage() {
   const [highlightId, setHighlightId] = useState("");
   const [user, setUser] = useState<{ id: string; name?: string } | null>(null);
   const [orders, setOrders] = useState<ProductOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -52,24 +61,111 @@ export default function OrdersPage() {
     }
   }, []);
 
+  const refreshOrders = useCallback(async (showLoader = false) => {
+    if (!user?.id) {
+      if (showLoader) setLoading(false);
+      return;
+    }
+    if (!API) {
+      if (showLoader) setLoading(false);
+      return;
+    }
+    if (showLoader) setLoading(true);
+    try {
+      const res = await fetch(`${API}/orders/my`, { credentials: "include" });
+      const payload = await res.json().catch(() => []);
+      setOrders(Array.isArray(payload) ? payload : []);
+    } catch {
+      setOrders([]);
+    } finally {
+      if (showLoader) setLoading(false);
+    }
+  }, [user?.id]);
+
   useEffect(() => {
-    const loadOrders = async () => {
-      if (!user?.id) {
-        setLoading(false);
+    void refreshOrders(true);
+  }, [refreshOrders]);
+
+  const handlePay = async (order: ProductOrder) => {
+    if (!API) {
+      toast.error("API unavailable.");
+      return;
+    }
+    if (typeof order.stockQty === "number" && order.stockQty <= 0) {
+      hotToast.error("This item just went out of stock.");
+      return;
+    }
+    setPayingOrderId(order.id);
+    try {
+      const scriptReady = await loadRazorpayScript();
+      if (!scriptReady) {
+        toast.error("Failed to load Razorpay checkout.");
         return;
       }
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/my`, { credentials: "include" });
-        const payload = await res.json().catch(() => []);
-        setOrders(Array.isArray(payload) ? payload : []);
-      } catch {
-        setOrders([]);
-      } finally {
-        setLoading(false);
+
+      const orderRes = await fetch(`${API}/orders/${order.id}/razorpay`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const orderPayload = await orderRes.json().catch(() => ({}));
+      if (!orderRes.ok) {
+        if (orderRes.status === 409) {
+          hotToast.error(orderPayload?.error || "This item is out of stock.");
+        } else {
+          toast.error(orderPayload?.error || "Unable to start Razorpay payment.");
+        }
+        return;
       }
-    };
-    void loadOrders();
-  }, [user?.id]);
+
+      const razorpayOrder = orderPayload?.razorpayOrder;
+      const keyId = orderPayload?.keyId;
+      if (!razorpayOrder?.id || !keyId) {
+        toast.error("Razorpay order not initialized.");
+        return;
+      }
+
+      const paymentResponse = await openRazorpayCheckout({
+        key: keyId,
+        amount: Number(razorpayOrder.amount || 0),
+        currency: razorpayOrder.currency || "INR",
+        name: "Golden Refrigeration",
+        description: order.productTitle,
+        order_id: razorpayOrder.id,
+      });
+
+      const verifyRes = await fetch(`${API}/orders/${order.id}/razorpay/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(paymentResponse),
+      });
+      const verifyPayload = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok) {
+        toast.error(verifyPayload?.error || "Payment verification failed.");
+        return;
+      }
+      if (verifyPayload?.success === false) {
+        hotToast.error(verifyPayload?.message || "Order cancelled due to stock unavailability.");
+        await refreshOrders(false);
+        return;
+      }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("products:refresh"));
+      }
+      toast.success("Payment verified. Thank you!");
+      await refreshOrders(false);
+    } catch (error: any) {
+      const message = String(error?.message || "").toLowerCase();
+      if (message.includes("cancel")) {
+        toast.error("Payment cancelled.");
+      } else {
+        toast.error("Payment could not be completed.");
+      }
+    } finally {
+      setPayingOrderId(null);
+    }
+  };
 
   const orderedData = useMemo(
     () => [...orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
@@ -122,6 +218,9 @@ export default function OrdersPage() {
           {orderedData.map((order) => {
             const stepIndex = getStepIndex(order.orderStatus);
             const isHighlighted = highlightId && highlightId === order.id;
+            const isPaid = String(order.paymentStatus || "PENDING") === "PAID";
+            const isDelivered = order.orderStatus === "DELIVERED";
+            const showStockBadge = !isPaid && !isDelivered;
             return (
               <article
                 key={order.id}
@@ -131,7 +230,22 @@ export default function OrdersPage() {
               >
                 <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
                   <div className="space-y-2">
-                    <p className="text-lg font-bold text-white">{order.productTitle}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-lg font-bold text-white">{order.productTitle}</p>
+                      {showStockBadge && typeof order.stockQty === "number" && order.stockQty <= 0 && (
+                        <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase text-red-200">
+                          ❌ Out of Stock
+                        </span>
+                      )}
+                      {showStockBadge &&
+                        typeof order.stockQty === "number" &&
+                        order.stockQty > 0 &&
+                        order.stockQty <= 5 && (
+                        <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase text-amber-200">
+                          ⚠️ Only {order.stockQty} left!
+                        </span>
+                      )}
+                    </div>
                     <p className="text-cyan-300 font-semibold">₹{Number(order.price || 0).toLocaleString("en-IN")}</p>
                     <p className="text-xs text-slate-300">Delivery Phone: {order.deliveryPhone}</p>
                     <p className="text-xs text-slate-300">Delivery Address: {order.deliveryAddress}</p>
@@ -139,7 +253,26 @@ export default function OrdersPage() {
                     <p className="text-xs text-slate-300">
                       Payment: <span className="font-semibold">{order.paymentStatus || "PENDING"}</span>
                     </p>
+                    {order.orderStatus === "CANCELLED" && (
+                      <p className="text-xs text-red-300">
+                        We're sorry! This item is out of stock. Your refund will reflect in 3-5 business days.
+                      </p>
+                    )}
                     <div className="pt-1">
+                      {String(order.paymentStatus || "PENDING") !== "PAID" && order.orderStatus !== "CANCELLED" && (
+                        <button
+                          type="button"
+                          disabled={payingOrderId === order.id || (typeof order.stockQty === "number" && order.stockQty <= 0)}
+                          onClick={() => handlePay(order)}
+                          className="mb-2 w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-60"
+                        >
+                          {typeof order.stockQty === "number" && order.stockQty <= 0
+                            ? "Currently Unavailable"
+                            : payingOrderId === order.id
+                              ? "Processing Payment..."
+                              : "Pay via Razorpay"}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => {

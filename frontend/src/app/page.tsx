@@ -1,8 +1,18 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ProductCard from "@/components/ProductCard";
 import ProductSkeleton from "@/components/ProductSkeleton";
 import type { NormalizedProduct, Product } from "@/types";
+
+const resolveApiBase = () => {
+  const envBase = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (envBase) return envBase;
+  if (typeof window !== "undefined") {
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}:5001/api`;
+  }
+  return "";
+};
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -14,21 +24,48 @@ export default function Home() {
     "https://assets.mixkit.co/videos/preview/mixkit-man-repairing-an-air-conditioner-43535-large.mp4",
   ];
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products`, { credentials: "include" });
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setProducts(data);
-        }
-      } catch (err) {
-        console.error("Fetch error:", err);
+  const fetchProducts = useCallback(async (showLoader = false) => {
+    if (showLoader) setLoading(true);
+    const apiBase = resolveApiBase();
+    if (!apiBase) {
+      console.error("NEXT_PUBLIC_API_URL is not configured.");
+      if (showLoader) setLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch(`${apiBase}/products`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        console.error("Fetch failed:", res.status, res.statusText);
+        setProducts([]);
+        return;
       }
-      finally { setLoading(false); }
-    };
-    fetchData();
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setProducts(data);
+      }
+    } catch (err) {
+      console.error("Fetch error:", err);
+      setProducts([]);
+    } finally {
+      if (showLoader) setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void fetchProducts(true);
+  }, [fetchProducts]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleRefresh = () => {
+      void fetchProducts(false);
+    };
+    window.addEventListener("products:refresh", handleRefresh);
+    return () => window.removeEventListener("products:refresh", handleRefresh);
+  }, [fetchProducts]);
 
   // Checkout flow now lives inside ProductCard.
 

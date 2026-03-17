@@ -3,6 +3,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Toaster } from "sonner";
+import { Toaster as HotToaster } from "react-hot-toast";
 import { AuthProvider } from "@/context/AuthContext";
 
 export default function RootLayout({
@@ -25,6 +26,7 @@ export default function RootLayout({
               className: "border border-slate-200 bg-white text-slate-900",
             }}
           />
+          <HotToaster position="top-right" />
         </AuthProvider>
       </body>
     </html>

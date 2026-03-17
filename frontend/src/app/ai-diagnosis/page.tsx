@@ -1,19 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import DiagnosisSkeleton from "@/components/DiagnosisSkeleton";
+import EstimateCard from "@/components/EstimateCard";
 import { useAuth } from "@/context/AuthContext";
-
-type StructuredDiagnosis = {
-  probableFault: string;
-  urgency: "LOW" | "MEDIUM" | "HIGH";
-  partsList: string[];
-  estimatedCostMin: number;
-  estimatedCostMax: number;
-  actionPlan: string;
-};
 
 type ContactInfo = {
   phone: string;
@@ -37,19 +28,19 @@ type HistoryItem = {
   appliance: string;
   issue: string;
   aiDiagnosis: string;
-  scheduledAt: string;
-  status?: string;
+  estimatedCostRange?: string;
+  createdAt: string;
 };
 
 const SERVICE_PIN_PREFIXES = ["500", "506"];
+const HISTORY_KEY = "gr_ai_diagnosis_history";
 
 export default function AIDiagnosis() {
-  const router = useRouter();
   const { user } = useAuth();
   const [appliance, setAppliance] = useState("Refrigerator");
   const [issue, setIssue] = useState("");
   const [result, setResult] = useState("");
-  const [structured, setStructured] = useState<StructuredDiagnosis | null>(null);
+  const [estimatedCostRange, setEstimatedCostRange] = useState("");
   const [contact, setContact] = useState<ContactInfo>({
     phone: "9060877595",
     call: "tel:9060877595",
@@ -58,6 +49,7 @@ export default function AIDiagnosis() {
   });
   const [isListening, setIsListening] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [chatLocked, setChatLocked] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<HistoryItem | null>(null);
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -73,24 +65,24 @@ export default function AIDiagnosis() {
     }
   }, [user?.name]);
 
-  const fetchHistory = useCallback(async () => {
-    const userId = user?.id;
-    if (!userId) return;
-
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/history/${userId}`, { credentials: "include" });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setHistory(data);
-      }
-    } catch (err) {
-      console.error("History error", err);
-    }
-  }, [user?.id]);
+  const persistHistory = useCallback((items: HistoryItem[]) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(items));
+  }, []);
 
   useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
+    if (typeof window === "undefined") return;
+    const stored = localStorage.getItem(HISTORY_KEY);
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        setHistory(parsed);
+      }
+    } catch (err) {
+      console.error("History load error", err);
+    }
+  }, []);
 
   const startVoiceInput = () => {
     const speechWindow = window as unknown as {
@@ -128,21 +120,39 @@ export default function AIDiagnosis() {
     e.preventDefault();
     setLoading(true);
     setResult("");
-    setStructured(null);
+    setEstimatedCostRange("");
+    setChatLocked(true);
 
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ai/diagnose`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ appliance, issue }),
+        body: JSON.stringify({ applianceType: appliance, issueDetails: issue }),
       });
 
       const data = await res.json();
       if (res.ok) {
-        setResult(data.diagnosis);
-        setStructured(data.structured || null);
+        const diagnosisText = String(data?.diagnosis || "").trim();
+        const costRange = String(data?.estimatedCostRange || "").trim();
+        setResult(diagnosisText);
+        setEstimatedCostRange(costRange);
         if (data.contact) setContact(data.contact as ContactInfo);
+        if (diagnosisText) {
+          const newItem: HistoryItem = {
+            id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}`,
+            appliance,
+            issue,
+            aiDiagnosis: diagnosisText,
+            estimatedCostRange: costRange,
+            createdAt: new Date().toISOString(),
+          };
+          setHistory((prev) => {
+            const next = [newItem, ...prev].slice(0, 25);
+            persistHistory(next);
+            return next;
+          });
+        }
         toast.success("Diagnosis completed.");
       } else {
         setResult(data?.error || data?.details || "AI service is currently unavailable. Please try again.");
@@ -191,6 +201,9 @@ export default function AIDiagnosis() {
 
     setBookingSubmitting(true);
     try {
+      const diagnosisSummary = result
+        ? `${result}${estimatedCostRange ? `\nEstimated cost range: ${estimatedCostRange}` : ""}`
+        : "";
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/service/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -201,6 +214,7 @@ export default function AIDiagnosis() {
           guestPhone: user?.id ? undefined : bookingPhone.replace(/\D/g, ""),
           appliance,
           issue,
+          aiDiagnosis: diagnosisSummary || undefined,
           fullName: bookingFullName.trim(),
           phoneNumber: bookingPhone.replace(/\D/g, ""),
           address: bookingAddress.trim(),
@@ -216,7 +230,6 @@ export default function AIDiagnosis() {
       }
       toast.success("Technician booked successfully. Admin has been notified.");
       setBookingOpen(false);
-      fetchHistory();
     } catch {
       toast.error("Booking service is unavailable right now.");
     } finally {
@@ -224,12 +237,12 @@ export default function AIDiagnosis() {
     }
   };
 
-  const urgencyStyle =
-    structured?.urgency === "HIGH"
-      ? "bg-red-50 border-red-200 text-red-700"
-      : structured?.urgency === "MEDIUM"
-        ? "bg-amber-50 border-amber-200 text-amber-700"
-        : "bg-emerald-50 border-emerald-200 text-emerald-700";
+  const handleClearChat = () => {
+    setIssue("");
+    setResult("");
+    setEstimatedCostRange("");
+    setChatLocked(false);
+  };
 
   return (
     <main className="min-h-screen pt-20 md:pt-24 pb-12 flex flex-col bg-slate-50">
@@ -245,7 +258,8 @@ export default function AIDiagnosis() {
               <select
                 value={appliance}
                 onChange={(e) => setAppliance(e.target.value)}
-                className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white p-4 font-medium text-slate-900 outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={chatLocked || loading}
+                className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white p-4 font-medium text-slate-900 outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 <option>Refrigerator</option>
                 <option>Air Conditioner</option>
@@ -280,6 +294,13 @@ export default function AIDiagnosis() {
             >
               {loading ? "Analyzing..." : "Get AI Diagnosis"}
             </button>
+            <button
+              type="button"
+              onClick={handleClearChat}
+              className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white py-4 font-semibold text-slate-600 shadow-sm transition-transform active:scale-95"
+            >
+              Clear Chat
+            </button>
           </form>
 
           {loading ? (
@@ -289,39 +310,11 @@ export default function AIDiagnosis() {
           ) : result ? (
             <div className="flex flex-col gap-6 md:gap-8">
               <div className="rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-500 to-blue-600 p-6 text-white shadow-lg">
-                <h3 className="mb-2 text-lg font-bold">Golden Refrigeration Technician Advice</h3>
+                <h3 className="mb-2 text-lg font-bold">Golden Refrigeration Senior Consultant</h3>
                 <p className="whitespace-pre-wrap leading-relaxed text-cyan-50">{result}</p>
               </div>
 
-              {structured && (
-                <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <h4 className="font-bold text-slate-900">Structured Diagnosis</h4>
-                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${urgencyStyle}`}>
-                      Urgency: {structured.urgency}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-700">
-                    <span className="font-semibold text-blue-600">Probable fault: </span>
-                    {structured.probableFault}
-                  </p>
-                  <p className="text-sm text-slate-700">
-                    <span className="font-semibold text-blue-600">Estimated cost: </span>
-                    ₹{Number(structured.estimatedCostMin || 0).toLocaleString()} - ₹
-                    {Number(structured.estimatedCostMax || 0).toLocaleString()}
-                  </p>
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Likely parts</p>
-                    <div className="flex flex-wrap gap-2">
-                      {structured.partsList.map((part, idx) => (
-                        <span key={`${part}-${idx}`} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
-                          {part}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+              <EstimateCard estimatedCostRange={estimatedCostRange} onBook={openBooking} />
 
               <div className="flex flex-col gap-4 rounded-2xl border border-blue-200 bg-blue-50/70 p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -339,13 +332,6 @@ export default function AIDiagnosis() {
                 >
                   Call Technician Now
                 </a>
-                <button
-                  type="button"
-                  onClick={openBooking}
-                  className="min-h-[48px] w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition-transform active:scale-95"
-                >
-                  Need Help? Book Technician Now
-                </button>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <a href={contact.call} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">Call: {contact.phone}</a>
                   <a href={contact.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white">WhatsApp</a>
@@ -358,7 +344,7 @@ export default function AIDiagnosis() {
 
         <section className="h-fit rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 flex flex-col gap-6 md:gap-8">
           <h2 className="text-2xl font-black text-slate-900">Consultation history</h2>
-          <p className="mb-6 mt-2 text-sm text-slate-600">Review your previous diagnosis records.</p>
+          <p className="mb-6 mt-2 text-sm text-slate-600">Review your previous AI diagnosis records (saved locally).</p>
 
           {history.length > 0 ? (
             <div className="max-h-[28rem] space-y-3 overflow-auto pr-1">
@@ -370,10 +356,10 @@ export default function AIDiagnosis() {
                 >
                   <div className="mb-1 flex items-start justify-between gap-2">
                     <span className="text-sm font-semibold uppercase text-blue-600">{item.appliance}</span>
-                    <span className="text-xs text-slate-500">{new Date(item.scheduledAt).toLocaleDateString()}</span>
+                    <span className="text-xs text-slate-500">{new Date(item.createdAt).toLocaleDateString()}</span>
                   </div>
                   <p className="line-clamp-2 text-sm font-medium text-slate-900">{item.issue}</p>
-                  <p className="mt-1 text-[11px] uppercase tracking-wide text-slate-500">{item.status || "PENDING"}</p>
+                  <p className="mt-1 text-[11px] uppercase tracking-wide text-slate-500">Local session</p>
                 </button>
               ))}
             </div>
@@ -406,6 +392,12 @@ export default function AIDiagnosis() {
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-600">Recommendation</p>
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{selectedItem.aiDiagnosis}</p>
             </div>
+            {selectedItem.estimatedCostRange && (
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-600">Estimated Cost</p>
+                <p className="text-sm font-semibold text-emerald-800">{selectedItem.estimatedCostRange}</p>
+              </div>
+            )}
 
             <button
               onClick={() => setSelectedItem(null)}

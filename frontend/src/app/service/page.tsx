@@ -5,6 +5,7 @@ import { AirVent, Microwave, Refrigerator, WashingMachine, Wrench } from "lucide
 import { toast } from "sonner";
 import ServiceActiveTrackerCard, { type ServiceBooking } from "@/components/ServiceActiveTrackerCard";
 import ServiceHistoryCard from "@/components/ServiceHistoryCard";
+import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/razorpay";
 
 type GalleryItem = {
   id: string;
@@ -25,8 +26,6 @@ type BookingFormState = {
 const API = process.env.NEXT_PUBLIC_API_URL;
 const FALLBACK_GALLERY_IMAGE =
   "https://images.unsplash.com/photo-1626806787461-102c1bfaaea1?q=80&w=900&auto=format&fit=crop";
-const SHOP_UPI_ID = "9060877595-2@ybl";
-const SHOP_UPI_NAME = "MD ATHAR ALI";
 
 const APPLIANCE_OPTIONS: Array<{
   label: BookingFormState["appliance"];
@@ -61,24 +60,40 @@ const PLACEHOLDER_GALLERY: GalleryItem[] = [
   },
 ];
 
-const buildUpiLink = (amount?: number | null) => {
-  const query = new URLSearchParams({
-    pa: SHOP_UPI_ID,
-    pn: SHOP_UPI_NAME,
-    cu: "INR",
-  });
-  if (typeof amount === "number" && Number.isFinite(amount) && amount > 0) {
-    query.set("am", String(amount));
-  }
-  return `upi://pay?${query.toString()}`;
+type EmptyServiceStateProps = {
+  onBookNow: () => void;
 };
 
+const EmptyServiceState = ({ onBookNow }: EmptyServiceStateProps) => (
+  <section className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/70 p-6 shadow-sm">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-start gap-3">
+        <span className="grid h-10 w-10 place-items-center rounded-full bg-white text-blue-600 shadow-sm">
+          <Wrench className="h-5 w-5" />
+        </span>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">No active service requests.</h2>
+          <p className="mt-1 text-sm text-slate-600">Book a technician to get started — your tracker will appear here instantly.</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onBookNow}
+        className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-blue-600 px-5 text-sm font-semibold text-white transition-transform hover:bg-blue-700 active:scale-95"
+      >
+        Book a New Service
+      </button>
+    </div>
+  </section>
+);
+
 export default function ServicePage() {
+  const [hasMounted, setHasMounted] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ id: string; name?: string; email?: string } | null>(null);
   const [bookings, setBookings] = useState<ServiceBooking[]>([]);
+  const [activeBooking, setActiveBooking] = useState<ServiceBooking | null>(null);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
-  const [hasActiveBooking, setHasActiveBooking] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [ratingLoading, setRatingLoading] = useState(false);
@@ -86,6 +101,7 @@ export default function ServicePage() {
   const [guestLookupLoading, setGuestLookupLoading] = useState(false);
   const [guestLookup, setGuestLookup] = useState({ bookingId: "", phone: "" });
   const [guestBooking, setGuestBooking] = useState<ServiceBooking | null>(null);
+  const [servicePaying, setServicePaying] = useState(false);
 
   const [form, setForm] = useState<BookingFormState>({
     appliance: "Refrigerator",
@@ -95,6 +111,10 @@ export default function ServicePage() {
     address: "",
     pincode: "",
   });
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -111,27 +131,42 @@ export default function ServicePage() {
   const loadData = async (userId?: string) => {
     if (!API) {
       setBookings([]);
+      setActiveBooking(null);
       setGallery([]);
-      setHasActiveBooking(false);
+      if (typeof window !== "undefined") {
+        ["serviceBookingType", "bookingType", "activeServiceBooking"].forEach((key) => localStorage.removeItem(key));
+      }
       setLoading(false);
       return;
     }
 
     try {
       const bookingsPromise = userId
-        ? fetch(`${API}/service/my-bookings?userId=${userId}`, { credentials: "include" }).then((res) => res.json().catch(() => []))
+        ? fetch(`${API}/service/my-bookings?userId=${userId}`, {
+            credentials: "include",
+            cache: "no-store",
+          }).then((res) => res.json().catch(() => []))
         : Promise.resolve([]);
       const galleryPromise = fetch(`${API}/gallery`, { credentials: "include" }).then((res) => res.json().catch(() => []));
       const [bookingsPayload, galleryPayload] = await Promise.all([bookingsPromise, galleryPromise]);
       const nextBookings = Array.isArray(bookingsPayload) ? (bookingsPayload as ServiceBooking[]) : [];
+      const activeBookings = nextBookings.filter((booking) => !["COMPLETED", "CANCELLED"].includes(booking.status));
 
-      setBookings(nextBookings);
-      setHasActiveBooking(nextBookings.some((booking) => !["COMPLETED", "CANCELLED"].includes(booking.status)));
+      if (activeBookings.length === 0) {
+        setBookings([]);
+        setActiveBooking(null);
+        if (typeof window !== "undefined") {
+          ["serviceBookingType", "bookingType", "activeServiceBooking"].forEach((key) => localStorage.removeItem(key));
+        }
+      } else {
+        setBookings(activeBookings);
+        setActiveBooking(activeBookings[0] || null);
+      }
       setGallery(Array.isArray(galleryPayload) ? galleryPayload.slice(0, 8) : []);
     } catch {
       setBookings([]);
+      setActiveBooking(null);
       setGallery([]);
-      setHasActiveBooking(false);
     } finally {
       setLoading(false);
     }
@@ -143,19 +178,11 @@ export default function ServicePage() {
     void loadData(currentUser?.id);
   }, [isHydrated, currentUser?.id]);
 
-  const activeBooking = useMemo(
-    () => bookings.find((booking) => !["COMPLETED", "CANCELLED"].includes(booking.status)) || null,
-    [bookings],
-  );
+  const hasActiveBookings = Array.isArray(bookings) && bookings.length > 0;
 
   const completedBookings = useMemo(
     () => bookings.filter((booking) => ["COMPLETED", "CANCELLED"].includes(booking.status)),
     [bookings],
-  );
-
-  const activeBookingUpiLink = useMemo(
-    () => buildUpiLink(activeBooking?.finalCost),
-    [activeBooking?.finalCost],
   );
 
   const galleryItems = gallery.length ? gallery.slice(0, 4) : PLACEHOLDER_GALLERY;
@@ -224,26 +251,14 @@ export default function ServicePage() {
 
       toast.success("Service booking created successfully.");
       const createdBooking = payload?.booking as ServiceBooking | undefined;
-      if (createdBooking) {
-        setBookings((prev) => [createdBooking, ...prev.filter((booking) => booking.id !== createdBooking.id)]);
-      } else {
-        setBookings((prev) => [
-          {
-            id: `tmp-${Date.now()}`,
-            appliance: form.appliance,
-            issue: form.issue,
-            status: "PENDING",
-            scheduledAt: new Date().toISOString(),
-            address: form.address || null,
-            finalCost: null,
-            invoiceUrl: null,
-            rating: null,
-            technician: null,
-          },
-          ...prev,
-        ]);
+      if (!createdBooking) {
+        throw new Error("Booking could not be confirmed. Please try again.");
       }
-      setHasActiveBooking(true);
+      if (currentUser?.id) {
+        await loadData(currentUser.id);
+      } else {
+        setGuestBooking(createdBooking);
+      }
       setForm((prev) => ({ ...prev, issue: "" }));
       if (currentUser?.id) {
         void loadData(currentUser.id);
@@ -301,11 +316,8 @@ export default function ServicePage() {
       const booking = payload?.booking as ServiceBooking | undefined;
       if (!booking) throw new Error("Booking details not available.");
       setGuestBooking(booking);
-      if (!currentUser?.id) {
-        setBookings([booking]);
-        setHasActiveBooking(!["COMPLETED", "CANCELLED"].includes(booking.status));
-      }
     } catch (error: unknown) {
+      setGuestBooking(null);
       toast.error(error instanceof Error ? error.message : "Unable to find booking.");
     } finally {
       setGuestLookupLoading(false);
@@ -338,23 +350,125 @@ export default function ServicePage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleServicePayment = async () => {
+    if (!activeBooking?.id) return;
+    if (!API) {
+      toast.error("Service API not configured.");
+      return;
+    }
+    if (!currentUser?.id) {
+      toast.error("Please login to pay.");
+      return;
+    }
+    if (activeBooking.status !== "PAYMENT_PENDING" || Number(activeBooking.finalCost || 0) <= 0) {
+      toast.error("Payment is not available yet for this booking.");
+      return;
+    }
+
+    setServicePaying(true);
+    try {
+      const scriptReady = await loadRazorpayScript();
+      if (!scriptReady) {
+        toast.error("Failed to load Razorpay checkout.");
+        return;
+      }
+
+      const orderRes = await fetch(`${API}/booking/${activeBooking.id}/razorpay`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const orderPayload = await orderRes.json().catch(() => ({}));
+      if (!orderRes.ok) {
+        toast.error(orderPayload?.error || "Unable to start Razorpay payment.");
+        return;
+      }
+
+      const razorpayOrder = orderPayload?.razorpayOrder;
+      const keyId = orderPayload?.keyId;
+      if (!razorpayOrder?.id || !keyId) {
+        toast.error("Razorpay order not initialized.");
+        return;
+      }
+
+      const paymentResponse = await openRazorpayCheckout({
+        key: keyId,
+        amount: Number(razorpayOrder.amount || 0),
+        currency: razorpayOrder.currency || "INR",
+        name: "Golden Refrigeration",
+        description: `Service payment - ${activeBooking.appliance}`,
+        order_id: razorpayOrder.id,
+        prefill: {
+          name: currentUser?.name,
+          email: currentUser?.email,
+        },
+      });
+
+      const verifyRes = await fetch(`${API}/booking/${activeBooking.id}/razorpay/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(paymentResponse),
+      });
+      const verifyPayload = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok) {
+        toast.error(verifyPayload?.error || "Payment verification failed.");
+        return;
+      }
+
+      toast.success("Payment verified. Service completed.");
+      void loadData(currentUser?.id);
+    } catch (error: unknown) {
+      const message = String((error as Error)?.message || "").toLowerCase();
+      if (message.includes("cancel")) {
+        toast.error("Payment cancelled.");
+      } else {
+        toast.error("Payment could not be completed.");
+      }
+    } finally {
+      setServicePaying(false);
+    }
+  };
+
+  const handleScrollToBooking = () => {
+    if (typeof window === "undefined") return;
+    const target = document.getElementById("quick-booking-desk");
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
     <main className="min-h-screen pt-20 md:pt-24 pb-12 flex flex-col bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col gap-8 md:gap-12">
-        <ServiceActiveTrackerCard
-          loading={loading}
-          hasActiveBooking={hasActiveBooking}
-          activeBooking={activeBooking}
-          activeBookingUpiLink={activeBookingUpiLink}
-          ratingValue={ratingValue}
-          setRatingValue={setRatingValue}
-          ratingLoading={ratingLoading}
-          onSubmitRating={onSubmitRating}
-          onDownloadInvoice={downloadInvoice}
-          upiId={SHOP_UPI_ID}
-        />
+        {loading || !hasMounted ? (
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-3 text-sm text-slate-600">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+              Loading your service tracker...
+            </div>
+          </section>
+        ) : (bookings && bookings.length > 0 && activeBooking) ? (
+          <ServiceActiveTrackerCard
+            loading={loading}
+            hasActiveBooking={hasActiveBookings}
+            activeBooking={activeBooking}
+            ratingValue={ratingValue}
+            setRatingValue={setRatingValue}
+            ratingLoading={ratingLoading}
+            onSubmitRating={onSubmitRating}
+            onDownloadInvoice={downloadInvoice}
+            onPayWithRazorpay={handleServicePayment}
+            paying={servicePaying}
+            canPay={Boolean(currentUser?.id)}
+          />
+        ) : (
+          <EmptyServiceState onBookNow={handleScrollToBooking} />
+        )}
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-6 md:gap-8">
+        <section
+          id="quick-booking-desk"
+          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-6 md:gap-8"
+        >
           <h3 className="text-lg font-bold text-slate-900">Quick Booking Desk</h3>
           <p className="mt-1 text-sm text-slate-600">Book a technician with customer details and full address.</p>
 

@@ -1,6 +1,5 @@
 "use client";
 
-import QRCode from "react-qr-code";
 import { CalendarClock, Loader2, Star } from "lucide-react";
 
 export type BookingStatus =
@@ -31,13 +30,14 @@ type ServiceActiveTrackerCardProps = {
   loading: boolean;
   hasActiveBooking: boolean | null;
   activeBooking: ServiceBooking | null;
-  activeBookingUpiLink: string;
   ratingValue: number;
   setRatingValue: (next: number) => void;
   ratingLoading: boolean;
   onSubmitRating: () => void;
   onDownloadInvoice: (booking: ServiceBooking) => void;
-  upiId: string;
+  onPayWithRazorpay: () => void;
+  paying: boolean;
+  canPay: boolean;
 };
 
 const STATUS_STEPS: Array<{ key: BookingStatus; label: string }> = [
@@ -75,14 +75,18 @@ export default function ServiceActiveTrackerCard({
   loading,
   hasActiveBooking,
   activeBooking,
-  activeBookingUpiLink,
   ratingValue,
   setRatingValue,
   ratingLoading,
   onSubmitRating,
   onDownloadInvoice,
-  upiId,
+  onPayWithRazorpay,
+  paying,
+  canPay,
 }: ServiceActiveTrackerCardProps) {
+  const isPaymentStage = Boolean(activeBooking && ["FIXED", "PAYMENT_PENDING", "COMPLETED"].includes(activeBooking.status));
+  const isPaymentPending = Boolean(activeBooking?.status === "PAYMENT_PENDING" && Number(activeBooking.finalCost || 0) > 0);
+  const isPaymentComplete = activeBooking?.status === "COMPLETED";
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-8 md:gap-12">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -106,51 +110,78 @@ export default function ServiceActiveTrackerCard({
             </div>
           ) : !activeBooking ? (
             <p className="text-sm text-slate-600">Fetching active tracker...</p>
-          ) : ["FIXED", "PAYMENT_PENDING"].includes(activeBooking.status) ? (
+          ) : isPaymentStage ? (
             <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
               <div className="space-y-3">
                 <h3 className="text-base font-semibold text-slate-900">Payment & Invoice</h3>
-                <p className="text-sm text-slate-600">Your technician has marked the job as fixed. Please complete payment and download your bill.</p>
+                <p className="text-sm text-slate-600">
+                  {isPaymentComplete
+                    ? "Payment verified. You can download your invoice below."
+                    : "Final estimate ready. Complete payment to finish the service."}
+                </p>
                 <p className="text-2xl font-black text-emerald-600">₹{Number(activeBooking.finalCost || 0).toLocaleString("en-IN")}</p>
-                <button
-                  type="button"
-                  onClick={() => onDownloadInvoice(activeBooking)}
-                  className="min-h-[48px] rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-transform hover:bg-blue-700 active:scale-95"
-                >
-                  Download Invoice
-                </button>
+                {isPaymentComplete && (
+                  <button
+                    type="button"
+                    onClick={() => onDownloadInvoice(activeBooking)}
+                    className="min-h-[48px] rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-transform hover:bg-blue-700 active:scale-95"
+                  >
+                    Download Invoice
+                  </button>
+                )}
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Rate Service</p>
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: 5 }, (_, idx) => {
-                      const value = idx + 1;
-                      return (
+                  {isPaymentComplete && (
+                    <>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Rate Service</p>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: 5 }, (_, idx) => {
+                          const value = idx + 1;
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setRatingValue(value)}
+                              className="rounded-md p-1"
+                              aria-label={`Rate ${value}`}
+                            >
+                              <Star className={`h-5 w-5 ${value <= ratingValue ? "fill-amber-400 text-amber-400" : "text-slate-400"}`} />
+                            </button>
+                          );
+                        })}
                         <button
-                          key={value}
                           type="button"
-                          onClick={() => setRatingValue(value)}
-                          className="rounded-md p-1"
-                          aria-label={`Rate ${value}`}
+                          onClick={onSubmitRating}
+                          disabled={ratingLoading || ratingValue < 1}
+                          className="ml-2 min-h-[40px] rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
                         >
-                          <Star className={`h-5 w-5 ${value <= ratingValue ? "fill-amber-400 text-amber-400" : "text-slate-400"}`} />
+                          {ratingLoading ? "Saving..." : "Submit"}
                         </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={onSubmitRating}
-                      disabled={ratingLoading || ratingValue < 1}
-                      className="ml-2 min-h-[40px] rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
-                    >
-                      {ratingLoading ? "Saving..." : "Submit"}
-                    </button>
-                  </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="grid place-items-center rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="space-y-2 text-center">
-                  <QRCode value={activeBookingUpiLink} size={140} bgColor="#ffffff" fgColor="#0f172a" />
-                  <p className="text-[11px] font-semibold text-slate-600">{upiId}</p>
+                  {isPaymentComplete ? (
+                    <span className="inline-flex items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs font-semibold text-emerald-700">
+                      ✅ Payment Successful
+                    </span>
+                  ) : isPaymentPending && canPay ? (
+                    <button
+                      type="button"
+                      onClick={onPayWithRazorpay}
+                      disabled={paying}
+                      className="min-h-[48px] rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-700 transition-transform hover:bg-emerald-500/20 disabled:opacity-60"
+                    >
+                      {paying ? "Processing..." : "Pay via Razorpay"}
+                    </button>
+                  ) : isPaymentPending ? (
+                    <p className="text-xs font-semibold text-slate-600">Login required to pay online.</p>
+                  ) : (
+                    <p className="text-xs font-semibold text-slate-600">Payment link will appear once the final estimate is ready.</p>
+                  )}
+                  <p className="text-[11px] text-slate-500">Secure payment powered by Razorpay.</p>
                 </div>
               </div>
             </div>

@@ -16,6 +16,7 @@ type ProductItem = {
   conditionScore?: number | null;
   warrantyType?: "BRAND" | "SHOP" | null;
   warrantyExpiry?: string | null;
+  stockQty?: number | null;
 };
 
 type ApplianceStat = {
@@ -83,8 +84,9 @@ type OrderItem = {
   customerName?: string | null;
   deliveryPhone: string;
   deliveryAddress: string;
-  orderStatus: "ORDER_PLACED" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED";
+  orderStatus: "ORDER_PLACED" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
   paymentStatus?: string;
+  internalNote?: string | null;
   price: number;
   invoiceUrl?: string | null;
   createdAt: string;
@@ -268,6 +270,7 @@ export default function AdminDashboard() {
         const opsPayload = await opsRes.json().catch(() => null);
         const galleryPayload = await galleryRes.json().catch(() => null);
         const ordersPayload = await ordersRes.json().catch(() => null);
+        console.log("Admin stats payload:", statsPayload);
 
         // Fallback to basic stats if enriched stats endpoint is unavailable.
         if (!statsRes.ok || !statsPayload || statsPayload?.error) {
@@ -358,12 +361,40 @@ export default function AdminDashboard() {
         method: "DELETE",
         credentials: "include",
       });
-      if (res.ok) {
-        toast.success("Product deleted.");
-        window.location.reload();
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(payload?.error || "Failed to delete product.");
+        return;
+      }
+      toast.success(payload?.message || "Product deleted.");
+      const updatedProducts = Array.isArray(payload?.products) ? payload.products : null;
+      if (updatedProducts) {
+        setStats((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            latestProducts: updatedProducts,
+            totalProducts: Number(payload?.totalProducts ?? updatedProducts.length ?? prev.totalProducts),
+          };
+        });
+      } else {
+        // Fallback: re-fetch stats from backend for true DB state.
+        const statsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/stats`, { credentials: "include" });
+        const statsPayload = await statsRes.json().catch(() => null);
+        if (statsRes.ok && statsPayload && typeof statsPayload === "object") {
+          setStats({
+            ...statsPayload,
+            totalBookings: Number((statsPayload as DashboardStats).totalBookings || 0),
+            totalUsers: Number((statsPayload as DashboardStats).totalUsers || 0),
+            totalProducts: Number((statsPayload as DashboardStats).totalProducts || 0),
+          });
+        } else {
+          toast.error(statsPayload?.error || "Unable to refresh inventory from server.");
+        }
       }
     } catch (err) {
       console.error(err);
+      toast.error("Failed to delete product.");
     }
   };
 
@@ -372,6 +403,12 @@ export default function AdminDashboard() {
     if (!adminUser) return toast.error("Login required.");
     if (!newProd.imageUrl) return toast.error("Please upload a product image first.");
     const isRefurbished = newProd.productType === "REFURBISHED";
+    if (!isRefurbished) {
+      const parsedStock = Number(newProd.stockQty || 0);
+      if (!Number.isFinite(parsedStock) || parsedStock < 1) {
+        return toast.error("Stock quantity is required for new products.");
+      }
+    }
     const totalAgeMonths = (Number(ageYears || 0) * 12) + Number(ageMonthsPart || 0);
     const computedWarrantyExpiry = toWarrantyExpiryFromDuration(warrantyDuration, warrantyDurationUnit);
     const payload: NewProduct = {
@@ -738,12 +775,14 @@ export default function AdminDashboard() {
   const safeLatestProducts = Array.isArray(stats?.latestProducts) ? stats.latestProducts : [];
   const safeApplianceStats = Array.isArray(stats?.applianceStats) ? stats.applianceStats : [];
   const safeBookings = Array.isArray(opsBookings) ? opsBookings : [];
-  const activeQueue = safeBookings.filter((service) =>
-    ["PENDING", "ASSIGNED", "ESTIMATE_APPROVED", "OUT_FOR_REPAIR", "REPAIRING"].includes(String(service.status)),
+  const isOrderCompleted = (order: OrderItem) =>
+    String(order.paymentStatus || "PENDING") === "PAID" || order.orderStatus === "DELIVERED";
+  const liveOrders = orders.filter((order) => !isOrderCompleted(order));
+  const completedOrders = orders.filter((order) => isOrderCompleted(order));
+  const activeQueue = safeBookings.filter(
+    (service) => !["COMPLETED", "CANCELLED"].includes(String(service.status)),
   );
-  const completedOperations = safeBookings.filter((service) =>
-    ["FIXED", "PAYMENT_PENDING", "COMPLETED", "CANCELLED"].includes(String(service.status)),
-  );
+  const completedOperations = safeBookings.filter((service) => String(service.status) === "COMPLETED");
   const activeServiceCount = activeQueue.length;
   const fixedReadyCount = safeBookings.filter((booking) => ["FIXED", "PAYMENT_PENDING"].includes(String(booking.status))).length;
   return (
@@ -781,20 +820,25 @@ export default function AdminDashboard() {
               <h3 className="text-xl font-black text-white mt-1">Live Orders Controller</h3>
             </div>
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-300 bg-slate-800 border border-slate-700 px-3 py-1 rounded-full">
-              {orders.length} orders
+              {liveOrders.length} live
             </span>
           </div>
 
           <div className="space-y-3 max-h-[36rem] overflow-auto pr-1">
-            {orders.map((order) => {
+            {liveOrders.map((order) => {
               const status = selectedStatusByOrder[order.id] || order.orderStatus;
               const isGeneratingInvoice = Boolean(generatingInvoiceByOrder[order.id]);
               const isConfirmingPayment = Boolean(confirmingPaymentByOrder[order.id]);
               const paymentConfirmed = String(order.paymentStatus || "PENDING") === "PAID";
+              const isCancelled = order.orderStatus === "CANCELLED";
               return (
                 <article
                   key={order.id}
-                  className="rounded-xl border border-slate-700 bg-slate-900/90 p-4 transition-all duration-300 hover:border-blue-500/50"
+                  className={`rounded-xl border p-4 transition-all duration-300 ${
+                    isCancelled
+                      ? "border-red-500/60 bg-red-500/10"
+                      : "border-slate-700 bg-slate-900/90 hover:border-blue-500/50"
+                  }`}
                 >
                   <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
                     <div className="space-y-1.5">
@@ -813,6 +857,11 @@ export default function AdminDashboard() {
                       <p className="text-[11px] text-slate-400">
                         Placed: {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}
                       </p>
+                      {isCancelled && (
+                        <p className="text-xs font-semibold text-red-300">
+                          Auto-Cancelled: Out of Stock
+                        </p>
+                      )}
                     </div>
 
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 lg:w-56">
@@ -823,17 +872,19 @@ export default function AdminDashboard() {
                           setSelectedStatusByOrder((prev) => ({ ...prev, [order.id]: next }));
                           updateOrderStatus(order.id, next);
                         }}
-                        className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-100"
+                        disabled={isCancelled}
+                        className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-100 disabled:opacity-60"
                       >
                         <option value="ORDER_PLACED">Order Placed</option>
                         <option value="DISPATCHED">Dispatched</option>
                         <option value="OUT_FOR_DELIVERY">Out for Delivery</option>
                         <option value="DELIVERED">Delivered</option>
+                        <option value="CANCELLED">Cancelled</option>
                       </select>
                       <button
                         type="button"
                         onClick={() => handleConfirmPayment(order.id)}
-                        disabled={paymentConfirmed || isConfirmingPayment}
+                        disabled={paymentConfirmed || isConfirmingPayment || isCancelled}
                         className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {paymentConfirmed ? "Payment Confirmed" : isConfirmingPayment ? "Confirming..." : "Confirm Payment"}
@@ -841,7 +892,7 @@ export default function AdminDashboard() {
                       <button
                         type="button"
                         onClick={() => handleGenerateOrderBill(order.id)}
-                        disabled={isGeneratingInvoice}
+                        disabled={isGeneratingInvoice || isCancelled}
                         className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-60"
                       >
                         {isGeneratingInvoice ? "Generating..." : "Generate & Send Bill"}
@@ -851,8 +902,58 @@ export default function AdminDashboard() {
                 </article>
               );
             })}
-            {!orders.length && (
+            {!liveOrders.length && (
               <p className="text-xs text-slate-400">No incoming product orders yet.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-blue-950/30 flex flex-col gap-6 md:gap-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] font-semibold text-emerald-300">Order History</p>
+              <h3 className="text-xl font-black text-white mt-1">Completed Operations</h3>
+            </div>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-300 bg-slate-800 border border-slate-700 px-3 py-1 rounded-full">
+              {completedOrders.length} delivered
+            </span>
+          </div>
+
+          <div className="space-y-3 max-h-[28rem] overflow-auto pr-1">
+            {completedOrders.map((order) => (
+              <article
+                key={order.id}
+                className="rounded-xl border border-slate-700 bg-slate-900/90 p-4 transition-all duration-300 hover:border-emerald-500/40"
+              >
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-white">{order.productTitle}</p>
+                    <p className="text-xs text-slate-300">
+                      Customer: <span className="font-semibold">{order.customerName || order.userName || "Unknown"}</span>
+                      {order.userEmail ? ` · ${order.userEmail}` : ""}
+                    </p>
+                    <p className="text-xs text-slate-300">Price: ₹{Number(order.price || 0).toLocaleString("en-IN")}</p>
+                    <p className="text-xs text-slate-300">Payment: {order.paymentStatus || "PENDING"}</p>
+                    <p className="text-[11px] text-slate-400">
+                      Delivered: {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}
+                    </p>
+                  </div>
+                  {order.invoiceUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => window.open(order.invoiceUrl as string, "_blank", "noopener,noreferrer")}
+                      className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20"
+                    >
+                      Download Bill
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-500">No invoice</span>
+                  )}
+                </div>
+              </article>
+            ))}
+            {!completedOrders.length && (
+              <p className="text-xs text-slate-400">No delivered orders yet.</p>
             )}
           </div>
         </section>
@@ -1160,9 +1261,18 @@ export default function AdminDashboard() {
                   {stats?.latestProducts?.length || 0} products
                 </span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                   {safeLatestProducts.map((p) => {
                   const normalizedType = p.productType || (p.isUsed ? "REFURBISHED" : "NEW");
+                  const stockValue = typeof p.stockQty === "number" ? p.stockQty : null;
+                  const stockClass =
+                    stockValue === 0
+                      ? "text-red-300"
+                      : stockValue !== null && stockValue < 5
+                        ? "text-amber-300"
+                        : stockValue !== null && stockValue > 10
+                          ? "text-emerald-300"
+                          : "text-slate-300";
                   return (
                   <article
                     key={p.id}
@@ -1179,6 +1289,9 @@ export default function AdminDashboard() {
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-100 text-sm truncate">{p.title}</p>
                         <p className="text-xs text-cyan-300 font-semibold">₹{p.price.toLocaleString()}</p>
+                        <p className={`text-xs font-semibold ${stockClass}`}>
+                          Stock: {stockValue ?? "-"}
+                        </p>
                         <div className="flex items-center gap-1 mt-1">
                           <span className="text-[10px] px-2 py-0.5 rounded-full border border-cyan-400/30 text-cyan-300 bg-cyan-400/10">
                             {normalizedType}
@@ -1269,6 +1382,7 @@ export default function AdminDashboard() {
                           className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
                           value={newProd.stockQty}
                           onChange={(e) => setNewProd({ ...newProd, stockQty: e.target.value })}
+                          required
                         />
                       </div>
                       <div>

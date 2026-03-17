@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { cloudinary } from "../config/cloudinary.js";
 import { prisma } from "../config/prisma.js";
+import { razorpay, razorpayKeyId, razorpayKeySecret } from "../config/razorpay.js";
 import type { AuthenticatedRequest } from "../middlewares/authMiddleware.js";
 import {
   SHOP_UPI_ID,
@@ -545,6 +547,9 @@ export const verifyBookingOtp = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Booking is already closed." });
     }
     if (!["FIXED", "PAYMENT_PENDING"].includes(String(booking.status))) {
+      return res.status(400).json({ error: "Payment is not yet available for this booking." });
+    }
+    if (!["FIXED", "PAYMENT_PENDING"].includes(String(booking.status))) {
       return res.status(400).json({ error: "OTP verification is allowed only after repair is fixed." });
     }
     if (!booking.finalCost || booking.finalCost <= 0) {
@@ -592,7 +597,10 @@ export const getMyBookingsByPath = async (req: AuthenticatedRequest, res: Respon
       }
     }
     const bookings = await getBookingsWithAssignment(userId);
-    res.json(bookings);
+    const activeBookings = bookings.filter(
+      (booking) => !["COMPLETED", "CANCELLED"].includes(String(booking.status)),
+    );
+    res.json(activeBookings);
   } catch (error: any) {
     res.status(500).json({ error: "Failed to fetch bookings.", details: error?.message || "Unknown error" });
   }
@@ -612,7 +620,10 @@ export const getMyBookingsByQuery = async (req: AuthenticatedRequest, res: Respo
       }
     }
     const bookings = await getBookingsWithAssignment(userId);
-    res.json(bookings);
+    const activeBookings = bookings.filter(
+      (booking) => !["COMPLETED", "CANCELLED"].includes(String(booking.status)),
+    );
+    res.json(activeBookings);
   } catch (error: any) {
     res.status(500).json({ error: "Failed to fetch bookings.", details: error?.message || "Unknown error" });
   }
@@ -678,6 +689,9 @@ export const updateAdminService = async (req: Request, res: Response) => {
     ) {
       return res.status(400).json({ error: "Valid status is required." });
     }
+    if (status === "COMPLETED") {
+      return res.status(400).json({ error: "Complete the booking only after payment verification." });
+    }
 
     const parsedCost = finalCost === undefined || finalCost === null || String(finalCost).trim() === "" ? null : Number(finalCost);
     if (parsedCost !== null && (!Number.isFinite(parsedCost) || parsedCost < 0)) {
@@ -686,15 +700,18 @@ export const updateAdminService = async (req: Request, res: Response) => {
 
     const booking = (await prisma.serviceBooking.findUnique({ where: { id } })) as any;
     if (!booking) return res.status(404).json({ error: "Booking not found." });
+    if (String(booking.status) === "COMPLETED") {
+      return res.status(400).json({ error: "Booking is already completed." });
+    }
 
-    const isPaymentStatus = status === "FIXED" || status === "PAYMENT_PENDING";
-    const isCancelled = status === "CANCELLED";
+    const hasFinalCost = parsedCost !== null && Number(parsedCost) > 0;
+    const effectiveStatus =
+      status !== "CANCELLED" && hasFinalCost && String(booking.status) !== "COMPLETED" ? "PAYMENT_PENDING" : status;
+    const isPaymentStatus = effectiveStatus === "PAYMENT_PENDING";
+    const isCancelled = effectiveStatus === "CANCELLED";
     const amountToUse = isPaymentStatus ? Number(parsedCost ?? booking.finalCost ?? 0) : Number(booking.finalCost ?? 0);
     if (isPaymentStatus && (!amountToUse || amountToUse <= 0)) {
       return res.status(400).json({ error: "Final cost must be set before requesting payment." });
-    }
-    if (status === "COMPLETED" && (!booking.finalCost || booking.finalCost <= 0)) {
-      return res.status(400).json({ error: "Final cost must be set before completing the booking." });
     }
     const paymentQR = isPaymentStatus && amountToUse > 0
       ? `upi://pay?pa=${SHOP_UPI_ID}&pn=MD%20ATHAR%20ALI&am=${amountToUse}&cu=INR`
@@ -710,7 +727,7 @@ export const updateAdminService = async (req: Request, res: Response) => {
     const updated = await prisma.$queryRaw<Array<any>>`
       UPDATE "ServiceBooking"
       SET
-        "status" = ${status}::"Status",
+        "status" = ${effectiveStatus}::"Status",
         "finalCost" = ${isCancelled ? null : isPaymentStatus ? amountToUse : parsedCost ?? booking.finalCost},
         "paymentQR" = ${paymentQR || null},
         "invoiceUrl" = ${invoiceUrl || null}
@@ -722,12 +739,12 @@ export const updateAdminService = async (req: Request, res: Response) => {
       VALUES (
         ${createUuid()},
         ${id},
-        ${status},
-        ${status === "CANCELLED"
+        ${effectiveStatus},
+        ${effectiveStatus === "CANCELLED"
           ? "Booking cancelled by admin"
           : isPaymentStatus
             ? `Final estimate locked at ₹${amountToUse}. Payment request generated.`
-            : `Admin updated status to ${status}`}
+            : `Admin updated status to ${effectiveStatus}`}
       )
     `;
 
@@ -738,6 +755,241 @@ export const updateAdminService = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to update service booking.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const createServiceRazorpayOrder = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await ensurePhase2Schema().catch(() => {});
+    const bookingId = String(req.params.id || "");
+    const requesterId = req.userId;
+    if (!bookingId) return res.status(400).json({ error: "bookingId is required." });
+    if (!requesterId) return res.status(401).json({ error: "Unauthorized." });
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      return res.status(500).json({ error: "Razorpay keys are not configured." });
+    }
+
+    const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+    if (!requester) return res.status(403).json({ error: "Forbidden." });
+
+    const booking = await prisma.serviceBooking.findUnique({ where: { id: bookingId } });
+    if (!booking) return res.status(404).json({ error: "Booking not found." });
+    if (requester.role !== "ADMIN" && booking.customerId !== requesterId) {
+      return res.status(403).json({ error: "Forbidden." });
+    }
+    if (["CANCELLED", "COMPLETED"].includes(String(booking.status))) {
+      return res.status(400).json({ error: "Booking is already closed." });
+    }
+    const finalCost = Number(booking.finalCost || 0);
+    if (!Number.isFinite(finalCost) || finalCost <= 0) {
+      return res.status(400).json({ error: "Final cost must be set before payment." });
+    }
+
+    const amount = Math.round(finalCost * 100);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: "Invalid payment amount." });
+    }
+
+    const razorpayOrder = await razorpay.orders.create({
+      amount,
+      currency: "INR",
+      receipt: bookingId,
+    });
+
+    res.json({ razorpayOrder, keyId: razorpayKeyId });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to create Razorpay order.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const verifyServiceRazorpayPayment = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await ensurePhase2Schema().catch(() => {});
+    const bookingId = String(req.params.id || "");
+    const requesterId = req.userId;
+    if (!bookingId) return res.status(400).json({ error: "bookingId is required." });
+    if (!requesterId) return res.status(401).json({ error: "Unauthorized." });
+    if (!razorpayKeySecret) {
+      return res.status(500).json({ error: "Razorpay keys are not configured." });
+    }
+
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body as {
+      razorpay_order_id?: string;
+      razorpay_payment_id?: string;
+      razorpay_signature?: string;
+    };
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ error: "razorpay_order_id, razorpay_payment_id, and razorpay_signature are required." });
+    }
+
+    const expectedSignature = createHmac("sha256", razorpayKeySecret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+    const providedSignature = String(razorpay_signature);
+    const signaturesMatch =
+      expectedSignature.length === providedSignature.length &&
+      timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(providedSignature));
+    if (!signaturesMatch) {
+      return res.status(400).json({ error: "Invalid payment signature." });
+    }
+
+    const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+    if (!requester) return res.status(403).json({ error: "Forbidden." });
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const booking = await tx.serviceBooking.findUnique({ where: { id: bookingId } });
+      if (!booking) throw new Error("Booking not found.");
+      if (requester.role !== "ADMIN" && booking.customerId !== requesterId) {
+        throw new Error("Forbidden.");
+      }
+      if (!booking.finalCost || booking.finalCost <= 0) {
+        throw new Error("Final cost must be set before payment.");
+      }
+      if (String(booking.status) === "CANCELLED") {
+        throw new Error("Booking is already closed.");
+      }
+      if (!["FIXED", "PAYMENT_PENDING", "COMPLETED"].includes(String(booking.status))) {
+        throw new Error("Payment is not yet available for this booking.");
+      }
+      if (String(booking.status) === "COMPLETED") {
+        return booking;
+      }
+
+      const updatedBooking = await tx.serviceBooking.update({
+        where: { id: bookingId },
+        data: { status: "COMPLETED" },
+      });
+      await tx.$executeRaw`
+        INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
+        VALUES (${createUuid()}, ${bookingId}, ${"COMPLETED"}, ${"Payment verified via Razorpay"})
+      `;
+      return updatedBooking;
+    });
+
+    res.json({ booking: updated });
+  } catch (error: any) {
+    if (error?.message?.includes("Booking not found")) {
+      return res.status(404).json({ error: "Booking not found." });
+    }
+    if (error?.message?.includes("Forbidden")) {
+      return res.status(403).json({ error: "Forbidden." });
+    }
+    if (error?.message?.includes("Final cost")) {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error?.message?.includes("Payment is not yet available")) {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error?.message?.includes("Booking is already closed")) {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: "Failed to verify payment.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const confirmManualPayment = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await ensurePhase2Schema().catch(() => {});
+    const bookingId = String(req.params.bookingId || "");
+    const requesterId = req.userId;
+    if (!bookingId) return res.status(400).json({ error: "bookingId is required." });
+    if (!requesterId) return res.status(401).json({ error: "Unauthorized." });
+
+    const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+    if (!requester) return res.status(403).json({ error: "Forbidden." });
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const booking = await tx.serviceBooking.findUnique({ where: { id: bookingId } });
+      if (!booking) throw new Error("Booking not found.");
+      if (requester.role !== "ADMIN" && booking.customerId !== requesterId) {
+        throw new Error("Forbidden.");
+      }
+      if (String(booking.status) === "CANCELLED") {
+        throw new Error("Booking is already cancelled.");
+      }
+      if (!booking.finalCost || booking.finalCost <= 0) {
+        throw new Error("Final cost must be set before confirming payment.");
+      }
+      if (String(booking.status) === "COMPLETED") {
+        return booking;
+      }
+
+      const updatedBooking = await tx.serviceBooking.update({
+        where: { id: bookingId },
+        data: { status: "COMPLETED" },
+      });
+      await tx.$executeRaw`
+        INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
+        VALUES (${createUuid()}, ${bookingId}, ${"COMPLETED"}, ${"Manual payment confirmed by admin"})
+      `;
+      return updatedBooking;
+    });
+
+    res.json({ booking: updated, message: "Manual payment confirmed." });
+  } catch (error: any) {
+    if (error?.message?.includes("Booking not found")) {
+      return res.status(404).json({ error: "Booking not found." });
+    }
+    if (error?.message?.includes("Forbidden")) {
+      return res.status(403).json({ error: "Forbidden." });
+    }
+    if (error?.message?.includes("Final cost")) {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error?.message?.includes("cancelled")) {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: "Failed to confirm manual payment.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const cancelServiceBooking = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    await ensurePhase2Schema().catch(() => {});
+    const bookingId = String(req.params.bookingId || "");
+    const requesterId = req.userId;
+    if (!bookingId) return res.status(400).json({ error: "bookingId is required." });
+    if (!requesterId) return res.status(401).json({ error: "Unauthorized." });
+
+    const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+    if (!requester) return res.status(403).json({ error: "Forbidden." });
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const booking = await tx.serviceBooking.findUnique({ where: { id: bookingId } });
+      if (!booking) throw new Error("Booking not found.");
+      if (requester.role !== "ADMIN" && booking.customerId !== requesterId) {
+        throw new Error("Forbidden.");
+      }
+      if (String(booking.status) === "COMPLETED") {
+        throw new Error("Booking is already completed.");
+      }
+      if (String(booking.status) === "CANCELLED") {
+        return booking;
+      }
+
+      const updatedBooking = await tx.serviceBooking.update({
+        where: { id: bookingId },
+        data: { status: "CANCELLED" },
+      });
+      await tx.$executeRaw`
+        INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
+        VALUES (${createUuid()}, ${bookingId}, ${"CANCELLED"}, ${"Booking cancelled manually by admin"})
+      `;
+      return updatedBooking;
+    });
+
+    res.json({ booking: updated, message: "Booking cancelled." });
+  } catch (error: any) {
+    if (error?.message?.includes("Booking not found")) {
+      return res.status(404).json({ error: "Booking not found." });
+    }
+    if (error?.message?.includes("Forbidden")) {
+      return res.status(403).json({ error: "Forbidden." });
+    }
+    if (error?.message?.includes("completed")) {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: "Failed to cancel booking.", details: error?.message || "Unknown error" });
   }
 };
 
@@ -1290,7 +1542,13 @@ export const getStatsBasic = async (_req: Request, res: Response) => {
     const [bookingsCountRows, usersCountRows, productsCountRows] = await Promise.all([
       prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "ServiceBooking"`,
       prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "User"`,
-      prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "Product"`,
+      prisma
+        .$queryRaw<Array<{ count: bigint | number }>>`
+          SELECT COUNT(*)::bigint AS count
+          FROM "Product"
+          WHERE COALESCE("isDeleted", false) = false
+        `
+        .catch(() => prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "Product"`),
     ]);
     const totalBookings = Number(bookingsCountRows?.[0]?.count || 0);
     const totalUsers = Number(usersCountRows?.[0]?.count || 0);
@@ -1306,7 +1564,13 @@ export const getStats = async (_req: Request, res: Response) => {
     const [bookingsCountRows, usersCountRows, productsCountRows, latestUsers, latestProducts, applianceStats] = await Promise.all([
       prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "ServiceBooking"`.catch(() => []),
       prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "User"`.catch(() => []),
-      prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "Product"`.catch(() => []),
+      prisma
+        .$queryRaw<Array<{ count: bigint | number }>>`
+          SELECT COUNT(*)::bigint AS count
+          FROM "Product"
+          WHERE COALESCE("isDeleted", false) = false
+        `
+        .catch(async () => prisma.$queryRaw<Array<{ count: bigint | number }>>`SELECT COUNT(*)::bigint AS count FROM "Product"`),
       prisma
         .$queryRaw<Array<{ id: string; name: string; email: string }>>`
         SELECT "id", "name", "email"
@@ -1316,12 +1580,22 @@ export const getStats = async (_req: Request, res: Response) => {
       `
         .catch(() => []),
       prisma
-        .$queryRaw<Array<{ id: string; title: string; price: number; images: string[]; status: string; isUsed: boolean }>>`
-        SELECT "id", "title", "price", "images", "status", "isUsed"
+        .$queryRaw<Array<{ id: string; title: string; price: number; images: string[]; status: string; isUsed: boolean; stockQty: number | null }>>`
+        SELECT "id", "title", "price", "images", "status", "isUsed", COALESCE("stockQty", 0) AS "stockQty"
         FROM "Product"
+        WHERE COALESCE("isDeleted", false) = false
         ORDER BY "id" DESC
       `
-        .catch(() => []),
+        .catch(async () => {
+          const fallback = await prisma.$queryRaw<
+            Array<{ id: string; title: string; price: number; images: string[]; status: string; isUsed: boolean }>
+          >`
+            SELECT "id", "title", "price", "images", "status", "isUsed"
+            FROM "Product"
+            ORDER BY "id" DESC
+          `;
+          return fallback.map((row) => ({ ...row, stockQty: null }));
+        }),
       prisma
         .$queryRaw<Array<{ appliance: string; count: bigint | number }>>`
         SELECT "appliance", COUNT(*)::bigint AS count

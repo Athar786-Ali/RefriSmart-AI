@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import QRCode from "react-qr-code";
 import { toast } from "sonner";
+import { toast as hotToast } from "react-hot-toast";
+import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/razorpay";
 import { useAuth } from "@/context/AuthContext";
 import type { NormalizedProduct, Product } from "@/types";
 
@@ -54,14 +55,16 @@ export default function ProductCard({ product }: ProductCardProps) {
   const router = useRouter();
   const { user } = useAuth();
   const imageUrl = transformCloudinaryImage(getImageUrl(product.images));
-  const isOutOfStock =
-    product.normalizedType === "NEW" && typeof product.stockQty === "number" && product.stockQty <= 0;
+  const numericStock = typeof product.stockQty === "number" ? product.stockQty : null;
+  const isOutOfStock = numericStock !== null && numericStock <= 0;
+  const isLowStock = numericStock !== null && numericStock > 0 && numericStock <= 5;
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<1 | 2>(1);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.name) {
@@ -70,16 +73,6 @@ export default function ProductCard({ product }: ProductCardProps) {
   }, [user?.name]);
 
   const checkoutAmount = Number(product.price || 0);
-  const checkoutUpiLink = useMemo(() => {
-    const params = new URLSearchParams({
-      pa: "9060877595-2@ybl",
-      pn: "Golden Refrigeration",
-      am: String(Number(product.price || 0)),
-      cu: "INR",
-      tn: product.title,
-    });
-    return `upi://pay?${params.toString()}`;
-  }, [product.price, product.title]);
 
   const openCheckout = () => {
     if (isOutOfStock) {
@@ -101,6 +94,7 @@ export default function ProductCard({ product }: ProductCardProps) {
     setCheckoutStep(1);
     setAddress("");
     setPhone("");
+    setActiveOrderId(null);
   };
 
   const handleProceed = () => {
@@ -119,37 +113,122 @@ export default function ProductCard({ product }: ProductCardProps) {
     setCheckoutStep(2);
   };
 
-  const handlePlaceOrder = async () => {
+  const createLocalOrder = async () => {
+    if (!user?.id || !API) return null;
+    if (activeOrderId) return activeOrderId;
+    const res = await fetch(`${API}/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        userId: user.id,
+        productId: product.id,
+        deliveryAddress: address.trim(),
+        deliveryPhone: phone.replace(/\D/g, ""),
+        fullName: fullName.trim(),
+      }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(payload?.error || "Failed to place order.");
+      return null;
+    }
+    const placedOrderId = payload?.order?.id;
+    if (!placedOrderId) {
+      toast.error("Order created but missing order id.");
+      return null;
+    }
+    setActiveOrderId(placedOrderId);
+    return placedOrderId as string;
+  };
+
+  const handleRazorpayPayment = async () => {
     if (!user?.id || !API) return;
+    if (isOutOfStock) {
+      hotToast.error("This item just went out of stock.");
+      return;
+    }
     setPlacingOrder(true);
+    let localOrderId: string | null = null;
     try {
-      const res = await fetch(`${API}/orders`, {
+      localOrderId = await createLocalOrder();
+      if (!localOrderId) return;
+
+      const scriptReady = await loadRazorpayScript();
+      if (!scriptReady) {
+        toast.error("Failed to load Razorpay checkout.");
+        return;
+      }
+
+      const orderRes = await fetch(`${API}/orders/${localOrderId}/razorpay`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const orderPayload = await orderRes.json().catch(() => ({}));
+      if (!orderRes.ok) {
+        if (orderRes.status === 409) {
+          hotToast.error(orderPayload?.error || "This item is out of stock.");
+        } else {
+          toast.error(orderPayload?.error || "Unable to start Razorpay payment.");
+        }
+        return;
+      }
+
+      const razorpayOrder = orderPayload?.razorpayOrder;
+      const keyId = orderPayload?.keyId;
+      if (!razorpayOrder?.id || !keyId) {
+        toast.error("Razorpay order not initialized.");
+        return;
+      }
+
+      const paymentResponse = await openRazorpayCheckout({
+        key: keyId,
+        amount: Number(razorpayOrder.amount || 0),
+        currency: razorpayOrder.currency || "INR",
+        name: "Golden Refrigeration",
+        description: product.title,
+        order_id: razorpayOrder.id,
+        prefill: {
+          name: fullName.trim(),
+          contact: phone.replace(/\D/g, ""),
+        },
+      });
+
+      const verifyRes = await fetch(`${API}/orders/${localOrderId}/razorpay/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          userId: user.id,
-          productId: product.id,
-          deliveryAddress: address.trim(),
-          deliveryPhone: phone.replace(/\D/g, ""),
-          fullName: fullName.trim(),
-        }),
+        body: JSON.stringify(paymentResponse),
       });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(payload?.error || "Failed to place order.");
+      const verifyPayload = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok) {
+        toast.error(verifyPayload?.error || "Payment verification failed.");
         return;
       }
-      const placedOrderId = payload?.order?.id;
-      closeCheckout();
-      toast.success("Order placed successfully.");
-      if (placedOrderId) {
-        router.push(`/orders?highlight=${encodeURIComponent(placedOrderId)}`);
-      } else {
-        router.push("/orders");
+      if (verifyPayload?.success === false) {
+        hotToast.error(verifyPayload?.message || "Order cancelled due to stock unavailability.");
+        closeCheckout();
+        router.push(`/orders?highlight=${encodeURIComponent(localOrderId)}`);
+        return;
       }
-    } catch {
-      toast.error("Order placement failed.");
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("products:refresh"));
+      }
+      toast.success("Payment verified. Order confirmed.");
+      closeCheckout();
+      router.push(`/orders?highlight=${encodeURIComponent(localOrderId)}`);
+    } catch (error: any) {
+      const message = String(error?.message || "").toLowerCase();
+      if (message.includes("cancel")) {
+        toast.error("Payment cancelled.");
+      } else {
+        toast.error("Payment could not be completed.");
+      }
+      if (localOrderId) {
+        closeCheckout();
+        router.push(`/orders?highlight=${encodeURIComponent(localOrderId)}`);
+      }
     } finally {
       setPlacingOrder(false);
     }
@@ -191,10 +270,12 @@ export default function ProductCard({ product }: ProductCardProps) {
             className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${
               isOutOfStock
                 ? "border-red-200 bg-red-50 text-red-600"
-                : "border-emerald-100 bg-emerald-50 text-emerald-700"
+                : isLowStock
+                  ? "border-amber-200 bg-amber-50 text-amber-700"
+                  : "border-emerald-100 bg-emerald-50 text-emerald-700"
             }`}
           >
-            {isOutOfStock ? "Out of Stock" : "Available"}
+            {isOutOfStock ? "❌ Out of Stock" : isLowStock ? `⚠️ Only ${numericStock} left!` : "Available"}
           </span>
           <h2 className="mt-3 line-clamp-2 text-lg font-bold leading-tight text-slate-900 md:text-xl">{product.title}</h2>
           <p className="mt-2 min-h-9 line-clamp-2 text-sm text-slate-600">
@@ -308,27 +389,20 @@ export default function ProductCard({ product }: ProductCardProps) {
                 </div>
               ) : (
                 <div className="space-y-5">
-                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-700">
-                    Scan the QR code to complete payment. Once paid, click confirm to place your order.
+                  <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4 text-sm text-cyan-700">
+                    Secure payment powered by Razorpay. You will be redirected to complete the payment.
                   </div>
-                  <div className="flex flex-col items-center gap-4 md:flex-row md:items-start">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <QRCode value={checkoutUpiLink} size={160} />
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-sm font-semibold text-slate-800">UPI Payment Link</p>
-                      <p className="break-all text-xs text-slate-500">{checkoutUpiLink}</p>
-                      <p className="text-sm font-semibold text-slate-800">
-                        Total: ₹{checkoutAmount.toLocaleString("en-IN")}
-                      </p>
-                    </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                    <p className="font-semibold text-slate-900">Order Total</p>
+                    <p className="text-lg font-black text-slate-900">₹{checkoutAmount.toLocaleString("en-IN")}</p>
+                    <p className="mt-2 text-xs text-slate-500">Complete payment to confirm your order instantly.</p>
                   </div>
                   <button
-                    onClick={handlePlaceOrder}
-                    disabled={placingOrder}
+                    onClick={handleRazorpayPayment}
+                    disabled={placingOrder || isOutOfStock}
                     className="min-h-[48px] w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white shadow-sm transition-transform hover:bg-emerald-700 active:scale-95 disabled:opacity-60"
                   >
-                    {placingOrder ? "Placing Order..." : "Confirm Order"}
+                    {isOutOfStock ? "Currently Unavailable" : placingOrder ? "Starting Payment..." : "Pay via Razorpay"}
                   </button>
                 </div>
               )}

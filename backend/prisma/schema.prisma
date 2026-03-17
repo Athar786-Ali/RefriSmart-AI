@@ -45,6 +45,7 @@ model Product {
   warrantyExpiry DateTime?
   warrantyCertificateUrl String?
   stockQty       Int           @default(1)
+  isDeleted      Boolean       @default(false)
   serialNumber   String?       @unique
   images         String[]
   status         ProductStatus @default(AVAILABLE)
@@ -175,6 +176,7 @@ model ProductOrder {
   deliveryAddress String
   orderStatus     OrderStatus   @default(ORDER_PLACED)
   paymentStatus   PaymentStatus @default(PENDING)
+  internalNote    String?
   paymentQR       String?
   invoiceUrl      String?
   createdAt       DateTime      @default(now())
@@ -222,6 +224,7 @@ enum OrderStatus {
   DISPATCHED
   OUT_FOR_DELIVERY
   DELIVERED
+  CANCELLED
 }
 
 enum PaymentStatus {
