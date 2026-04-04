@@ -45,10 +45,16 @@ const adminRoutes = Router();
 adminRoutes.get("/history/:userId", userAuth, getHistory);
 
 adminRoutes.get("/booking/slots", getBookingSlots);
-adminRoutes.post("/booking/create", createBooking);
+// Issue #6 Fix: createBooking was fully unauthenticated — any caller could pass
+// any userId in the body and book under someone else's identity.
+// Using userAuth as optional middleware; for logged-in users, userId is
+// overridden from the JWT inside the controller so body userId is ignored.
+adminRoutes.post("/booking/create", userAuth, createBooking);
 adminRoutes.post("/service/book", bookService);
 adminRoutes.patch("/booking/:id/status", adminAuth, updateBookingStatus);
 adminRoutes.patch("/booking/:id/reschedule", adminAuth, rescheduleBooking);
+// Fix #12: cancelBooking previously had NO auth middleware — any caller with a bookingId
+// could cancel any booking. Restricted to adminAuth.
 adminRoutes.patch("/booking/:id/cancel", adminAuth, cancelBooking);
 adminRoutes.get("/booking/timeline/:bookingId", userAuth, getBookingTimeline);
 adminRoutes.post("/booking/:id/send-otp", adminAuth, sendBookingOtp);
@@ -75,7 +81,9 @@ adminRoutes.patch("/technician/jobs/:bookingId/status", adminAuth, updateTechnic
 adminRoutes.post("/sell/request", createSellRequest);
 adminRoutes.get("/sell/requests", adminAuth, getSellRequests);
 adminRoutes.post("/sell/requests/:id/offer", adminAuth, sendSellOffer);
-adminRoutes.post("/sell/offers/:id/respond", respondSellOffer);
+// R2 Fix: respondSellOffer had NO auth — anyone could accept/reject any offer anonymously.
+// This is customer-facing so userAuth is used (not adminAuth).
+adminRoutes.post("/sell/offers/:id/respond", userAuth, respondSellOffer);
 adminRoutes.post("/sell/requests/:id/move-to-refurbished", adminAuth, moveSellRequestToRefurbished);
 
 adminRoutes.get("/ops/analytics", adminAuth, getOpsAnalytics);

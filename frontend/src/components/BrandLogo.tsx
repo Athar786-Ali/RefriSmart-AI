@@ -1,32 +1,40 @@
-import React from "react";
+import { Snowflake, Flame } from "lucide-react";
 
 type BrandLogoProps = {
   compact?: boolean;
   className?: string;
+  theme?: "light" | "dark";
 };
 
-export default function BrandLogo({ compact = false, className = "" }: BrandLogoProps) {
+export default function BrandLogo({ compact = false, className = "", theme = "light" }: BrandLogoProps) {
+  const textColor = theme === "dark" ? "text-white drop-shadow-md" : "text-slate-900";
+  
   return (
-    <div className={`inline-flex items-center gap-3 ${className}`}>
-      <span className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-700 via-blue-600 to-cyan-500 shadow-md shadow-blue-300/50">
-        <svg viewBox="0 0 24 24" className="h-5.5 w-5.5 text-white" fill="none" aria-hidden="true">
-          <path d="M6 8h12v8H6z" stroke="currentColor" strokeWidth="1.6" />
-          <path d="M9 5h6M9 19h6M12 5v14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-        <span className="absolute -bottom-1 -right-1 rounded-full border border-blue-200 bg-white px-1.5 py-0.5 text-[8px] font-black text-blue-700 leading-none">
-          GR
-        </span>
-      </span>
+    <div className={`inline-flex items-center gap-3 md:gap-4 group ${className}`}>
+      {/* Unique Industry-Level Icon */}
+      <div className="relative flex shrink-0 items-center justify-center h-12 w-12 md:h-14 md:w-14 rounded-2xl bg-slate-950 shadow-[0_10px_25px_rgba(0,0,0,0.3)] overflow-hidden border-[3px] border-amber-500 group-hover:scale-105 transition-transform duration-300">
+        
+        {/* Dynamic Inner Gradients (Clash of Heat and Cold) */}
+        <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-red-600/80 to-transparent mix-blend-screen"></div>
+        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-cyan-500/80 to-transparent mix-blend-screen"></div>
+        
+        {/* Abstract Fusion SVG Elements */}
+        <div className="relative z-10 flex items-center justify-center w-full h-full">
+          <Flame className="absolute -left-1 text-amber-500 w-7 h-7 drop-shadow-lg" />
+          <Snowflake className="absolute -right-1 text-cyan-400 w-7 h-7 drop-shadow-lg animate-[spin_15s_linear_infinite]" />
+        </div>
+      </div>
 
+      {/* Sharpened Typography */}
       {compact ? (
-        <span className="text-lg sm:text-xl font-black tracking-tight leading-none whitespace-nowrap">
-          <span className="bg-gradient-to-r from-blue-700 to-cyan-500 bg-clip-text text-transparent">GOLDEN</span>{" "}
-          <span className="text-slate-900">REFRIGERATION</span>
+        <span className="flex flex-col justify-center whitespace-nowrap">
+          <span className={`text-lg md:text-xl font-black tracking-tight leading-none ${textColor}`}>GOLDEN</span>
+          <span className="text-[11px] md:text-xs font-bold tracking-[0.25em] text-amber-500 uppercase mt-1 leading-none">Refrigeration</span>
         </span>
       ) : (
-        <span className="text-xl sm:text-2xl font-black tracking-tight leading-none whitespace-nowrap">
-          <span className="bg-gradient-to-r from-blue-700 to-cyan-500 bg-clip-text text-transparent">GOLDEN</span>{" "}
-          <span className="text-slate-900">REFRIGERATION</span>
+        <span className="flex flex-col justify-center whitespace-nowrap">
+          <span className={`text-[28px] font-black tracking-tight leading-none ${textColor}`}>GOLDEN</span>
+          <span className="text-[13px] font-extrabold tracking-[0.28em] text-amber-500 uppercase mt-1.5 leading-none">Refrigeration</span>
         </span>
       )}
     </div>

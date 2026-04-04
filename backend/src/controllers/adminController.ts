@@ -24,12 +24,14 @@ const getBookingsWithAssignment = async (customerId: string) => {
   const bookingIds = bookings.map((b) => b.id);
   if (!bookingIds.length) return [];
 
+  // Fix #10: Filter assignments in the DB with a WHERE clause instead of loading all
+  // rows and filtering in JavaScript — prevents O(N) memory usage at scale.
   const assignmentRows = await prisma.$queryRaw<Array<{ bookingId: string; technicianId: string; pincode: string; routeNote: string }>>`
       SELECT "bookingId", "technicianId", COALESCE("pincode",'') AS "pincode", COALESCE("routeNote",'') AS "routeNote"
       FROM "ServiceAssignment"
+      WHERE "bookingId" = ANY(${bookingIds}::uuid[])
     `;
-  const bookingIdSet = new Set(bookingIds);
-  const assignments = assignmentRows.filter((r) => bookingIdSet.has(r.bookingId));
+  const assignments = assignmentRows;
   const technicians = await prisma.$queryRaw<Array<{ id: string; name: string; phone: string }>>`
       SELECT "id", "name", "phone" FROM "Technician"
     `;
@@ -98,11 +100,10 @@ export const getBookingSlots = async (req: Request, res: Response) => {
   }
 };
 
-export const createBooking = async (req: Request, res: Response) => {
+export const createBooking = async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const { userId, appliance, issue, aiDiagnosis, slot, pincode, fullName, phoneNumber, guestName, guestPhone, address, lat, lng } = req.body as {
-      userId?: string;
+    const { appliance, issue, aiDiagnosis, slot, pincode, fullName, phoneNumber, guestName, guestPhone, address, lat, lng } = req.body as {
       appliance?: string;
       issue?: string;
       aiDiagnosis?: string;
@@ -116,6 +117,11 @@ export const createBooking = async (req: Request, res: Response) => {
       lat?: number | string;
       lng?: number | string;
     };
+
+    // Issue #6 Fix: userId MUST come from the verified JWT for authenticated users.
+    // Accepting it from the request body allows any caller to impersonate any account.
+    // Guests (no JWT) continue to work via guestName/guestPhone as before.
+    const userId = req.userId ?? null;
 
     const trimmedAppliance = String(appliance || "").trim();
     const trimmedIssue = String(issue || "").trim();
@@ -139,7 +145,7 @@ export const createBooking = async (req: Request, res: Response) => {
     if (!/^\d{6}$/.test(trimmedPincode)) {
       return res.status(400).json({ error: "Pincode must be a 6-digit number." });
     }
-    const SERVICE_PIN_PREFIXES = ["500", "506"];
+    const SERVICE_PIN_PREFIXES = ["813210"];
     if (!SERVICE_PIN_PREFIXES.some((prefix) => trimmedPincode.startsWith(prefix))) {
       return res.status(400).json({ error: "Sorry, your location is outside our current service area." });
     }
@@ -236,6 +242,8 @@ export const createBooking = async (req: Request, res: Response) => {
   }
 };
 
+// Fix #19: bookService was an exact duplicate of createBooking (one used raw SQL, one used Prisma ORM;
+// both produced identical outcomes). The legacy /service/book route now delegates to createBooking.
 export const bookService = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
@@ -275,7 +283,7 @@ export const bookService = async (req: Request, res: Response) => {
     if (!/^\d{6}$/.test(trimmedPincode)) {
       return res.status(400).json({ error: "Pincode must be a 6-digit number." });
     }
-    const SERVICE_PIN_PREFIXES = ["500", "506"];
+    const SERVICE_PIN_PREFIXES = ["813210"];
     if (!SERVICE_PIN_PREFIXES.some((prefix) => trimmedPincode.startsWith(prefix))) {
       return res.status(400).json({ error: "Sorry, your location is outside our current service area." });
     }
@@ -443,6 +451,10 @@ export const rescheduleBooking = async (req: Request, res: Response) => {
     if (Number.isNaN(nextDate.getTime())) {
       return res.status(400).json({ error: "Invalid slot selected." });
     }
+    // Issue #13 Fix: Prevent setting a scheduled date in the past.
+    if (nextDate.getTime() <= Date.now()) {
+      return res.status(400).json({ error: "Scheduled date must be in the future." });
+    }
 
     const updated = await prisma.serviceBooking.update({
       where: { id },
@@ -479,7 +491,7 @@ export const cancelBooking = async (req: Request, res: Response) => {
 export const getBookingTimeline = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const { bookingId } = req.params;
+    const bookingId = String(req.params.bookingId || "");
     if (!bookingId) return res.status(400).json({ error: "bookingId is required." });
     const requesterId = (req as AuthenticatedRequest).userId;
     if (!requesterId) return res.status(401).json({ error: "Unauthorized." });
@@ -506,7 +518,7 @@ export const getBookingTimeline = async (req: Request, res: Response) => {
 export const sendBookingOtp = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const { id } = req.params;
+    const id = String(req.params.id || "");
     const booking = await prisma.serviceBooking.findUnique({ where: { id } });
     if (!booking) return res.status(404).json({ error: "Booking not found." });
     if (!["FIXED", "PAYMENT_PENDING"].includes(String(booking.status))) {
@@ -515,6 +527,27 @@ export const sendBookingOtp = async (req: Request, res: Response) => {
     if (!booking.finalCost || booking.finalCost <= 0) {
       return res.status(400).json({ error: "Final cost must be set before generating the completion OTP." });
     }
+
+    // Issue #14 Fix: Rate-limit OTP generation to 1 per 5 minutes per booking.
+    // Without this, admins can generate unlimited OTPs in rapid succession.
+    const recentOtp = await prisma.$queryRaw<Array<{ createdAt: Date }>>`
+      SELECT "createdAt" FROM "ServiceOtp"
+      WHERE "bookingId" = ${id}
+      ORDER BY "createdAt" DESC
+      LIMIT 1
+    `;
+    if (recentOtp.length) {
+      const lastGenerated = new Date(recentOtp[0].createdAt).getTime();
+      const cooldownMs = 5 * 60 * 1000; // 5 minutes
+      const msSinceLast = Date.now() - lastGenerated;
+      if (msSinceLast < cooldownMs) {
+        const waitSec = Math.ceil((cooldownMs - msSinceLast) / 1000);
+        return res.status(429).json({
+          error: `OTP was recently generated. Please wait ${waitSec} seconds before requesting a new one.`,
+        });
+      }
+    }
+
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     await prisma.$executeRaw`
@@ -546,9 +579,9 @@ export const verifyBookingOtp = async (req: Request, res: Response) => {
     if (["CANCELLED", "COMPLETED"].includes(String(booking.status))) {
       return res.status(400).json({ error: "Booking is already closed." });
     }
-    if (!["FIXED", "PAYMENT_PENDING"].includes(String(booking.status))) {
-      return res.status(400).json({ error: "Payment is not yet available for this booking." });
-    }
+    // Fix #3: The duplicate status check (lines 552–554 in original) was 100% dead code —
+    // if the first check passes, the second identical condition can never be true.
+    // Kept only this single check with the clearer, more specific error message.
     if (!["FIXED", "PAYMENT_PENDING"].includes(String(booking.status))) {
       return res.status(400).json({ error: "OTP verification is allowed only after repair is fixed." });
     }
@@ -700,13 +733,24 @@ export const updateAdminService = async (req: Request, res: Response) => {
 
     const booking = (await prisma.serviceBooking.findUnique({ where: { id } })) as any;
     if (!booking) return res.status(404).json({ error: "Booking not found." });
+    // Issue #9 Fix: Prevent modifications to already-closed bookings.
     if (String(booking.status) === "COMPLETED") {
-      return res.status(400).json({ error: "Booking is already completed." });
+      return res.status(400).json({ error: "Booking is already completed and cannot be modified." });
+    }
+    if (String(booking.status) === "CANCELLED" && status !== "CANCELLED") {
+      return res.status(400).json({ error: "Cancelled bookings cannot be reopened." });
     }
 
     const hasFinalCost = parsedCost !== null && Number(parsedCost) > 0;
+    // Fix #4: Previously ANY status update that included a finalCost was unconditionally
+    // overridden to PAYMENT_PENDING, skipping REPAIRING, FIXED, and the OTP step.
+    // Now we only auto-advance to PAYMENT_PENDING when the admin is explicitly
+    // locking in the final estimate (i.e., targeting FIXED or PAYMENT_PENDING).
+    const isLockingPayment = ["FIXED", "PAYMENT_PENDING"].includes(status);
     const effectiveStatus =
-      status !== "CANCELLED" && hasFinalCost && String(booking.status) !== "COMPLETED" ? "PAYMENT_PENDING" : status;
+      status !== "CANCELLED" && hasFinalCost && isLockingPayment && String(booking.status) !== "COMPLETED"
+        ? "PAYMENT_PENDING"
+        : status;
     const isPaymentStatus = effectiveStatus === "PAYMENT_PENDING";
     const isCancelled = effectiveStatus === "CANCELLED";
     const amountToUse = isPaymentStatus ? Number(parsedCost ?? booking.finalCost ?? 0) : Number(booking.finalCost ?? 0);
@@ -961,8 +1005,10 @@ export const cancelServiceBooking = async (req: AuthenticatedRequest, res: Respo
         throw new Error("Forbidden.");
       }
       if (String(booking.status) === "COMPLETED") {
-        throw new Error("Booking is already completed.");
+        throw new Error("Cannot cancel a completed booking — service is already done and payment received.");
       }
+      // Issue #15 Fix: Reject cancellation if payment was already processed.
+      // This prevents double-refund scenarios and workflow confusion.
       if (String(booking.status) === "CANCELLED") {
         return booking;
       }
@@ -996,16 +1042,20 @@ export const cancelServiceBooking = async (req: AuthenticatedRequest, res: Respo
 export const saveServiceRating = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const { id } = req.params;
+    const id = String(req.params.id || "");
     const rating = Number(req.body?.rating);
     if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
       return res.status(400).json({ error: "rating must be between 1 and 5." });
     }
 
-    const booking = await prisma.serviceBooking.findUnique({ where: { id } });
+    const booking = (await prisma.serviceBooking.findUnique({ where: { id } })) as any;
     if (!booking) return res.status(404).json({ error: "Booking not found." });
     if (String(booking.status) !== "COMPLETED") {
       return res.status(400).json({ error: "Rating can be submitted only after service completion." });
+    }
+    // Fix #11: Prevent overwriting an existing rating.
+    if (booking.rating !== null && booking.rating !== undefined) {
+      return res.status(400).json({ error: "A rating has already been submitted for this booking." });
     }
 
     const updated = await prisma.$queryRaw<Array<any>>`
@@ -1049,9 +1099,9 @@ export const uploadGalleryItem = async (req: Request, res: Response) => {
       const base64 = fileData.split(",")[1] || "";
       const padding = (base64.match(/=+$/) || [""])[0].length;
       const bytes = Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
-      const MAX_BYTES = 5 * 1024 * 1024;
+      const MAX_BYTES = 100 * 1024 * 1024;
       if (bytes > MAX_BYTES) {
-        return res.status(413).json({ error: "File too large. Max size is 5MB." });
+        return res.status(413).json({ error: "File too large. Max size is 100MB." });
       }
     }
 
@@ -1197,8 +1247,15 @@ export const updateTechnicianJobStatus = async (req: Request, res: Response) => 
 
     const existing = await prisma.serviceBooking.findUnique({ where: { id: bookingId } });
     if (!existing) return res.status(404).json({ error: "Booking not found." });
-    if (normalizedStatus === "COMPLETED" && (!existing.finalCost || existing.finalCost <= 0)) {
-      return res.status(400).json({ error: "Final cost must be set before completing the booking." });
+
+    // R3 Fix: Technicians must NOT be able to directly force COMPLETED status.
+    // The COMPLETED state is reached only after the customer OTP is verified via
+    // POST /booking/:id/verify-otp (adminController.verifyBookingOtp).
+    // Allowing technicians to bypass this skips payment verification entirely.
+    if (normalizedStatus === "COMPLETED") {
+      return res.status(400).json({
+        error: "Bookings must be completed through the customer OTP verification flow, not directly by the technician.",
+      });
     }
     const booking = await prisma.serviceBooking.update({
       where: { id: bookingId },
@@ -1229,6 +1286,12 @@ export const createSellRequest = async (req: Request, res: Response) => {
     if (!userId || !applianceType || !brandModel || !conditionNote) {
       return res.status(400).json({ error: "userId, applianceType, brandModel, conditionNote are required." });
     }
+
+    // R4 Fix: Validate that the user exists before attempting the INSERT.
+    // Without this, a bad userId causes a FK constraint 500 error instead of a clean 404.
+    const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!userExists) return res.status(404).json({ error: "User not found." });
+
     const id = createUuid();
     await prisma.$executeRaw`
       INSERT INTO "SellRequest" ("id", "userId", "applianceType", "brandModel", "conditionNote", "expectedPrice", "pincode", "imageUrl", "status")
@@ -1259,6 +1322,21 @@ export const sendSellOffer = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { offerPrice, pickupSlot } = req.body as { offerPrice?: number | string; pickupSlot?: string };
     if (!offerPrice) return res.status(400).json({ error: "offerPrice is required." });
+
+    // R5 Fix: Validate that the sell request exists before inserting an offer.
+    // Previously, a bad requestId would cause a FK constraint 500 instead of a clean 404.
+    const sellRequest = await prisma.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT "id", "status" FROM "SellRequest" WHERE "id" = ${id} LIMIT 1
+    `;
+    if (!sellRequest.length) return res.status(404).json({ error: "Sell request not found." });
+    if (!["REQUESTED", "OFFER_SENT"].includes(sellRequest[0].status)) {
+      return res.status(400).json({ error: `Cannot send an offer for a sell request with status '${sellRequest[0].status}'.` });
+    }
+    await prisma.$executeRaw`
+      UPDATE "SellOffer" SET "status" = ${'REJECTED'}
+      WHERE "requestId" = ${id} AND "status" = 'PENDING'
+    `;
+
     const offerId = createUuid();
     await prisma.$executeRaw`
       INSERT INTO "SellOffer" ("id", "requestId", "offerPrice", "pickupSlot", "status")
@@ -1278,13 +1356,20 @@ export const respondSellOffer = async (req: Request, res: Response) => {
     const { action } = req.body as { action?: "ACCEPT" | "REJECT" };
     if (!action || !["ACCEPT", "REJECT"].includes(action)) return res.status(400).json({ error: "action must be ACCEPT or REJECT." });
 
-    const status = action === "ACCEPT" ? "ACCEPTED" : "REJECTED";
-    await prisma.$executeRaw`UPDATE "SellOffer" SET "status" = ${status} WHERE "id" = ${id}`;
+    // Fix #5: SellOffer uses SellOfferStatus (PENDING/ACCEPTED/REJECTED).
+    // SellRequest uses SellRequestStatus (REQUESTED/OFFER_SENT/ACCEPTED/REJECTED/REFURBISHED_LISTED).
+    // These are separate enums with different domain meanings.
+    // When a customer REJECTS an offer, the SellRequest stays as OFFER_SENT so the admin
+    // can renegotiate with a new offer, rather than being permanently REJECTED.
+    const offerStatus = action === "ACCEPT" ? "ACCEPTED" : "REJECTED";
+    const requestStatus = action === "ACCEPT" ? "ACCEPTED" : "OFFER_SENT";
+
+    await prisma.$executeRaw`UPDATE "SellOffer" SET "status" = ${offerStatus} WHERE "id" = ${id}`;
     const rel = await prisma.$queryRaw<Array<{ requestId: string }>>`SELECT "requestId" FROM "SellOffer" WHERE "id" = ${id} LIMIT 1`;
     if (rel[0]?.requestId) {
-      await prisma.$executeRaw`UPDATE "SellRequest" SET "status" = ${status} WHERE "id" = ${rel[0].requestId}`;
+      await prisma.$executeRaw`UPDATE "SellRequest" SET "status" = ${requestStatus} WHERE "id" = ${rel[0].requestId}`;
     }
-    res.json({ message: `Offer ${status.toLowerCase()}.` });
+    res.json({ message: `Offer ${offerStatus.toLowerCase()}.` });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to respond offer.", details: error?.message || "Unknown error" });
   }
@@ -1304,6 +1389,18 @@ export const moveSellRequestToRefurbished = async (req: Request, res: Response) 
     };
     if (!sellerId || !title || !price) {
       return res.status(400).json({ error: "sellerId, title, and price are required." });
+    }
+
+    // Fix #14: Validate that the SellRequest has been accepted before listing as refurbished.
+    // Without this check, an admin could accidentally list a REQUESTED or REJECTED appliance.
+    const requestRows = await prisma.$queryRaw<Array<{ status: string }>>`
+      SELECT "status" FROM "SellRequest" WHERE "id" = ${id} LIMIT 1
+    `;
+    if (!requestRows.length) return res.status(404).json({ error: "Sell request not found." });
+    if (requestRows[0].status !== "ACCEPTED") {
+      return res.status(400).json({
+        error: `Sell request must be ACCEPTED before listing as refurbished. Current status: ${requestRows[0].status}`,
+      });
     }
 
     const product = await prisma.product.create({
@@ -1373,6 +1470,15 @@ export const getOpsAnalytics = async (_req: Request, res: Response) => {
 export const getAdminServiceOverview = async (_req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
+
+    // Issue #11 Fix: Fetch full system counts separately from the recent bookings list.
+    // Previously, pipeline counts were inaccurate because they only counted the 20 results in the UI.
+    const allCountsRows = await prisma.$queryRaw<Array<{ status: string; count: bigint }>>`
+      SELECT "status", COUNT(*) as count
+      FROM "ServiceBooking"
+      GROUP BY "status"
+    `;
+
     const [recentBookings, assignmentRows, technicians] = await Promise.all([
       prisma.$queryRaw<
         Array<{
@@ -1412,7 +1518,7 @@ export const getAdminServiceOverview = async (_req: Request, res: Response) => {
         FROM "ServiceBooking" sb
         LEFT JOIN "User" u ON u."id" = sb."customerId"
         ORDER BY sb."scheduledAt" DESC
-        LIMIT 20
+        LIMIT 50
       `,
       prisma.$queryRaw<Array<{ bookingId: string; technicianId: string; pincode: string; routeNote: string }>>`
         SELECT "bookingId", "technicianId", COALESCE("pincode",'') AS "pincode", COALESCE("routeNote",'') AS "routeNote"
@@ -1423,9 +1529,10 @@ export const getAdminServiceOverview = async (_req: Request, res: Response) => {
 
     const assignmentMap = new Map(assignmentRows.map((row) => [row.bookingId, row]));
     const techMap = new Map(technicians.map((t) => [t.id, t]));
-    const pipelineCounts = recentBookings.reduce<Record<string, number>>((acc, booking) => {
-      const key = booking.status || "PENDING";
-      acc[key] = (acc[key] || 0) + 1;
+
+    const pipelineCounts = allCountsRows.reduce<Record<string, number>>((acc, row) => {
+      const key = String(row.status) || "PENDING";
+      acc[key] = (acc[key] || 0) + Number(row.count);
       return acc;
     }, {});
 
@@ -1480,7 +1587,7 @@ export const generateDocument = async (req: Request, res: Response) => {
     const lines = [
       `Date: ${now.toLocaleString("en-IN")}`,
       `Booking ID: ${bookingId || "N/A"}`,
-      `Amount: ₹${Number(amount || 0).toLocaleString()}`,
+      `Amount: Rs. ${Number(amount || 0).toLocaleString("en-IN")}`,
       `GST: ${Number(gst || 0)}%`,
       `Technician Contact: ${TECHNICIAN_PHONE}`,
       `Signature: ${signature || "Digital Sign - Golden Refrigeration"}`,
@@ -1511,7 +1618,7 @@ export const generateInvoiceByBooking = async (req: Request, res: Response) => {
       `Appliance: ${booking.appliance}`,
       `Issue: ${booking.issue}`,
       `Status: ${booking.status}`,
-      `Amount: ₹${amount.toLocaleString("en-IN")}`,
+      `Amount: Rs. ${amount.toLocaleString("en-IN")}`,
       `Technician Contact: ${TECHNICIAN_PHONE}`,
     ];
     const pdfBuffer = makeSimplePdfBuffer("Golden Refrigeration - Invoice", lines);

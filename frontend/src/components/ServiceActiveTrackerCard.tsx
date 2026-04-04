@@ -40,10 +40,11 @@ type ServiceActiveTrackerCardProps = {
   canPay: boolean;
 };
 
+// Issue #23 Fix: Removed ESTIMATE_APPROVED — this status does not exist in the backend enum.
+// It was a permanently dead step that was never highlighted, only causing customer confusion.
 const STATUS_STEPS: Array<{ key: BookingStatus; label: string }> = [
   { key: "PENDING", label: "Pending" },
   { key: "ASSIGNED", label: "Assigned" },
-  { key: "ESTIMATE_APPROVED", label: "Estimate Approved" },
   { key: "OUT_FOR_REPAIR", label: "On Way" },
   { key: "REPAIRING", label: "Repairing" },
   { key: "PAYMENT_PENDING", label: "Payment Pending" },
@@ -54,7 +55,9 @@ const getStepIndex = (status: BookingStatus) => {
   if (idx >= 0) return idx;
   if (status === "FIXED") return STATUS_STEPS.findIndex((step) => step.key === "PAYMENT_PENDING");
   if (status === "COMPLETED") return STATUS_STEPS.length - 1;
-  if (status === "CANCELLED") return STATUS_STEPS.length - 1;
+  // Issue #24 Fix: CANCELLED must NOT map to the last step — it should not appear
+  // as a completed flow. Return -1 so all steps render as unfilled (grey).
+  if (status === "CANCELLED") return -1;
   return 0;
 };
 

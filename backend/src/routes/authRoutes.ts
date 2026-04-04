@@ -10,6 +10,8 @@ import {
   sendVerifyOtp,
   verifyPhoneOtp,
   verifyOtp,
+  requestLoginOtp,
+  verifyLogin,
 } from "../controllers/authController.js";
 import { userAuth } from "../middlewares/authMiddleware.js";
 
@@ -18,6 +20,8 @@ const authRoutes = Router();
 authRoutes.post("/register", register);
 authRoutes.post("/login", login);
 authRoutes.post("/logout", logout);
+authRoutes.post("/request-login-otp", requestLoginOtp);
+authRoutes.post("/verify-login", verifyLogin);
 authRoutes.get("/me", userAuth, getMe);
 authRoutes.post("/send-verify-otp", userAuth, sendVerifyOtp);
 authRoutes.post("/verify-otp", userAuth, verifyOtp);

@@ -172,7 +172,7 @@ type UploadResult = {
   error?: string;
 };
 
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100MB limit for high quality videos
 
 export default function AdminDashboard() {
   const [data, setData] = useState<DiagnosisItem[]>([]);
@@ -241,6 +241,8 @@ export default function AdminDashboard() {
     setWarrantyDurationUnit("MONTHS");
   };
 
+  const [authChecked, setAuthChecked] = useState(false);
+
   useEffect(() => {
     let isActive = true;
 
@@ -255,6 +257,7 @@ export default function AdminDashboard() {
         }
         if (!isActive) return;
         setAdminUser(profileUser);
+        setAuthChecked(true);
 
         const [dataRes, statsRes, serviceRes, opsRes, galleryRes, ordersRes] = await Promise.all([
           fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/all-diagnoses`, { credentials: "include" }),
@@ -287,7 +290,7 @@ export default function AdminDashboard() {
                 totalProducts: Number((statsPayload as DashboardStats).totalProducts || 0),
               }
             : null;
-
+        // Issue #19 Fix: Removed console.log that leaked internal admin stats payload to browser console in production.
         if (!isActive) return;
         setData(Array.isArray(dataPayload) ? dataPayload : []);
         setStats(normalizedStats);
@@ -308,6 +311,20 @@ export default function AdminDashboard() {
       isActive = false;
     };
   }, [router]);
+
+  // Show a full-screen spinner while verifying admin identity.
+  // This prevents a false redirect when /auth/me is slow to respond.
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-slate-950 text-slate-300">
+        <svg className="animate-spin h-10 w-10 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <p className="text-sm font-medium tracking-wide">Verifying admin access…</p>
+      </div>
+    );
+  }
 
   const uploadViaBackend = async (file: File): Promise<UploadResult> => {
     try {
@@ -336,7 +353,7 @@ export default function AdminDashboard() {
       return;
     }
     if (file.size > MAX_UPLOAD_BYTES) {
-      toast.error("File too large. Max size is 5MB.");
+      toast.error("File too large. Max size is 100MB.");
       return;
     }
 
@@ -355,7 +372,18 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteProduct = async (id: string) => {
-    if (!confirm("Are you sure you want to remove this product?")) return;
+    // Issue #29 Fix: window.confirm() is blocked in many embedded browser contexts
+    // (iframes, React Native webviews, some Electron shells). We use a toast-based
+    // confirmation instead, which is always available and matches the design system.
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast("Remove this product?", {
+        duration: 10000,
+        action: { label: "Yes, remove", onClick: () => resolve(true) },
+        cancel: { label: "Cancel", onClick: () => resolve(false) },
+        onDismiss: () => resolve(false),
+      });
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/delete-product/${id}`, {
         method: "DELETE",
@@ -433,12 +461,37 @@ export default function AdminDashboard() {
       });
 
       if (res.ok) {
+        const addedPayload = await res.json().catch(() => null);
         toast.success("Product listed successfully.");
         resetProductForm();
-        window.location.reload();
+        // Issue #28 Fix: window.location.reload() discarded all admin panel state
+        // (orders, bookings, gallery) and forced 6 API calls to re-run.
+        // Now we surgically update just the products list in state.
+        if (addedPayload?.product) {
+          setStats((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              latestProducts: [addedPayload.product, ...(prev.latestProducts || [])],
+              totalProducts: (prev.totalProducts || 0) + 1,
+            };
+          });
+        } else {
+          // Fallback: re-fetch only stats (not the full page)
+          const statsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/stats`, { credentials: "include" });
+          const freshStats = await statsRes.json().catch(() => null);
+          if (statsRes.ok && freshStats) {
+            setStats({
+              ...freshStats,
+              totalBookings: Number(freshStats.totalBookings || 0),
+              totalUsers: Number(freshStats.totalUsers || 0),
+              totalProducts: Number(freshStats.totalProducts || 0),
+            });
+          }
+        }
       } else {
-        const payload = await res.json();
-        toast.error(`${payload?.error || "Unable to add product."}${payload?.details ? `\n${payload.details}` : ""}`);
+        const errPayload = await res.json();
+        toast.error(`${errPayload?.error || "Unable to add product."}${errPayload?.details ? `\n${errPayload.details}` : ""}`);
       }
     } catch (err) {
       console.error(err);
@@ -548,6 +601,9 @@ export default function AdminDashboard() {
         setOpsBookings(previousBookings);
         return toast.error(payload?.error || "Failed to update booking status.");
       }
+      // Issue #25 Fix: The optimistic update (above) was immediately overwritten by
+      // refreshServiceOps() on every call — even on success — making it pointless.
+      // Now we apply the server response directly to state; only re-fetch on mount.
       if (payload?.booking) {
         setOpsBookings((prev) =>
           prev.map((booking) => (booking.id === bookingId ? { ...booking, ...(payload.booking as ServiceBookingItem) } : booking)),
@@ -556,7 +612,6 @@ export default function AdminDashboard() {
       if (status === "FIXED") {
         toast.success("Bill generated and payment request pushed to customer screen.");
       }
-      await refreshServiceOps();
     } catch (err) {
       console.error(err);
       setOpsBookings(previousBookings);
@@ -567,7 +622,7 @@ export default function AdminDashboard() {
   const uploadGalleryItem = async () => {
     if (!galleryFile) return toast.error("Please choose an image or video first.");
     if (galleryFile.size > MAX_UPLOAD_BYTES) {
-      toast.error("File too large. Max size is 5MB.");
+      toast.error("File too large. Max size is 100MB.");
       return;
     }
     setGalleryUploading(true);
@@ -729,7 +784,14 @@ export default function AdminDashboard() {
     }
   };
 
-  const downloadServiceDoc = async (docType: "invoice" | "warranty-certificate" | "service-report", bookingId?: string) => {
+  // Issue #20 Fix: Accept real amount and gst from the booking instead of hardcoding ₹2500 + 18%.
+  // Every generated invoice was previously financially inaccurate.
+  const downloadServiceDoc = async (
+    docType: "invoice" | "warranty-certificate" | "service-report",
+    bookingId?: string,
+    amount?: number,
+    gst?: number,
+  ) => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/docs/${docType}`, {
         method: "POST",
@@ -737,8 +799,8 @@ export default function AdminDashboard() {
         credentials: "include",
         body: JSON.stringify({
           bookingId: bookingId || "ADMIN",
-          amount: 2500,
-          gst: 18,
+          amount: amount ?? 0,
+          gst: gst ?? 0,
           signature: "Golden Refrigeration Digital Sign",
           notes: "Generated from admin operations panel",
         }),

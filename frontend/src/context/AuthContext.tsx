@@ -31,7 +31,20 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+// Fix: If the browser is on 127.0.0.1 but API_URL is localhost, cookies will be blocked by CORS due to origin mismatch.
+// Dynamically swap them so the request always perfectly matches the domain the user is viewing.
+const getApiBase = () => {
+  const rawApi = process.env.NEXT_PUBLIC_API_URL || "";
+  if (typeof window === "undefined") return rawApi;
+  
+  if (window.location.hostname === "127.0.0.1" && rawApi.includes("localhost")) {
+    return rawApi.replace("localhost", "127.0.0.1");
+  }
+  if (window.location.hostname === "localhost" && rawApi.includes("127.0.0.1")) {
+    return rawApi.replace("127.0.0.1", "localhost");
+  }
+  return rawApi;
+};
 
 const readCachedUser = () => {
   if (typeof window === "undefined") return null;
@@ -48,6 +61,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Instantly hydrate user from cache on initial mount to completely prevent "Logged Out" UI flickering
+  useEffect(() => {
+    const cached = readCachedUser();
+    if (cached) setUserState(cached);
+  }, []);
+
   const setUser = useCallback((next: AuthUser | null) => {
     setUserState(next);
     if (typeof window !== "undefined") {
@@ -60,25 +79,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!API_BASE) {
-      setUser(readCachedUser());
+    const apiBase = getApiBase();
+    if (!apiBase) {
+      // Issue #21 Fix: When API_BASE is missing we have no way to verify the
+      // session, so set user to null rather than serving potentially stale
+      // and expired cached data from localStorage.
+      setUser(null);
       setLoading(false);
       return;
     }
 
     try {
-      const res = await fetch(`${API_BASE}/auth/me`, {
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/auth/me`, {
         method: "GET",
         credentials: "include",
       });
+      
+      // Fix: Only clear active session if the backend explicitly rejects the JWT
+      if (res.status === 401 || res.status === 403) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+      
       const payload = await res.json().catch(() => ({}));
       if (res.ok && payload?.user?.id) {
         setUser(payload.user as AuthUser);
-      } else {
-        setUser(null);
       }
-    } catch {
-      setUser(readCachedUser());
+    } catch (e) {
+      // Fix: Do NOT call setUser(null) on network errors.
+      // If the user's internet drops while refreshing, they shouldn't lose their localStorage auth cache!
+      console.warn("Network auth verification failed, keeping cached session", e);
     } finally {
       setLoading(false);
     }
@@ -86,8 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      if (API_BASE) {
-        await fetch(`${API_BASE}/auth/logout`, {
+      const apiBase = getApiBase();
+      if (apiBase) {
+        await fetch(`${apiBase}/auth/logout`, {
           method: "POST",
           credentials: "include",
         });

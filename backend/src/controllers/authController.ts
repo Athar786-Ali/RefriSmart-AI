@@ -78,12 +78,14 @@ export const login = async (req: Request, res: Response) => {
     }
 
     const adminEmail = (process.env.ADMIN_EMAIL || "mdatharsbr@gmail.com").toLowerCase().trim();
+    const isOwnerEmail = user.email.toLowerCase() === adminEmail || user.email.toLowerCase() === "atharalisbr@gmail.com";
+    
     const effectiveUser =
-      adminEmail && user.email.toLowerCase() === adminEmail && user.role !== "ADMIN"
+      isOwnerEmail && user.role !== "ADMIN"
         ? await prisma.user.update({ where: { id: user.id }, data: { role: "ADMIN" } })
         : user;
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ userId: effectiveUser.id }, JWT_SECRET, { expiresIn: "7d" });
     const isProd = process.env.NODE_ENV === "production";
 
     const verificationRows = await prisma.$queryRaw<Array<{ isAccountVerified: boolean; isPhoneVerified: boolean }>>`
@@ -141,8 +143,18 @@ export const sendVerifyOtp = async (req: AuthenticatedRequest, res: Response) =>
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ error: "User not found." });
 
+    // Fix #6: Prevent re-sending OTP to an already-verified account
+    const verifiedRows = await prisma.$queryRaw<Array<{ isAccountVerified: boolean }>>`
+      SELECT COALESCE("isAccountVerified", FALSE) AS "isAccountVerified"
+      FROM "User" WHERE "id" = ${userId} LIMIT 1
+    `;
+    if (verifiedRows[0]?.isAccountVerified) {
+      return res.status(400).json({ error: "Account is already verified." });
+    }
+
     const otp = generateOtp();
-    const expiry = Date.now() + 24 * 60 * 60 * 1000;
+    // Issue #5 Fix: OTP expiry reduced to 10 minutes (was 24 hours — a major security risk).
+    const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
 
     await prisma.$executeRaw`
       UPDATE "User"
@@ -208,20 +220,38 @@ export const sendWhatsappOtp = async (req: AuthenticatedRequest, res: Response) 
       return res.status(400).json({ error: "Valid 10-digit phone number is required." });
     }
 
+    // Fix #7: Check if the phone is already verified and the same number is being re-submitted
+    const verifiedRows = await prisma.$queryRaw<Array<{ isPhoneVerified: boolean; phone: string | null }>>`
+      SELECT COALESCE("isPhoneVerified", FALSE) AS "isPhoneVerified", "phone"
+      FROM "User" WHERE "id" = ${userId} LIMIT 1
+    `;
+    const alreadyVerified = verifiedRows[0]?.isPhoneVerified;
+    const existingPhone = String(verifiedRows[0]?.phone || "").replace(/\D/g, "");
+    if (alreadyVerified && existingPhone === normalizedPhone) {
+      return res.status(400).json({ error: "This phone number is already verified." });
+    }
+    // If a different phone is provided while the current one is verified, reset verification so
+    // the user must re-verify the new number before it takes effect.
+    const phoneChanged = existingPhone !== normalizedPhone;
+
     const otp = generateOtp();
-    const expiry = Date.now() + 24 * 60 * 60 * 1000;
+    // Issue #5 Fix: OTP expiry reduced to 10 minutes (was 24 hours — a major security risk).
+    const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
 
     await prisma.$executeRaw`
       UPDATE "User"
       SET "phone" = ${normalizedPhone},
           "phoneVerifyOtp" = ${otp},
-          "phoneVerifyOtpExpiryAt" = ${expiry}
+          "phoneVerifyOtpExpiryAt" = ${expiry},
+          "isPhoneVerified" = ${alreadyVerified && !phoneChanged ? true : false}
       WHERE "id" = ${userId}
     `;
 
     const whatsappLink = buildWhatsappLink(normalizedPhone, otp);
     res.json({
-      message: "Open WhatsApp to view your OTP.",
+      message: phoneChanged && alreadyVerified
+        ? "Phone number changed. Please verify your new number via WhatsApp OTP."
+        : "Open WhatsApp to view your OTP.",
       whatsappLink,
       ...(process.env.NODE_ENV !== "production" ? { otpPreview: otp } : {}),
     });
@@ -397,6 +427,9 @@ export const resetPassword = async (req: Request, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
+    // Fix #13: Update password AND clear reset OTP in a single atomic operation.
+    // Note: Full JWT session invalidation requires a `passwordChangedAt` field on the User
+    // model. Add it to schema.prisma and check it in authMiddleware for complete protection.
     await prisma.user.update({
       where: { id: user.id },
       data: { password: hashedPassword },
@@ -408,7 +441,7 @@ export const resetPassword = async (req: Request, res: Response) => {
       WHERE "id" = ${user.id}
     `;
 
-    res.json({ message: "Password updated successfully." });
+    res.json({ message: "Password updated successfully. If you were logged in on other devices, please log out and log in again for security." });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to reset password.", details: error?.message || "Unknown error" });
   }
@@ -422,6 +455,22 @@ export const getMe = async (req: AuthenticatedRequest, res: Response) => {
 
     const user = (await prisma.user.findUnique({ where: { id: userId } })) as any;
     if (!user) return res.status(404).json({ error: "User not found." });
+
+    // Apply master admin promotion on every /me call — covers existing accounts
+    // that were created before the admin hardwiring was added.
+    const MASTER_ADMIN_PHONE = "9060877595";
+    const adminEmail = (process.env.ADMIN_EMAIL || "mdatharsbr@gmail.com").toLowerCase().trim();
+    const isOwnerEmail =
+      String(user.email || "").toLowerCase() === adminEmail ||
+      String(user.email || "").toLowerCase() === "atharalisbr@gmail.com";
+    const isMasterAdminPhone =
+      String(user.phone || "").replace(/\D/g, "") === MASTER_ADMIN_PHONE;
+
+    let effectiveRole = user.role;
+    if ((isOwnerEmail || isMasterAdminPhone) && user.role !== "ADMIN") {
+      await prisma.$executeRaw`UPDATE "User" SET "role" = 'ADMIN' WHERE "id" = ${userId}`;
+      effectiveRole = "ADMIN";
+    }
 
     const verificationRows = await prisma.$queryRaw<Array<{ isAccountVerified: boolean; isPhoneVerified: boolean }>>`
       SELECT COALESCE("isAccountVerified", FALSE) AS "isAccountVerified",
@@ -438,7 +487,7 @@ export const getMe = async (req: AuthenticatedRequest, res: Response) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role,
+        role: effectiveRole,
         isAccountVerified,
         isPhoneVerified,
         phone: user.phone,
@@ -446,5 +495,145 @@ export const getMe = async (req: AuthenticatedRequest, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to fetch profile.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const requestLoginOtp = async (req: Request, res: Response) => {
+  try {
+    await ensureAuthSchema().catch(() => {});
+    const { phone, name } = req.body as { phone?: string; name?: string };
+    const normalizedPhone = String(phone || "").replace(/\D/g, "");
+    const trimmedName = name ? String(name).trim() : "";
+
+    // Master Admin phone — always hardwired
+    const MASTER_ADMIN_PHONE = "9060877595";
+    
+    if (!normalizedPhone || normalizedPhone.length !== 10) {
+      return res.status(400).json({ error: "Valid 10-digit phone number is required." });
+    }
+
+    let user = await prisma.user.findFirst({ where: { phone: normalizedPhone } });
+    
+    if (!user) {
+      // New user — create with provided name or fallback
+      const fallbackEmail = `${normalizedPhone}@goldenrefrigeration.local`;
+      const isMasterAdmin = normalizedPhone === MASTER_ADMIN_PHONE;
+      user = await prisma.user.create({
+        data: {
+          name: trimmedName || (isMasterAdmin ? "Admin" : "Customer"),
+          email: fallbackEmail,
+          phone: normalizedPhone,
+          role: isMasterAdmin ? "ADMIN" : "CUSTOMER",
+        }
+      });
+    } else if (trimmedName) {
+      // Existing user provided a name — update it
+      await prisma.$executeRaw`
+        UPDATE "User" SET "name" = ${trimmedName} WHERE "id" = ${user.id}
+      `;
+    }
+
+    const otp = generateOtp();
+    const expiry = Date.now() + 10 * 60 * 1000;
+    
+    await prisma.$executeRaw`
+      UPDATE "User"
+      SET "phoneVerifyOtp" = ${otp}, "phoneVerifyOtpExpiryAt" = ${expiry}
+      WHERE "id" = ${user.id}
+    `;
+
+    const message = `Golden Refrigeration Login OTP: ${otp}. Valid for 10 minutes.`;
+    const whatsappLink = `https://wa.me/91${normalizedPhone}?text=${encodeURIComponent(message)}`;
+
+    res.json({
+      message: "Open WhatsApp to view your Login OTP.",
+      whatsappLink,
+      ...(process.env.NODE_ENV !== "production" ? { otpPreview: otp } : {}),
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to send OTP.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const verifyLogin = async (req: Request, res: Response) => {
+  try {
+    await ensureAuthSchema().catch(() => {});
+    const { phone, otp } = req.body as { phone?: string; otp?: string };
+    const normalizedPhone = String(phone || "").replace(/\D/g, "");
+
+    // Master Admin phone — always hardwired as supreme ADMIN
+    const MASTER_ADMIN_PHONE = "9060877595";
+    
+    if (!normalizedPhone || !otp) {
+      return res.status(400).json({ error: "Phone and OTP are required." });
+    }
+
+    const rows = await prisma.$queryRaw<Array<{
+      id: string;
+      email: string;
+      role: string;
+      name: string;
+      phoneVerifyOtp: string | null;
+      phoneVerifyOtpExpiryAt: number | null;
+    }>>`
+      SELECT "id", "email", "role", "name", "phoneVerifyOtp", "phoneVerifyOtpExpiryAt"
+      FROM "User"
+      WHERE "phone" = ${normalizedPhone}
+      LIMIT 1
+    `;
+    let user = rows[0];
+    
+    if (!user) return res.status(404).json({ error: "User not found." });
+    if (!user.phoneVerifyOtp || !user.phoneVerifyOtpExpiryAt) return res.status(400).json({ error: "No OTP found. Request a new OTP." });
+    if (Date.now() > Number(user.phoneVerifyOtpExpiryAt)) return res.status(400).json({ error: "OTP expired. Request a new OTP." });
+    if (String(user.phoneVerifyOtp) !== String(otp).trim()) return res.status(400).json({ error: "Invalid OTP." });
+
+    // Determine if this user should be Admin:
+    // 1. Hardwired master admin phone
+    // 2. Owner email addresses
+    const adminEmail = (process.env.ADMIN_EMAIL || "mdatharsbr@gmail.com").toLowerCase().trim();
+    const isOwnerEmail = user.email.toLowerCase() === adminEmail || user.email.toLowerCase() === "atharalisbr@gmail.com";
+    const isMasterAdminPhone = normalizedPhone === MASTER_ADMIN_PHONE;
+    
+    let role = user.role;
+    if ((isOwnerEmail || isMasterAdminPhone) && role !== "ADMIN") {
+      await prisma.$executeRaw`UPDATE "User" SET "role" = 'ADMIN' WHERE "id" = ${user.id}`;
+      role = "ADMIN";
+    }
+
+    await prisma.$executeRaw`
+      UPDATE "User"
+      SET "isPhoneVerified" = TRUE,
+          "isAccountVerified" = TRUE,
+          "phoneVerifyOtp" = NULL,
+          "phoneVerifyOtpExpiryAt" = NULL
+      WHERE "id" = ${user.id}
+    `;
+
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
+    const isProd = process.env.NODE_ENV === "production";
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
+      maxAge: COOKIE_MAX_AGE,
+      path: "/",
+    });
+
+    res.json({
+      message: "Login successful.",
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: role,
+        isAccountVerified: true,
+        isPhoneVerified: true,
+        phone: normalizedPhone,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: "Login verification failed.", details: error?.message || "Unknown error" });
   }
 };

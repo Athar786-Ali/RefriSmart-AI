@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { toast as hotToast } from "react-hot-toast";
+// Issue #22 Fix: Removed react-hot-toast. Two separate toast libraries were running
+// simultaneously, causing duplicate containers and bloating the bundle.
 import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/razorpay";
 import { useAuth } from "@/context/AuthContext";
 import type { NormalizedProduct, Product } from "@/types";
@@ -145,7 +146,7 @@ export default function ProductCard({ product }: ProductCardProps) {
   const handleRazorpayPayment = async () => {
     if (!user?.id || !API) return;
     if (isOutOfStock) {
-      hotToast.error("This item just went out of stock.");
+      toast.error("This item just went out of stock.");
       return;
     }
     setPlacingOrder(true);
@@ -167,7 +168,7 @@ export default function ProductCard({ product }: ProductCardProps) {
       const orderPayload = await orderRes.json().catch(() => ({}));
       if (!orderRes.ok) {
         if (orderRes.status === 409) {
-          hotToast.error(orderPayload?.error || "This item is out of stock.");
+          toast.error(orderPayload?.error || "This item is out of stock.");
         } else {
           toast.error(orderPayload?.error || "Unable to start Razorpay payment.");
         }
@@ -206,7 +207,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         return;
       }
       if (verifyPayload?.success === false) {
-        hotToast.error(verifyPayload?.message || "Order cancelled due to stock unavailability.");
+        toast.error(verifyPayload?.message || "Order cancelled due to stock unavailability.");
         closeCheckout();
         router.push(`/orders?highlight=${encodeURIComponent(localOrderId)}`);
         return;

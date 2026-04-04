@@ -161,7 +161,7 @@ export const ensurePhase2Schema = async () => {
         name: "Ravi Kumar",
         phone: "9060877595",
         role: "TECHNICIAN",
-        pincode: "506001",
+        pincode: "813210",
         active: true,
       },
       create: {
@@ -169,7 +169,7 @@ export const ensurePhase2Schema = async () => {
         name: "Ravi Kumar",
         phone: "9060877595",
         role: "TECHNICIAN",
-        pincode: "506001",
+        pincode: "813210",
         active: true,
       },
     });
@@ -179,7 +179,7 @@ export const ensurePhase2Schema = async () => {
         name: "Anil Singh",
         phone: "9060877596",
         role: "TECHNICIAN",
-        pincode: "500001",
+        pincode: "813210",
         active: true,
       },
       create: {
@@ -187,7 +187,7 @@ export const ensurePhase2Schema = async () => {
         name: "Anil Singh",
         phone: "9060877596",
         role: "TECHNICIAN",
-        pincode: "500001",
+        pincode: "813210",
         active: true,
       },
     });

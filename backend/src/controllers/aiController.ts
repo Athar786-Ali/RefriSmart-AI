@@ -11,8 +11,11 @@ type ConsultantPayload = {
   estimatedCostRange?: string;
 };
 
+import fs from "fs";
+
 export const diagnose = async (req: Request, res: Response) => {
   try {
+    const file = (req as any).file;
     const { applianceType, issueDetails, appliance, issue } = req.body as {
       applianceType?: string;
       issueDetails?: string;
@@ -21,56 +24,71 @@ export const diagnose = async (req: Request, res: Response) => {
     };
     const resolvedAppliance = String(applianceType || appliance || "").trim();
     const resolvedIssue = String(issueDetails || issue || "").trim();
-    if (!resolvedAppliance || !resolvedIssue) {
-      return res.status(400).json({ error: "Please provide appliance details and issue description." });
+    if (!resolvedAppliance && !resolvedIssue && !file) {
+      return res.status(400).json({ error: "Please provide an appliance type, issue description, or upload a photo/video." });
     }
 
-    const detectedLanguage = detectInputLanguage(resolvedIssue);
+    const detectedLanguage = detectInputLanguage(resolvedIssue || "English");
     const replyLanguage = detectedLanguage === "ENGLISH" ? "ENGLISH" : "HINGLISH";
 
-    const prompt = `You are "Golden Refrigeration Senior Consultant", a senior appliance technician speaking to a friend.
-You only answer appliance repair questions. If the user asks anything unrelated to appliance repair, set isRelevant=false.
-ONLY talk about the appliance provided; do not mention other appliances.
+    const prompt = `You are a "Golden Refrigeration Expert Technician", a top repair expert working in Sabour, Bhagalpur area.
+You only answer appliance repair questions. Provide proper practical solutions that satisfy the customer.
+If an image or video is provided, analyze it carefully to identify the exact fault and give a precise solution.
+If the user asks anything unrelated to appliance repair, set isRelevant=false.
 
-Appliance: ${resolvedAppliance}
-Issue details: ${resolvedIssue}
+Appliance: ${resolvedAppliance || 'Unknown'}
+Issue details: ${resolvedIssue || 'See attached media'}
+
 Reply language rule:
-- If user language is Hindi or Hinglish, respond in professional-friendly Hinglish (Roman script).
-- If user language is English, respond in VERY SIMPLE English with short, clear sentences.
+- If user language is Hindi or Hinglish, respond in simple professional Hinglish (Roman script).
+- If user language is English, respond in simple clear English.
 
 Return strictly valid JSON only with keys:
 {
   "isRelevant": true | false,
-  "problem": "short problem title",
-  "technicalExplanation": "simple and friendly explanation",
-  "safetyAlert": "mention high voltage / gas / safety risks in simple words",
-  "conclusion": "always suggest Golden Refrigeration technician booking",
-  "estimatedCostRange": "₹600 - ₹1200"
+  "problem": "exact identified problem based on description or visual analysis",
+  "technicalExplanation": "proper practical and step-by-step solution to satisfy the customer",
+  "safetyAlert": "mention any high voltage, gas, or physical safety risks",
+  "conclusion": "A strong, friendly advice to book our Golden Refrigeration expert technician to get it safely repaired.",
+  "estimatedCostRange": "real estimation charge for Sabour/Bhagalpur area (include a baseline like ₹300 visit fee + expected parts limit)"
 }
 If isRelevant is false, leave other fields as empty strings.`;
 
     const preferredModels = [
-      process.env.GEMINI_MODEL,
-      "gemini-3.1-flash-lite-preview",
-      "gemini-2.5-flash",
-      "gemini-2.0-flash",
+      "gemini-2.0-flash", // Enforce 2.0-flash for media understanding
       "gemini-1.5-flash",
-    ].filter(Boolean) as string[];
+    ];
 
     let parsed: ConsultantPayload | null = null;
     let lastModelError = "";
+    
+    let uploadedFilePart: any = null;
+    if (file) {
+      try {
+        uploadedFilePart = await ai.files.upload({
+          file: file.path,
+          config: { mimeType: file.mimetype },
+        });
+      } catch (e: any) {
+        console.error("Failed to upload to Gemini File API:", e.message);
+      }
+    }
+
+    const contents = uploadedFilePart ? [uploadedFilePart, prompt] : [prompt];
 
     for (const model of preferredModels) {
       try {
+        const reqPromise = uploadedFilePart
+          ? ai.models.generateContent({ model, contents })
+          : ai.models.generateContent({ model, contents: prompt });
+          
         const response = await Promise.race([
-          ai.models.generateContent({
-            model,
-            contents: prompt,
-          }),
-          wait(3500).then(() => {
+          reqPromise,
+          wait(8000).then(() => {
             throw new Error(`Timeout for model: ${model}`);
           }),
         ]) as { text?: string };
+        
         const raw = response.text?.trim() || "";
         if (!raw) continue;
         const jsonCandidate = extractJsonObject(raw);
@@ -89,7 +107,19 @@ If isRelevant is false, leave other fields as empty strings.`;
         }
       } catch (error) {
         lastModelError = (error as Error).message;
+        console.error("Model failure:", lastModelError);
       }
+    }
+    
+    if (file && uploadedFilePart) {
+      try {
+        await ai.files.delete({ name: uploadedFilePart.name });
+      } catch(e) {}
+    }
+    if (file) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch(e) {}
     }
 
     const fallback = fallbackStructuredDiagnosis(resolvedAppliance, resolvedIssue, replyLanguage);

@@ -27,9 +27,14 @@ import type { ProductCompatMeta } from "../config/runtime.js";
 export const getProducts = async (_req: Request, res: Response) => {
   try {
     await ensurePhase1ProductSchema().catch(() => {});
+    // Issue #7 Fix: Always filter by status=AVAILABLE so SOLD products never appear on the storefront.
     const products = await prisma.product.findMany({
       where: {
-        AND: [{ stockQty: { gt: 0 } }, { isDeleted: false }],
+        AND: [
+          { stockQty: { gt: 0 } },
+          { isDeleted: false },
+          { status: "AVAILABLE" },
+        ],
       },
       orderBy: { id: "desc" },
     });
@@ -71,6 +76,7 @@ export const getProducts = async (_req: Request, res: Response) => {
           FROM "Product"
           WHERE COALESCE("isDeleted", false) = false
             AND COALESCE("stockQty", 0) > 0
+            AND "status" = 'AVAILABLE'
           ORDER BY "id" DESC
         `;
 
@@ -100,12 +106,18 @@ export const getProducts = async (_req: Request, res: Response) => {
   }
 };
 
-export const createOrder = async (req: Request, res: Response) => {
+export const createOrder = async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensurePhase1ProductSchema().catch(() => {});
     await ensurePhase2Schema().catch(() => {});
-    const { userId, productId, deliveryAddress, deliveryPhone, fullName } = req.body as {
-      userId?: string;
+
+    // Issue #3 + #8 Fix: userId MUST come from the authenticated JWT (req.userId),
+    // never from req.body. This prevents impersonation and ensures the price used
+    // for the order is always the authoritative DB price, not a user-supplied value.
+    const authenticatedUserId = req.userId;
+    if (!authenticatedUserId) return res.status(401).json({ error: "Unauthorized." });
+
+    const { productId, deliveryAddress, deliveryPhone, fullName } = req.body as {
       productId?: string;
       deliveryAddress?: string;
       deliveryPhone?: string;
@@ -122,14 +134,11 @@ export const createOrder = async (req: Request, res: Response) => {
     }
 
     const inserted = await prisma.$transaction(async (tx) => {
-      const user = userId ? await tx.user.findUnique({ where: { id: userId } }) : null;
-      if (userId && !user) {
-        throw new Error("Customer not found.");
-      }
+      const user = await tx.user.findUnique({ where: { id: authenticatedUserId } });
+      if (!user) throw new Error("Customer not found.");
+
       const product = await tx.product.findUnique({ where: { id: productId } });
-      if (!product) {
-        throw new Error("Product not found.");
-      }
+      if (!product) throw new Error("Product not found.");
 
       const normalizedType = product.productType || (product.isUsed ? "REFURBISHED" : "NEW");
       if (product.status !== "AVAILABLE") {
@@ -154,9 +163,11 @@ export const createOrder = async (req: Request, res: Response) => {
         }
       }
 
-      const productImageUrl = Array.isArray(product.images) && product.images[0] ? String(product.images[0]) : "";
-      const safeCustomerName = trimmedName || String(user?.name || "Customer").trim() || "Customer";
+      // Issue #8 Fix: Always use product.price from DB as the authoritative price.
+      // Never trust a price supplied in the request body.
       const amount = Number(product.price || 0);
+      const productImageUrl = Array.isArray(product.images) && product.images[0] ? String(product.images[0]) : "";
+      const safeCustomerName = trimmedName || String(user.name || "Customer").trim() || "Customer";
       const paymentQR = `upi://pay?pa=${SHOP_UPI_ID}&pn=Golden%20Refrigeration&am=${amount}&cu=INR`;
       const orderId = createUuid();
       const rows = await tx.$queryRaw<Array<any>>`
@@ -180,7 +191,7 @@ export const createOrder = async (req: Request, res: Response) => {
         (
           ${orderId},
           ${product.id},
-          ${user?.id ?? null},
+          ${user.id},
           ${product.title},
           ${productImageUrl ? cloudinaryOptimizeUrl(productImageUrl) : null},
           ${amount},
@@ -237,9 +248,14 @@ export const getMyOrders = async (req: AuthenticatedRequest, res: Response) => {
   }
 };
 
-export const getAdminOrders = async (_req: Request, res: Response) => {
+export const getAdminOrders = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
+    // Issue #12 Fix: Removed hardcoded LIMIT 120. Added query-param pagination
+    // so admins can view all orders without silent data loss.
+    const page = Math.max(1, Number(req.query.page || 1));
+    const limit = Math.min(500, Math.max(10, Number(req.query.limit || 100)));
+    const offset = (page - 1) * limit;
     const rows = await prisma.$queryRaw<Array<any>>`
       SELECT
         o.*,
@@ -248,7 +264,7 @@ export const getAdminOrders = async (_req: Request, res: Response) => {
       FROM "ProductOrder" o
       LEFT JOIN "User" u ON u."id" = o."customerId"
       ORDER BY o."createdAt" DESC
-      LIMIT 120
+      LIMIT ${limit} OFFSET ${offset}
     `;
     res.json(rows);
   } catch (error: any) {
@@ -274,7 +290,9 @@ export const updateAdminOrderStatus = async (req: Request, res: Response) => {
     `;
     if (!existing.length) return res.status(404).json({ error: "Order not found." });
     const paymentStatus = String(existing[0]?.paymentStatus || "PENDING");
-    if (orderStatus !== "ORDER_PLACED" && paymentStatus !== "PAID") {
+    // Fix #8: CANCELLED is always allowed regardless of payment status.
+    // Any other forward-progression status requires confirmed payment.
+    if (orderStatus !== "ORDER_PLACED" && orderStatus !== "CANCELLED" && paymentStatus !== "PAID") {
       return res.status(400).json({ error: "Payment not confirmed yet." });
     }
 
@@ -420,6 +438,9 @@ export const verifyRazorpayPayment = async (req: AuthenticatedRequest, res: Resp
         return await cancelOrder();
       }
 
+      // R1 Fix: Mark order PAID first, then atomically decrement stock.
+      // Using conditional UPDATE...WHERE to prevent race conditions with
+      // confirmOrderPayment firing concurrently for the same order.
       const paidOrder = await tx.productOrder.update({
         where: { id: orderId },
         data: {
@@ -429,19 +450,29 @@ export const verifyRazorpayPayment = async (req: AuthenticatedRequest, res: Resp
       });
 
       if (normalizedType === "REFURBISHED") {
-        await tx.product.update({
-          where: { id: order.productId },
-          data: { status: "SOLD", stockQty: 0 },
-        });
+        // Atomic: only marks SOLD if still AVAILABLE — prevents parallel double-sell
+        await tx.$queryRaw`
+          UPDATE "Product"
+          SET "status" = 'SOLD'::"ProductStatus", "stockQty" = 0
+          WHERE "id" = ${order.productId} AND "status" = 'AVAILABLE'::"ProductStatus"
+        `;
       } else {
-        const nextStock = currentStock - 1;
-        await tx.product.update({
-          where: { id: order.productId },
-          data: {
-            stockQty: nextStock,
-            status: nextStock <= 0 ? "SOLD" : "AVAILABLE",
-          },
-        });
+        // Atomic stock decrement with floor guard — prevents going below 0
+        const decremented = await tx.$queryRaw<Array<{ id: string }>>`
+          UPDATE "Product"
+          SET
+            "stockQty" = GREATEST("stockQty" - 1, 0),
+            "status" = CASE
+              WHEN "stockQty" - 1 <= 0 THEN 'SOLD'::"ProductStatus"
+              ELSE "status"
+            END
+          WHERE "id" = ${order.productId} AND "stockQty" > 0
+          RETURNING "id"
+        `;
+        if (!decremented.length) {
+          // Payment received but stock gone — cancel and flag for refund
+          return await cancelOrder();
+        }
       }
 
       return { success: true, order: paidOrder };
@@ -477,59 +508,69 @@ export const confirmOrderPayment = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
     const { id } = req.params;
+    // Fix #2: This is the admin manual-payment confirmation path.
+    // We use SELECT ... FOR UPDATE style locking via a conditional UPDATE to prevent
+    // a race condition with verifyRazorpayPayment where both could decrement stock simultaneously.
     const updated = await prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<Array<any>>`
-        SELECT "id", "productId", "paymentStatus"
+        SELECT "id", "productId", "paymentStatus", "orderStatus"
         FROM "ProductOrder"
         WHERE "id" = ${id}
         LIMIT 1
       `;
       if (!rows.length) throw new Error("Order not found.");
       const order = rows[0];
+
+      // Idempotency guard: if already paid, return current state without touching stock
       if (String(order.paymentStatus || "PENDING") === "PAID") {
         const refreshed = await tx.$queryRaw<Array<any>>`
-          SELECT *
-          FROM "ProductOrder"
-          WHERE "id" = ${id}
-          LIMIT 1
+          SELECT * FROM "ProductOrder" WHERE "id" = ${id} LIMIT 1
         `;
         return refreshed[0] || order;
+      }
+
+      if (String(order.orderStatus) === "CANCELLED") {
+        throw new Error("Cannot confirm payment for a cancelled order.");
       }
 
       const product = await tx.product.findUnique({ where: { id: order.productId } });
       if (!product) throw new Error("Product not found.");
       const normalizedType = product.productType || (product.isUsed ? "REFURBISHED" : "NEW");
 
+      // Mark payment as PAID in a single statement
       await tx.$queryRaw`
         UPDATE "ProductOrder"
-        SET "paymentStatus" = ${"PAID"}, "updatedAt" = ${new Date()}
-        WHERE "id" = ${id}
+        SET "paymentStatus" = ${'PAID'}, "updatedAt" = ${new Date()}
+        WHERE "id" = ${id} AND "paymentStatus" <> 'PAID'
       `;
 
       if (normalizedType === "REFURBISHED") {
-        await tx.product.updateMany({
-          where: { id: order.productId },
-          data: { status: "SOLD", stockQty: 0 },
-        });
+        // Atomic: only mark SOLD if still AVAILABLE (prevents double-sell)
+        await tx.$queryRaw`
+          UPDATE "Product"
+          SET "status" = 'SOLD'::\"ProductStatus\", "stockQty" = 0
+          WHERE "id" = ${order.productId} AND "status" = 'AVAILABLE'::\"ProductStatus\"
+        `;
       } else {
-        const currentStock = Number(product.stockQty ?? 1);
-        if (!Number.isFinite(currentStock) || currentStock <= 0) {
+        // Atomic stock decrement with floor guard — prevents going below 0
+        const decremented = await tx.$queryRaw<Array<{ id: string }>>`
+          UPDATE "Product"
+          SET
+            "stockQty" = GREATEST("stockQty" - 1, 0),
+            "status" = CASE
+              WHEN "stockQty" - 1 <= 0 THEN 'SOLD'::\"ProductStatus\"
+              ELSE "status"
+            END
+          WHERE "id" = ${order.productId} AND "stockQty" > 0
+          RETURNING "id"
+        `;
+        if (!decremented.length) {
           throw new Error("Stock is already depleted.");
         }
-        const nextStock = currentStock - 1;
-        await tx.product.update({
-          where: { id: order.productId },
-          data: {
-            stockQty: nextStock,
-            status: nextStock <= 0 ? "SOLD" : "AVAILABLE",
-          },
-        });
       }
+
       const refreshed = await tx.$queryRaw<Array<any>>`
-        SELECT *
-        FROM "ProductOrder"
-        WHERE "id" = ${id}
-        LIMIT 1
+        SELECT * FROM "ProductOrder" WHERE "id" = ${id} LIMIT 1
       `;
       return refreshed[0];
     });
@@ -541,6 +582,9 @@ export const confirmOrderPayment = async (req: Request, res: Response) => {
     }
     if (error?.message?.includes("Product not found")) {
       return res.status(404).json({ error: "Product not found." });
+    }
+    if (error?.message?.includes("cancelled")) {
+      return res.status(400).json({ error: error.message });
     }
     if (error?.message?.includes("Stock")) {
       return res.status(400).json({ error: error.message });
@@ -597,7 +641,7 @@ export const downloadOrderInvoice = async (req: Request, res: Response) => {
       `Address: ${order.deliveryAddress || "N/A"}`,
       `Product: ${order.productTitle || "N/A"}`,
       `Order Status: ${order.orderStatus || "ORDER_PLACED"}`,
-      `Amount: ₹${Number(order.price || 0).toLocaleString("en-IN")}`,
+      `Amount: Rs. ${Number(order.price || 0).toLocaleString("en-IN")}`,
       `Payment Status: ${order.paymentStatus || "PENDING"}`,
     ];
     const pdfBuffer = makeSimplePdfBuffer("Golden Refrigeration - Product Invoice", lines);
@@ -636,7 +680,7 @@ export const downloadCustomerOrderInvoice = async (req: AuthenticatedRequest, re
       `Address: ${order.deliveryAddress || "N/A"}`,
       `Product: ${order.productTitle || "N/A"}`,
       `Order Status: ${order.orderStatus || "ORDER_PLACED"}`,
-      `Amount: ₹${Number(order.price || 0).toLocaleString("en-IN")}`,
+      `Amount: Rs. ${Number(order.price || 0).toLocaleString("en-IN")}`,
       `Payment Status: ${order.paymentStatus || "PENDING"}`,
     ];
     const pdfBuffer = makeSimplePdfBuffer("Golden Refrigeration - Product Invoice", lines);
@@ -826,6 +870,9 @@ export const addProduct = async (req: Request, res: Response) => {
     const trimmedTitle = String(title || "").trim();
     const trimmedDescription = String(description || "").trim();
     const parsedPrice = Number(price);
+
+    // Fix #17: Run all field validations BEFORE constructing any objects.
+    // Previously NaN checks happened after compatMeta was built, creating misleading error order.
     if (!trimmedTitle || !sellerId) {
       return res.status(400).json({ error: "Missing details!" });
     }
@@ -834,23 +881,11 @@ export const addProduct = async (req: Request, res: Response) => {
     }
 
     const normalizedProductType = productType === "REFURBISHED" ? "REFURBISHED" : "NEW";
-    const optimizedImageUrl = imageUrl ? cloudinaryOptimizeUrl(imageUrl) : "";
     const conditionRaw = parseOptionalNumber(conditionScore);
     const ageRaw = parseOptionalNumber(ageMonths);
     const stockRaw = parseOptionalNumber(stockQty);
-    const parsedCondition = conditionRaw === null ? null : Math.min(10, Math.max(1, Math.round(conditionRaw)));
-    const parsedAge = ageRaw === null ? null : Math.max(0, Math.round(ageRaw));
-    const parsedWarrantyExpiry = parseFlexibleDate(warrantyExpiry);
-    const normalizedWarrantyType = warrantyType === "SHOP" || warrantyType === "BRAND" ? warrantyType : null;
-    const compatMeta: ProductCompatMeta = {
-      productType: normalizedProductType,
-      conditionScore: parsedCondition,
-      ageMonths: parsedAge,
-      warrantyType: normalizedWarrantyType,
-      warrantyExpiry: parsedWarrantyExpiry ? parsedWarrantyExpiry.toISOString() : null,
-      warrantyCertificateUrl: warrantyCertificateUrl || null,
-    };
 
+    // Validate parsed numerics immediately after parsing — before using them below
     if (conditionRaw !== null && Number.isNaN(conditionRaw)) {
       return res.status(400).json({ error: "Condition score must be a valid number between 1 and 10." });
     }
@@ -863,6 +898,21 @@ export const addProduct = async (req: Request, res: Response) => {
     if (normalizedProductType === "NEW" && (stockRaw === null || !Number.isFinite(Number(stockRaw)) || Number(stockRaw) < 1)) {
       return res.status(400).json({ error: "Stock quantity is required for new products." });
     }
+
+    // All validations passed — safe to build objects now
+    const optimizedImageUrl = imageUrl ? cloudinaryOptimizeUrl(imageUrl) : "";
+    const parsedCondition = conditionRaw === null ? null : Math.min(10, Math.max(1, Math.round(conditionRaw)));
+    const parsedAge = ageRaw === null ? null : Math.max(0, Math.round(ageRaw));
+    const parsedWarrantyExpiry = parseFlexibleDate(warrantyExpiry);
+    const normalizedWarrantyType = warrantyType === "SHOP" || warrantyType === "BRAND" ? warrantyType : null;
+    const compatMeta: ProductCompatMeta = {
+      productType: normalizedProductType,
+      conditionScore: parsedCondition,
+      ageMonths: parsedAge,
+      warrantyType: normalizedWarrantyType,
+      warrantyExpiry: parsedWarrantyExpiry ? parsedWarrantyExpiry.toISOString() : null,
+      warrantyCertificateUrl: warrantyCertificateUrl || null,
+    };
 
     const normalizedStock =
       normalizedProductType === "REFURBISHED"
@@ -1061,7 +1111,7 @@ export const downloadServiceInvoice = async (req: Request, res: Response) => {
       `Appliance: ${booking.appliance}`,
       `Issue: ${booking.issue}`,
       `Status: ${booking.status}`,
-      `Amount: ₹${amount.toLocaleString("en-IN")}`,
+      `Amount: Rs. ${amount.toLocaleString("en-IN")}`,
       `Technician Contact: ${TECHNICIAN_PHONE}`,
     ];
     const pdfBuffer = makeSimplePdfBuffer("Golden Refrigeration - Invoice", lines);

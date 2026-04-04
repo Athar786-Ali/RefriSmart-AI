@@ -1,16 +1,27 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { cloudinary } from "../config/cloudinary.js";
 import { prisma } from "../config/prisma.js";
+import { razorpay, razorpayKeyId, razorpayKeySecret } from "../config/razorpay.js";
 import { ORDER_STATUS_FLOW, SHOP_UPI_ID, TECHNICIAN_PHONE, clamp, cloudinaryOptimizeUrl, createUuid, decodeCompatMetaFromDescription, demoProducts, encodeCompatMetaInDescription, ensurePhase1ProductSchema, ensurePhase2Schema, makeSimplePdfBuffer, median, parseFlexibleDate, parseOptionalNumber, tokenize, } from "../config/runtime.js";
 export const getProducts = async (_req, res) => {
     try {
         await ensurePhase1ProductSchema().catch(() => { });
+        // Issue #7 Fix: Always filter by status=AVAILABLE so SOLD products never appear on the storefront.
         const products = await prisma.product.findMany({
+            where: {
+                AND: [
+                    { stockQty: { gt: 0 } },
+                    { isDeleted: false },
+                    { status: "AVAILABLE" },
+                ],
+            },
             orderBy: { id: "desc" },
         });
         const normalized = products.map((p) => {
             const { cleanDescription, meta } = decodeCompatMetaFromDescription(p.description);
             return {
                 ...p,
+                stockQty: p.stockQty ?? 0,
                 description: cleanDescription,
                 productType: p.productType || meta.productType || (p.isUsed ? "REFURBISHED" : "NEW"),
                 conditionScore: p.conditionScore ?? meta.conditionScore ?? null,
@@ -24,24 +35,36 @@ export const getProducts = async (_req, res) => {
     }
     catch {
         try {
-            const legacyProducts = await prisma.$queryRaw `
-        SELECT "id", "title", "description", "price", "isUsed", "images", "status", "sellerId", "createdAt"
-        FROM "Product"
-        ORDER BY "id" DESC
-      `;
-            res.json(legacyProducts.map((p) => {
-                const { cleanDescription, meta } = decodeCompatMetaFromDescription(p.description);
-                return {
-                    ...p,
-                    description: cleanDescription,
-                    productType: meta.productType || (p.isUsed ? "REFURBISHED" : "NEW"),
-                    conditionScore: meta.conditionScore ?? null,
-                    ageMonths: meta.ageMonths ?? null,
-                    warrantyType: meta.warrantyType ?? null,
-                    warrantyExpiry: meta.warrantyExpiry ?? null,
-                    warrantyCertificateUrl: meta.warrantyCertificateUrl ?? null,
-                };
-            }));
+            try {
+                const legacyProducts = await prisma.$queryRaw `
+          SELECT "id", "title", "description", "price", "isUsed", "images",
+            COALESCE("stockQty", 0) AS "stockQty",
+            "status", "sellerId", "createdAt"
+          FROM "Product"
+          WHERE COALESCE("isDeleted", false) = false
+            AND COALESCE("stockQty", 0) > 0
+            AND "status" = 'AVAILABLE'
+          ORDER BY "id" DESC
+        `;
+                return res.json(legacyProducts.map((p) => {
+                    const { cleanDescription, meta } = decodeCompatMetaFromDescription(p.description);
+                    return {
+                        ...p,
+                        description: cleanDescription,
+                        productType: meta.productType || (p.isUsed ? "REFURBISHED" : "NEW"),
+                        conditionScore: meta.conditionScore ?? null,
+                        ageMonths: meta.ageMonths ?? null,
+                        warrantyType: meta.warrantyType ?? null,
+                        warrantyExpiry: meta.warrantyExpiry ?? null,
+                        warrantyCertificateUrl: meta.warrantyCertificateUrl ?? null,
+                    };
+                }));
+            }
+            catch {
+                return res.status(500).json({
+                    error: "Product schema is out of sync. Please run `npx prisma db push` and `npx prisma generate`.",
+                });
+            }
         }
         catch {
             res.status(500).json({ error: "Database error" });
@@ -52,80 +75,129 @@ export const createOrder = async (req, res) => {
     try {
         await ensurePhase1ProductSchema().catch(() => { });
         await ensurePhase2Schema().catch(() => { });
-        const { userId, productId, deliveryAddress, deliveryPhone, fullName, paymentConfirmed } = req.body;
-        if (!userId || !productId || !deliveryAddress || !deliveryPhone) {
-            return res.status(400).json({ error: "userId, productId, deliveryAddress, and deliveryPhone are required." });
+        // Issue #3 + #8 Fix: userId MUST come from the authenticated JWT (req.userId),
+        // never from req.body. This prevents impersonation and ensures the price used
+        // for the order is always the authoritative DB price, not a user-supplied value.
+        const authenticatedUserId = req.userId;
+        if (!authenticatedUserId)
+            return res.status(401).json({ error: "Unauthorized." });
+        const { productId, deliveryAddress, deliveryPhone, fullName } = req.body;
+        const trimmedName = String(fullName || "").trim();
+        const trimmedAddress = String(deliveryAddress || "").trim();
+        if (!productId || !trimmedName || !trimmedAddress || !deliveryPhone) {
+            return res.status(400).json({ error: "productId, fullName, deliveryAddress, and deliveryPhone are required." });
         }
-        const [user, product] = await Promise.all([
-            prisma.user.findUnique({ where: { id: userId } }),
-            prisma.product.findUnique({ where: { id: productId } }),
-        ]);
-        if (!user)
-            return res.status(404).json({ error: "Customer not found." });
-        if (!product)
-            return res.status(404).json({ error: "Product not found." });
-        if (product.status !== "AVAILABLE")
-            return res.status(400).json({ error: "Product is not available for order." });
-        const productImageUrl = Array.isArray(product.images) && product.images[0] ? String(product.images[0]) : "";
-        const amount = Number(product.price || 0);
-        const paymentQR = `upi://pay?pa=${SHOP_UPI_ID}&pn=Golden%20Refrigeration&am=${amount}&cu=INR`;
-        const orderId = createUuid();
-        const inserted = await prisma.$queryRaw `
-      INSERT INTO "ProductOrder"
-      (
-        "id",
-        "productId",
-        "customerId",
-        "productTitle",
-        "productImageUrl",
-        "price",
-        "customerName",
-        "deliveryPhone",
-        "deliveryAddress",
-        "orderStatus",
-        "paymentStatus",
-        "paymentQR",
-        "updatedAt"
-      )
-      VALUES
-      (
-        ${orderId},
-        ${product.id},
-        ${user.id},
-        ${product.title},
-        ${productImageUrl ? cloudinaryOptimizeUrl(productImageUrl) : null},
-        ${amount},
-        ${String(fullName || user.name || "Customer").trim() || "Customer"},
-        ${String(deliveryPhone).trim()},
-        ${String(deliveryAddress).trim()},
-        ${"ORDER_PLACED"},
-        ${paymentConfirmed ? "PAID" : "PENDING"},
-        ${paymentQR},
-        ${new Date()}
-      )
-      RETURNING *
-    `;
+        const cleanedPhone = String(deliveryPhone || "").replace(/\D/g, "");
+        if (!cleanedPhone || cleanedPhone.length !== 10) {
+            return res.status(400).json({ error: "A valid 10-digit phone number is required for delivery." });
+        }
+        const inserted = await prisma.$transaction(async (tx) => {
+            const user = await tx.user.findUnique({ where: { id: authenticatedUserId } });
+            if (!user)
+                throw new Error("Customer not found.");
+            const product = await tx.product.findUnique({ where: { id: productId } });
+            if (!product)
+                throw new Error("Product not found.");
+            const normalizedType = product.productType || (product.isUsed ? "REFURBISHED" : "NEW");
+            if (product.status !== "AVAILABLE") {
+                throw new Error("Product is not available for order.");
+            }
+            if (normalizedType === "NEW") {
+                const stockQty = Number(product.stockQty ?? 1);
+                if (!Number.isFinite(stockQty) || stockQty <= 0) {
+                    throw new Error("Product is out of stock.");
+                }
+                const reservationCutoff = new Date(Date.now() - 30 * 60 * 1000);
+                const pendingRows = await tx.$queryRaw `
+          SELECT COUNT(*)::int AS count
+          FROM "ProductOrder"
+          WHERE "productId" = ${product.id}
+            AND COALESCE("paymentStatus",'PENDING') <> 'PAID'
+            AND "createdAt" >= ${reservationCutoff}
+        `;
+                const pendingCount = Number(pendingRows[0]?.count || 0);
+                if (pendingCount >= stockQty) {
+                    throw new Error("All units are currently reserved. Please try later.");
+                }
+            }
+            // Issue #8 Fix: Always use product.price from DB as the authoritative price.
+            // Never trust a price supplied in the request body.
+            const amount = Number(product.price || 0);
+            const productImageUrl = Array.isArray(product.images) && product.images[0] ? String(product.images[0]) : "";
+            const safeCustomerName = trimmedName || String(user.name || "Customer").trim() || "Customer";
+            const paymentQR = `upi://pay?pa=${SHOP_UPI_ID}&pn=Golden%20Refrigeration&am=${amount}&cu=INR`;
+            const orderId = createUuid();
+            const rows = await tx.$queryRaw `
+        INSERT INTO "ProductOrder"
+        (
+          "id",
+          "productId",
+          "customerId",
+          "productTitle",
+          "productImageUrl",
+          "price",
+          "customerName",
+          "deliveryPhone",
+          "deliveryAddress",
+          "orderStatus",
+          "paymentStatus",
+          "paymentQR",
+          "updatedAt"
+        )
+        VALUES
+        (
+          ${orderId},
+          ${product.id},
+          ${user.id},
+          ${product.title},
+          ${productImageUrl ? cloudinaryOptimizeUrl(productImageUrl) : null},
+          ${amount},
+          ${safeCustomerName},
+          ${cleanedPhone},
+          ${trimmedAddress},
+          ${"ORDER_PLACED"},
+          ${"PENDING"},
+          ${paymentQR},
+          ${new Date()}
+        )
+        RETURNING *
+      `;
+            return { order: rows[0] || null, paymentQR };
+        });
         res.status(201).json({
-            order: inserted[0] || null,
-            paymentQR,
+            order: inserted.order,
+            paymentQR: inserted.paymentQR,
             statusFlow: ORDER_STATUS_FLOW,
         });
     }
     catch (error) {
-        res.status(500).json({ error: "Failed to place order.", details: error?.message || "Unknown error" });
+        const message = error?.message || "Unknown error";
+        if (message.includes("Customer not found")) {
+            return res.status(404).json({ error: message });
+        }
+        if (message.includes("Product not found")) {
+            return res.status(404).json({ error: message });
+        }
+        if (message.includes("not available")) {
+            return res.status(400).json({ error: message });
+        }
+        res.status(500).json({ error: "Failed to place order.", details: message });
     }
 };
 export const getMyOrders = async (req, res) => {
     try {
         await ensurePhase2Schema().catch(() => { });
-        const userId = String(req.query.userId || "").trim();
+        const userId = req.userId;
         if (!userId)
-            return res.status(400).json({ error: "userId is required." });
+            return res.status(401).json({ error: "Unauthorized." });
         const rows = await prisma.$queryRaw `
-      SELECT *
-      FROM "ProductOrder"
-      WHERE "customerId" = ${userId}
-      ORDER BY "createdAt" DESC
+      SELECT
+        o.*,
+        p."stockQty" AS "stockQty"
+      FROM "ProductOrder" o
+      LEFT JOIN "Product" p ON p."id" = o."productId"
+      WHERE o."customerId" = ${userId}
+      ORDER BY o."createdAt" DESC
     `;
         res.json(rows);
     }
@@ -133,9 +205,14 @@ export const getMyOrders = async (req, res) => {
         res.status(500).json({ error: "Failed to fetch customer orders.", details: error?.message || "Unknown error" });
     }
 };
-export const getAdminOrders = async (_req, res) => {
+export const getAdminOrders = async (req, res) => {
     try {
         await ensurePhase2Schema().catch(() => { });
+        // Issue #12 Fix: Removed hardcoded LIMIT 120. Added query-param pagination
+        // so admins can view all orders without silent data loss.
+        const page = Math.max(1, Number(req.query.page || 1));
+        const limit = Math.min(500, Math.max(10, Number(req.query.limit || 100)));
+        const offset = (page - 1) * limit;
         const rows = await prisma.$queryRaw `
       SELECT
         o.*,
@@ -144,7 +221,7 @@ export const getAdminOrders = async (_req, res) => {
       FROM "ProductOrder" o
       LEFT JOIN "User" u ON u."id" = o."customerId"
       ORDER BY o."createdAt" DESC
-      LIMIT 120
+      LIMIT ${limit} OFFSET ${offset}
     `;
         res.json(rows);
     }
@@ -157,8 +234,23 @@ export const updateAdminOrderStatus = async (req, res) => {
         await ensurePhase2Schema().catch(() => { });
         const { id } = req.params;
         const { orderStatus } = req.body;
-        if (!orderStatus || !ORDER_STATUS_FLOW.includes(orderStatus)) {
+        const allowedStatuses = new Set([...ORDER_STATUS_FLOW, "CANCELLED"]);
+        if (!orderStatus || !allowedStatuses.has(orderStatus)) {
             return res.status(400).json({ error: "Valid orderStatus is required." });
+        }
+        const existing = await prisma.$queryRaw `
+      SELECT "id", "paymentStatus"
+      FROM "ProductOrder"
+      WHERE "id" = ${id}
+      LIMIT 1
+    `;
+        if (!existing.length)
+            return res.status(404).json({ error: "Order not found." });
+        const paymentStatus = String(existing[0]?.paymentStatus || "PENDING");
+        // Fix #8: CANCELLED is always allowed regardless of payment status.
+        // Any other forward-progression status requires confirmed payment.
+        if (orderStatus !== "ORDER_PLACED" && orderStatus !== "CANCELLED" && paymentStatus !== "PAID") {
+            return res.status(400).json({ error: "Payment not confirmed yet." });
         }
         const updated = await prisma.$queryRaw `
       UPDATE "ProductOrder"
@@ -166,12 +258,275 @@ export const updateAdminOrderStatus = async (req, res) => {
       WHERE "id" = ${id}
       RETURNING *
     `;
-        if (!updated.length)
-            return res.status(404).json({ error: "Order not found." });
         res.json({ order: updated[0] });
     }
     catch (error) {
         res.status(500).json({ error: "Failed to update order status.", details: error?.message || "Unknown error" });
+    }
+};
+export const createRazorpayOrder = async (req, res) => {
+    try {
+        await ensurePhase2Schema().catch(() => { });
+        const { orderId } = req.params;
+        const userId = req.userId;
+        if (!orderId)
+            return res.status(400).json({ error: "orderId is required." });
+        if (!userId)
+            return res.status(401).json({ error: "Unauthorized." });
+        if (!razorpayKeyId || !razorpayKeySecret) {
+            return res.status(500).json({ error: "Razorpay keys are not configured." });
+        }
+        const rows = await prisma.$queryRaw `
+      SELECT "id", "customerId", "price", "paymentStatus", "productId"
+      FROM "ProductOrder"
+      WHERE "id" = ${orderId}
+      LIMIT 1
+    `;
+        if (!rows.length)
+            return res.status(404).json({ error: "Order not found." });
+        const order = rows[0];
+        if (order.customerId && order.customerId !== userId) {
+            return res.status(403).json({ error: "Forbidden." });
+        }
+        if (String(order.paymentStatus || "PENDING") === "PAID") {
+            return res.status(400).json({ error: "Order already paid." });
+        }
+        const product = await prisma.product.findUnique({ where: { id: order.productId } });
+        if (!product)
+            return res.status(404).json({ error: "Product not found." });
+        const normalizedType = product.productType || (product.isUsed ? "REFURBISHED" : "NEW");
+        const currentStock = Number(product.stockQty ?? 0);
+        if ((normalizedType === "NEW" && currentStock <= 0) ||
+            (normalizedType === "REFURBISHED" && (currentStock <= 0 || product.status === "SOLD"))) {
+            return res.status(409).json({ error: "Item is out of stock." });
+        }
+        const amount = Math.round(Number(order.price || 0) * 100);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return res.status(400).json({ error: "Invalid order amount." });
+        }
+        const razorpayOrder = await razorpay.orders.create({
+            amount,
+            currency: "INR",
+            receipt: orderId,
+        });
+        res.json({ razorpayOrder, keyId: razorpayKeyId });
+    }
+    catch (error) {
+        res.status(500).json({ error: "Failed to create Razorpay order.", details: error?.message || "Unknown error" });
+    }
+};
+export const verifyRazorpayPayment = async (req, res) => {
+    try {
+        await ensurePhase2Schema().catch(() => { });
+        const { orderId } = req.params;
+        const userId = req.userId;
+        if (!orderId)
+            return res.status(400).json({ error: "orderId is required." });
+        if (!userId)
+            return res.status(401).json({ error: "Unauthorized." });
+        if (!razorpayKeySecret) {
+            return res.status(500).json({ error: "Razorpay keys are not configured." });
+        }
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+            return res.status(400).json({ error: "razorpay_order_id, razorpay_payment_id, and razorpay_signature are required." });
+        }
+        const expectedSignature = createHmac("sha256", razorpayKeySecret)
+            .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+            .digest("hex");
+        const providedSignature = String(razorpay_signature);
+        const signaturesMatch = expectedSignature.length === providedSignature.length &&
+            timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(providedSignature));
+        if (!signaturesMatch) {
+            return res.status(400).json({ error: "Invalid payment signature." });
+        }
+        const outcome = await prisma.$transaction(async (tx) => {
+            const order = await tx.productOrder.findUnique({ where: { id: orderId } });
+            if (!order)
+                throw new Error("Order not found.");
+            if (order.customerId && order.customerId !== userId) {
+                throw new Error("Forbidden.");
+            }
+            if (order.orderStatus === "CANCELLED") {
+                return {
+                    success: false,
+                    order,
+                    message: "Order Cancelled: Item went out of stock. Refund initiated.",
+                };
+            }
+            if (String(order.paymentStatus || "PENDING") === "PAID") {
+                return { success: true, order };
+            }
+            const product = await tx.product.findUnique({ where: { id: order.productId } });
+            if (!product)
+                throw new Error("Product not found.");
+            const normalizedType = product.productType || (product.isUsed ? "REFURBISHED" : "NEW");
+            const currentStock = Number(product.stockQty ?? 0);
+            const cancelOrder = async () => {
+                const cancelled = await tx.productOrder.update({
+                    where: { id: orderId },
+                    data: {
+                        orderStatus: "CANCELLED",
+                        paymentStatus: "PAID",
+                        internalNote: "System: Payment received but stock depleted. Refund needed.",
+                    },
+                });
+                return {
+                    success: false,
+                    order: cancelled,
+                    message: "Order Cancelled: Item went out of stock. Refund initiated.",
+                };
+            };
+            if ((normalizedType === "NEW" && currentStock <= 0) ||
+                (normalizedType === "REFURBISHED" && (currentStock <= 0 || product.status === "SOLD"))) {
+                return await cancelOrder();
+            }
+            // R1 Fix: Mark order PAID first, then atomically decrement stock.
+            // Using conditional UPDATE...WHERE to prevent race conditions with
+            // confirmOrderPayment firing concurrently for the same order.
+            const paidOrder = await tx.productOrder.update({
+                where: { id: orderId },
+                data: {
+                    paymentStatus: "PAID",
+                    orderStatus: order.orderStatus || "ORDER_PLACED",
+                },
+            });
+            if (normalizedType === "REFURBISHED") {
+                // Atomic: only marks SOLD if still AVAILABLE — prevents parallel double-sell
+                await tx.$queryRaw `
+          UPDATE "Product"
+          SET "status" = 'SOLD'::"ProductStatus", "stockQty" = 0
+          WHERE "id" = ${order.productId} AND "status" = 'AVAILABLE'::"ProductStatus"
+        `;
+            }
+            else {
+                // Atomic stock decrement with floor guard — prevents going below 0
+                const decremented = await tx.$queryRaw `
+          UPDATE "Product"
+          SET
+            "stockQty" = GREATEST("stockQty" - 1, 0),
+            "status" = CASE
+              WHEN "stockQty" - 1 <= 0 THEN 'SOLD'::"ProductStatus"
+              ELSE "status"
+            END
+          WHERE "id" = ${order.productId} AND "stockQty" > 0
+          RETURNING "id"
+        `;
+                if (!decremented.length) {
+                    // Payment received but stock gone — cancel and flag for refund
+                    return await cancelOrder();
+                }
+            }
+            return { success: true, order: paidOrder };
+        });
+        if (!outcome.success) {
+            return res.status(200).json({
+                success: false,
+                message: outcome.message,
+                order: outcome.order,
+            });
+        }
+        res.json({ success: true, order: outcome.order });
+    }
+    catch (error) {
+        if (error?.message?.includes("Order not found")) {
+            return res.status(404).json({ error: "Order not found." });
+        }
+        if (error?.message?.includes("Product not found")) {
+            return res.status(404).json({ error: "Product not found." });
+        }
+        if (error?.message?.includes("Forbidden")) {
+            return res.status(403).json({ error: "Forbidden." });
+        }
+        if (error?.message?.includes("Stock")) {
+            return res.status(400).json({ error: error.message });
+        }
+        res.status(500).json({ error: "Failed to verify payment.", details: error?.message || "Unknown error" });
+    }
+};
+export const confirmOrderPayment = async (req, res) => {
+    try {
+        await ensurePhase2Schema().catch(() => { });
+        const { id } = req.params;
+        // Fix #2: This is the admin manual-payment confirmation path.
+        // We use SELECT ... FOR UPDATE style locking via a conditional UPDATE to prevent
+        // a race condition with verifyRazorpayPayment where both could decrement stock simultaneously.
+        const updated = await prisma.$transaction(async (tx) => {
+            const rows = await tx.$queryRaw `
+        SELECT "id", "productId", "paymentStatus", "orderStatus"
+        FROM "ProductOrder"
+        WHERE "id" = ${id}
+        LIMIT 1
+      `;
+            if (!rows.length)
+                throw new Error("Order not found.");
+            const order = rows[0];
+            // Idempotency guard: if already paid, return current state without touching stock
+            if (String(order.paymentStatus || "PENDING") === "PAID") {
+                const refreshed = await tx.$queryRaw `
+          SELECT * FROM "ProductOrder" WHERE "id" = ${id} LIMIT 1
+        `;
+                return refreshed[0] || order;
+            }
+            if (String(order.orderStatus) === "CANCELLED") {
+                throw new Error("Cannot confirm payment for a cancelled order.");
+            }
+            const product = await tx.product.findUnique({ where: { id: order.productId } });
+            if (!product)
+                throw new Error("Product not found.");
+            const normalizedType = product.productType || (product.isUsed ? "REFURBISHED" : "NEW");
+            // Mark payment as PAID in a single statement
+            await tx.$queryRaw `
+        UPDATE "ProductOrder"
+        SET "paymentStatus" = ${'PAID'}, "updatedAt" = ${new Date()}
+        WHERE "id" = ${id} AND "paymentStatus" <> 'PAID'
+      `;
+            if (normalizedType === "REFURBISHED") {
+                // Atomic: only mark SOLD if still AVAILABLE (prevents double-sell)
+                await tx.$queryRaw `
+          UPDATE "Product"
+          SET "status" = 'SOLD'::\"ProductStatus\", "stockQty" = 0
+          WHERE "id" = ${order.productId} AND "status" = 'AVAILABLE'::\"ProductStatus\"
+        `;
+            }
+            else {
+                // Atomic stock decrement with floor guard — prevents going below 0
+                const decremented = await tx.$queryRaw `
+          UPDATE "Product"
+          SET
+            "stockQty" = GREATEST("stockQty" - 1, 0),
+            "status" = CASE
+              WHEN "stockQty" - 1 <= 0 THEN 'SOLD'::\"ProductStatus\"
+              ELSE "status"
+            END
+          WHERE "id" = ${order.productId} AND "stockQty" > 0
+          RETURNING "id"
+        `;
+                if (!decremented.length) {
+                    throw new Error("Stock is already depleted.");
+                }
+            }
+            const refreshed = await tx.$queryRaw `
+        SELECT * FROM "ProductOrder" WHERE "id" = ${id} LIMIT 1
+      `;
+            return refreshed[0];
+        });
+        res.json({ order: updated });
+    }
+    catch (error) {
+        if (error?.message?.includes("Order not found")) {
+            return res.status(404).json({ error: "Order not found." });
+        }
+        if (error?.message?.includes("Product not found")) {
+            return res.status(404).json({ error: "Product not found." });
+        }
+        if (error?.message?.includes("cancelled")) {
+            return res.status(400).json({ error: error.message });
+        }
+        if (error?.message?.includes("Stock")) {
+            return res.status(400).json({ error: error.message });
+        }
+        res.status(500).json({ error: "Failed to confirm payment.", details: error?.message || "Unknown error" });
     }
 };
 export const generateAdminOrderInvoice = async (req, res) => {
@@ -223,7 +578,46 @@ export const downloadOrderInvoice = async (req, res) => {
             `Address: ${order.deliveryAddress || "N/A"}`,
             `Product: ${order.productTitle || "N/A"}`,
             `Order Status: ${order.orderStatus || "ORDER_PLACED"}`,
-            `Amount: ₹${Number(order.price || 0).toLocaleString("en-IN")}`,
+            `Amount: Rs. ${Number(order.price || 0).toLocaleString("en-IN")}`,
+            `Payment Status: ${order.paymentStatus || "PENDING"}`,
+        ];
+        const pdfBuffer = makeSimplePdfBuffer("Golden Refrigeration - Product Invoice", lines);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="order-invoice-${orderId}.pdf"`);
+        res.send(pdfBuffer);
+    }
+    catch (error) {
+        res.status(500).json({ error: "Failed to generate order invoice.", details: error?.message || "Unknown error" });
+    }
+};
+export const downloadCustomerOrderInvoice = async (req, res) => {
+    try {
+        await ensurePhase2Schema().catch(() => { });
+        const { orderId } = req.params;
+        const userId = req.userId;
+        if (!userId)
+            return res.status(401).json({ error: "Unauthorized." });
+        const rows = await prisma.$queryRaw `
+      SELECT *
+      FROM "ProductOrder"
+      WHERE "id" = ${orderId}
+      LIMIT 1
+    `;
+        if (!rows.length)
+            return res.status(404).json({ error: "Order not found." });
+        const order = rows[0];
+        if (!order.customerId || order.customerId !== userId) {
+            return res.status(403).json({ error: "Forbidden." });
+        }
+        const lines = [
+            `Order ID: ${order.id}`,
+            `Date: ${new Date(order.createdAt).toLocaleString("en-IN")}`,
+            `Customer: ${order.customerName || "Customer"}`,
+            `Phone: ${order.deliveryPhone || "N/A"}`,
+            `Address: ${order.deliveryAddress || "N/A"}`,
+            `Product: ${order.productTitle || "N/A"}`,
+            `Order Status: ${order.orderStatus || "ORDER_PLACED"}`,
+            `Amount: Rs. ${Number(order.price || 0).toLocaleString("en-IN")}`,
             `Payment Status: ${order.paymentStatus || "PENDING"}`,
         ];
         const pdfBuffer = makeSimplePdfBuffer("Golden Refrigeration - Product Invoice", lines);
@@ -240,6 +634,13 @@ export const uploadProductImage = async (req, res) => {
         const { fileData } = req.body;
         if (!fileData || typeof fileData !== "string" || !fileData.startsWith("data:image/")) {
             return res.status(400).json({ error: "Invalid image payload." });
+        }
+        const base64 = fileData.split(",")[1] || "";
+        const padding = (base64.match(/=+$/) || [""])[0].length;
+        const bytes = Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+        const MAX_BYTES = 5 * 1024 * 1024;
+        if (bytes > MAX_BYTES) {
+            return res.status(413).json({ error: "File too large. Max size is 5MB." });
         }
         const uploaded = await cloudinary.uploader.upload(fileData, {
             folder: "refri-smart/products",
@@ -350,14 +751,37 @@ export const suggestPrice = async (req, res) => {
 export const addProduct = async (req, res) => {
     try {
         await ensurePhase1ProductSchema().catch(() => { });
-        const { title, description, price, sellerId, imageUrl, productType, conditionScore, ageMonths, warrantyType, warrantyExpiry, warrantyCertificateUrl, } = req.body;
-        if (!title || !price || !sellerId) {
+        const { title, description, price, sellerId, imageUrl, productType, conditionScore, ageMonths, warrantyType, warrantyExpiry, warrantyCertificateUrl, serialNumber, stockQty, } = req.body;
+        const trimmedTitle = String(title || "").trim();
+        const trimmedDescription = String(description || "").trim();
+        const parsedPrice = Number(price);
+        // Fix #17: Run all field validations BEFORE constructing any objects.
+        // Previously NaN checks happened after compatMeta was built, creating misleading error order.
+        if (!trimmedTitle || !sellerId) {
             return res.status(400).json({ error: "Missing details!" });
         }
+        if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+            return res.status(400).json({ error: "Price must be a positive number." });
+        }
         const normalizedProductType = productType === "REFURBISHED" ? "REFURBISHED" : "NEW";
-        const optimizedImageUrl = imageUrl ? cloudinaryOptimizeUrl(imageUrl) : "";
         const conditionRaw = parseOptionalNumber(conditionScore);
         const ageRaw = parseOptionalNumber(ageMonths);
+        const stockRaw = parseOptionalNumber(stockQty);
+        // Validate parsed numerics immediately after parsing — before using them below
+        if (conditionRaw !== null && Number.isNaN(conditionRaw)) {
+            return res.status(400).json({ error: "Condition score must be a valid number between 1 and 10." });
+        }
+        if (ageRaw !== null && Number.isNaN(ageRaw)) {
+            return res.status(400).json({ error: "Age in months must be a valid number." });
+        }
+        if (stockRaw !== null && Number.isNaN(stockRaw)) {
+            return res.status(400).json({ error: "Stock quantity must be a valid number." });
+        }
+        if (normalizedProductType === "NEW" && (stockRaw === null || !Number.isFinite(Number(stockRaw)) || Number(stockRaw) < 1)) {
+            return res.status(400).json({ error: "Stock quantity is required for new products." });
+        }
+        // All validations passed — safe to build objects now
+        const optimizedImageUrl = imageUrl ? cloudinaryOptimizeUrl(imageUrl) : "";
         const parsedCondition = conditionRaw === null ? null : Math.min(10, Math.max(1, Math.round(conditionRaw)));
         const parsedAge = ageRaw === null ? null : Math.max(0, Math.round(ageRaw));
         const parsedWarrantyExpiry = parseFlexibleDate(warrantyExpiry);
@@ -370,20 +794,20 @@ export const addProduct = async (req, res) => {
             warrantyExpiry: parsedWarrantyExpiry ? parsedWarrantyExpiry.toISOString() : null,
             warrantyCertificateUrl: warrantyCertificateUrl || null,
         };
-        if (conditionRaw !== null && Number.isNaN(conditionRaw)) {
-            return res.status(400).json({ error: "Condition score must be a valid number between 1 and 10." });
-        }
-        if (ageRaw !== null && Number.isNaN(ageRaw)) {
-            return res.status(400).json({ error: "Age in months must be a valid number." });
-        }
+        const normalizedStock = normalizedProductType === "REFURBISHED"
+            ? 1
+            : Math.max(1, Math.round(Number.isFinite(stockRaw) ? Number(stockRaw) : 1));
+        const normalizedSerial = String(serialNumber || "").trim();
         const baseData = {
-            title,
-            description: description || "",
-            price: parseFloat(String(price)),
+            title: trimmedTitle,
+            description: trimmedDescription,
+            price: parsedPrice,
             sellerId,
             isUsed: normalizedProductType === "REFURBISHED",
             images: optimizedImageUrl ? [optimizedImageUrl] : [],
             status: "AVAILABLE",
+            serialNumber: normalizedSerial || null,
+            stockQty: normalizedStock,
         };
         let newProduct;
         try {
@@ -489,11 +913,54 @@ export const seedDemoProducts = async (req, res) => {
 export const deleteProduct = async (req, res) => {
     try {
         const id = String(req.params.id || "");
-        await prisma.product.delete({ where: { id } });
-        res.json({ message: "Product deleted successfully." });
+        const updated = await prisma.product.update({
+            where: { id },
+            data: { isDeleted: true, stockQty: 0, status: "SOLD" },
+        });
+        const products = await prisma.product.findMany({
+            where: { isDeleted: false },
+            orderBy: { id: "desc" },
+        });
+        res.json({
+            message: "Product removed from inventory.",
+            product: updated,
+            products,
+            totalProducts: products.length,
+        });
     }
-    catch {
-        res.status(500).json({ error: "Failed to delete product." });
+    catch (error) {
+        if (error?.code === "P2025") {
+            return res.status(404).json({ error: "Product not found." });
+        }
+        const message = String(error?.message || "");
+        const isSchemaMismatch = message.includes("Unknown argument `isDeleted`") ||
+            (message.includes("isDeleted") && message.includes("column"));
+        if (isSchemaMismatch) {
+            try {
+                const id = String(req.params.id || "");
+                const updated = await prisma.product.update({
+                    where: { id },
+                    data: { stockQty: 0, status: "SOLD" },
+                });
+                const products = await prisma.product.findMany({
+                    orderBy: { id: "desc" },
+                });
+                return res.json({
+                    message: "Product removed (legacy schema). Please run `npx prisma db push` and `npx prisma generate`.",
+                    product: updated,
+                    products,
+                    totalProducts: products.length,
+                    legacy: true,
+                });
+            }
+            catch (inner) {
+                return res.status(500).json({
+                    error: "Failed to delete product.",
+                    details: String(inner?.message || ""),
+                });
+            }
+        }
+        res.status(500).json({ error: "Failed to delete product.", details: message });
     }
 };
 export const downloadServiceInvoice = async (req, res) => {
@@ -508,7 +975,7 @@ export const downloadServiceInvoice = async (req, res) => {
             `Appliance: ${booking.appliance}`,
             `Issue: ${booking.issue}`,
             `Status: ${booking.status}`,
-            `Amount: ₹${amount.toLocaleString("en-IN")}`,
+            `Amount: Rs. ${amount.toLocaleString("en-IN")}`,
             `Technician Contact: ${TECHNICIAN_PHONE}`,
         ];
         const pdfBuffer = makeSimplePdfBuffer("Golden Refrigeration - Invoice", lines);

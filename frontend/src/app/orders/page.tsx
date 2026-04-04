@@ -174,17 +174,20 @@ export default function OrdersPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen pt-20 md:pt-24 pb-12 flex flex-col bg-slate-950 text-slate-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-12 md:py-16 grid gap-6 md:gap-8">
+      <main className="min-h-screen pt-20 md:pt-24 pb-16 flex flex-col font-sans bg-slate-50">
+        <section className="bg-slate-900 border-b-4 border-blue-600 relative overflow-hidden py-12 md:py-20 mb-10">
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10 text-center flex flex-col items-center gap-4">
+            <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight">
+              My <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Orders</span>
+            </h1>
+          </div>
+        </section>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full grid gap-8">
           {Array.from({ length: 3 }, (_, i) => (
-            <div key={`order-skeleton-${i}`} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-              <div className="h-6 w-48 animate-pulse rounded bg-slate-700" />
-              <div className="mt-3 h-4 w-32 animate-pulse rounded bg-slate-700" />
-              <div className="mt-2 h-4 w-64 animate-pulse rounded bg-slate-800" />
-              <div className="mt-5 flex items-center gap-2 text-slate-400">
-                <Loader2 className="h-4 w-4 animate-spin text-cyan-300" />
-                <span className="text-sm">Preparing live delivery timeline...</span>
-              </div>
+            <div key={`order-skeleton-${i}`} className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
+              <div className="h-6 w-48 animate-pulse rounded bg-slate-200" />
+              <div className="mt-4 h-4 w-32 animate-pulse rounded bg-slate-200" />
+              <div className="mt-3 h-4 w-64 animate-pulse rounded bg-slate-100" />
             </div>
           ))}
         </div>
@@ -194,11 +197,18 @@ export default function OrdersPage() {
 
   if (!user?.id) {
     return (
-      <main className="min-h-screen pt-20 md:pt-24 pb-12 flex flex-col bg-slate-950 text-slate-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-12 md:py-16">
-          <div className="max-w-4xl mx-auto rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center">
-          <h1 className="text-3xl font-black text-white">My Orders / Delivery Tracker</h1>
-          <p className="mt-3 text-slate-300">Please login to view your product orders and live delivery status.</p>
+      <main className="min-h-screen pt-20 md:pt-24 pb-16 flex flex-col font-sans bg-slate-50">
+        <section className="bg-slate-900 border-b-4 border-blue-600 relative overflow-hidden py-12 md:py-20 mb-10">
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10 text-center flex flex-col items-center gap-4">
+            <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight">
+              My <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Orders</span>
+            </h1>
+          </div>
+        </section>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+          <div className="max-w-2xl mx-auto rounded-[2.5rem] border border-slate-200 bg-white p-12 text-center shadow-xl shadow-slate-200/50">
+            <h2 className="text-2xl font-black text-slate-900">Sign in to track your items</h2>
+            <p className="mt-3 text-slate-600 font-medium">Please login to view your product orders, delivery timelines, and download your billing invoices.</p>
           </div>
         </div>
       </main>
@@ -206,118 +216,151 @@ export default function OrdersPage() {
   }
 
   return (
-    <main className="min-h-screen pt-20 md:pt-24 pb-12 flex flex-col bg-slate-950 text-slate-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col gap-8 md:gap-12">
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 flex flex-col gap-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-cyan-300 font-semibold">E-Commerce</p>
-          <h1 className="text-3xl font-black mt-2">My Orders / Delivery Tracker</h1>
-          <p className="text-sm text-slate-300 mt-2">Track each purchase from placement to final delivery.</p>
-        </section>
+    <main className="min-h-screen pt-20 md:pt-24 pb-16 flex flex-col font-sans bg-slate-50">
+      
+      {/* PREMIUM HEADER */}
+      <section className="bg-slate-900 border-b-4 border-blue-600 relative overflow-hidden py-12 md:py-20 mb-10">
+        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1586528116311-ad8ed7c83a7f?q=80&w=2000&auto=format&fit=crop')] opacity-10 bg-cover bg-center"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/80 to-transparent"></div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10 text-center flex flex-col items-center gap-4">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tight">
+            My <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Orders</span>
+          </h1>
+          <p className="text-slate-300 text-lg md:text-xl font-medium max-w-2xl mt-4">
+            Track your appliance purchases, view live delivery statuses, and download your tax invoices.
+          </p>
+        </div>
+      </section>
 
-        <section className="flex flex-col gap-6 md:gap-8">
-          {orderedData.map((order) => {
-            const stepIndex = getStepIndex(order.orderStatus);
-            const isHighlighted = highlightId && highlightId === order.id;
-            const isPaid = String(order.paymentStatus || "PENDING") === "PAID";
-            const isDelivered = order.orderStatus === "DELIVERED";
-            const showStockBadge = !isPaid && !isDelivered;
-            return (
-              <article
-                key={order.id}
-                className={`rounded-2xl border p-5 bg-slate-900/70 ${
-                  isHighlighted ? "border-cyan-400/60 shadow-lg shadow-cyan-900/20" : "border-slate-800"
-                }`}
-              >
-                <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-lg font-bold text-white">{order.productTitle}</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col gap-8 md:gap-10">
+        {orderedData.map((order) => {
+          const stepIndex = getStepIndex(order.orderStatus);
+          const isHighlighted = highlightId && highlightId === order.id;
+          const isPaid = String(order.paymentStatus || "PENDING") === "PAID";
+          const isDelivered = order.orderStatus === "DELIVERED";
+          const showStockBadge = !isPaid && !isDelivered;
+
+          return (
+            <article
+              key={order.id}
+              className={`rounded-[2.5rem] border bg-white p-8 md:p-10 transition-shadow duration-300 ${
+                isHighlighted ? "border-blue-400 shadow-2xl shadow-blue-900/20" : "border-slate-200 shadow-xl shadow-slate-200/50"
+              }`}
+            >
+              <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
+                <div className="flex flex-col gap-6">
+                  
+                  <div className="border-b border-slate-100 pb-6">
+                    <div className="flex flex-wrap items-center gap-3 mb-2">
+                      <h2 className="text-2xl font-black text-slate-900">{order.productTitle}</h2>
                       {showStockBadge && typeof order.stockQty === "number" && order.stockQty <= 0 && (
-                        <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase text-red-200">
-                          ❌ Out of Stock
+                        <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-red-600">
+                           Out of Stock
                         </span>
                       )}
                       {showStockBadge &&
                         typeof order.stockQty === "number" &&
                         order.stockQty > 0 &&
                         order.stockQty <= 5 && (
-                        <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase text-amber-200">
-                          ⚠️ Only {order.stockQty} left!
+                        <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-700">
+                          ⚡ Only {order.stockQty} left
                         </span>
                       )}
                     </div>
-                    <p className="text-cyan-300 font-semibold">₹{Number(order.price || 0).toLocaleString("en-IN")}</p>
-                    <p className="text-xs text-slate-300">Delivery Phone: {order.deliveryPhone}</p>
-                    <p className="text-xs text-slate-300">Delivery Address: {order.deliveryAddress}</p>
-                    <p className="text-xs text-slate-400">Ordered on {new Date(order.createdAt).toLocaleString()}</p>
-                    <p className="text-xs text-slate-300">
-                      Payment: <span className="font-semibold">{order.paymentStatus || "PENDING"}</span>
-                    </p>
-                    {order.orderStatus === "CANCELLED" && (
-                      <p className="text-xs text-red-300">
-                        We're sorry! This item is out of stock. Your refund will reflect in 3-5 business days.
+                    <p className="text-3xl font-black text-cyan-600">₹{Number(order.price || 0).toLocaleString("en-IN")}</p>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4 text-sm font-medium text-slate-600 border-b border-slate-100 pb-6">
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                      <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-1">Delivery Address</p>
+                      <p className="text-slate-900 leading-relaxed">{order.deliveryAddress}</p>
+                      <p className="mt-2 text-slate-500">📞 {order.deliveryPhone}</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-center">
+                      <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-1">Order Details</p>
+                      <p>Date: <span className="text-slate-900">{new Date(order.createdAt).toLocaleString()}</span></p>
+                      <p className="mt-1">
+                        Payment: <strong className={isPaid ? "text-emerald-600" : "text-amber-500"}>{order.paymentStatus || "PENDING"}</strong>
                       </p>
-                    )}
-                    <div className="pt-1">
-                      {String(order.paymentStatus || "PENDING") !== "PAID" && order.orderStatus !== "CANCELLED" && (
-                        <button
-                          type="button"
-                          disabled={payingOrderId === order.id || (typeof order.stockQty === "number" && order.stockQty <= 0)}
-                          onClick={() => handlePay(order)}
-                          className="mb-2 w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-60"
-                        >
-                          {typeof order.stockQty === "number" && order.stockQty <= 0
-                            ? "Currently Unavailable"
-                            : payingOrderId === order.id
-                              ? "Processing Payment..."
-                              : "Pay via Razorpay"}
-                        </button>
+                      {order.orderStatus === "CANCELLED" && (
+                        <p className="mt-2 text-red-500 font-bold text-xs bg-red-50 px-2 py-1 rounded inline-flex">
+                          Refund initiating in 3-5 days.
+                        </p>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const url = order.invoiceUrl || `${process.env.NEXT_PUBLIC_API_URL}/orders/my/invoice/${order.id}`;
-                          window.open(url, "_blank", "noopener,noreferrer");
-                        }}
-                        className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/20"
-                      >
-                        Download Bill
-                      </button>
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-                    <p className="text-xs uppercase tracking-[0.15em] text-slate-400 font-semibold mb-3">Delivery Progress</p>
-                    <div className="space-y-3">
-                      {STATUS_STEPS.map((step, index) => {
-                        const done = index <= stepIndex;
-                        const last = index === STATUS_STEPS.length - 1;
-                        return (
-                          <div key={step.key} className="flex items-start gap-3">
-                            <div className="flex flex-col items-center">
-                              <span
-                                className={`h-3 w-3 rounded-full border ${done ? "bg-cyan-400 border-cyan-300" : "bg-slate-800 border-slate-600"}`}
-                              />
-                              {!last && (
-                                <span className={`mt-1 h-8 w-[2px] ${done ? "bg-cyan-400/80" : "bg-slate-700"}`} />
-                              )}
-                            </div>
-                            <p className={`text-sm ${done ? "text-slate-100 font-semibold" : "text-slate-400"}`}>{step.label}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
+                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                    {String(order.paymentStatus || "PENDING") !== "PAID" && order.orderStatus !== "CANCELLED" && (
+                      <button
+                        type="button"
+                        disabled={payingOrderId === order.id || (typeof order.stockQty === "number" && order.stockQty <= 0)}
+                        onClick={() => handlePay(order)}
+                        className="rounded-2xl border-b-4 border-emerald-700 bg-emerald-500 px-8 py-3 text-sm font-black tracking-wide text-white transition-transform hover:bg-emerald-400 active:translate-y-1 active:border-b-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {typeof order.stockQty === "number" && order.stockQty <= 0
+                          ? "Unavailable"
+                          : payingOrderId === order.id
+                            ? "Processing..."
+                            : "Pay Securely via Razorpay"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = order.invoiceUrl || `${process.env.NEXT_PUBLIC_API_URL}/orders/my/invoice/${order.id}`;
+                        window.open(url, "_blank", "noopener,noreferrer");
+                      }}
+                      className="rounded-2xl border-2 border-cyan-200 bg-cyan-50 px-8 py-3 text-sm font-bold text-cyan-800 transition-colors hover:bg-cyan-100 hover:border-cyan-300"
+                    >
+                      Download GST Bill
+                    </button>
                   </div>
                 </div>
-              </article>
-            );
-          })}
-          {!orderedData.length && (
-            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-10 text-center text-slate-400">
-              No product orders found yet.
+
+                <div className="rounded-3xl border border-blue-100 bg-blue-50/50 p-6 shadow-inner flex flex-col justify-center">
+                  <p className="text-xs uppercase tracking-[0.18em] text-blue-600 font-bold mb-6 text-center">Live Tracker</p>
+                  <div className="space-y-6 relative ml-4">
+                    {/* Connecting line */}
+                    <div className="absolute left-2.5 top-2 bottom-6 w-0.5 bg-slate-200 -z-10"></div>
+                    
+                    {STATUS_STEPS.map((step, index) => {
+                      const done = index <= stepIndex;
+                      const active = index === stepIndex;
+                      return (
+                        <div key={step.key} className="flex items-center gap-4 relative">
+                          <span
+                            className={`h-5 w-5 rounded-full border-4 shadow-sm z-10 ${
+                              done 
+                                ? active ? "bg-white border-blue-500 shadow-blue-300" : "bg-blue-500 border-blue-500" 
+                                : "bg-slate-100 border-slate-300"
+                            }`}
+                          />
+                          <p className={`text-base flex-1 ${
+                            done 
+                              ? active ? "text-blue-700 font-black" : "text-slate-800 font-bold" 
+                              : "text-slate-400 font-medium"
+                          }`}>
+                            {step.label}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+        {!loading && !orderedData.length && (
+          <div className="rounded-[2.5rem] border border-dashed border-slate-300 bg-slate-100/50 py-20 px-6 text-center shadow-inner">
+            <div className="mx-auto w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+               📦
             </div>
-          )}
-        </section>
+            <h3 className="text-xl font-bold text-slate-800">No active products found</h3>
+            <p className="mt-2 text-slate-500 font-medium">Head to the Showroom to browse premium appliances.</p>
+          </div>
+        )}
       </div>
     </main>
   );

@@ -42,7 +42,15 @@ export const ModelName = {
     User: 'User',
     Product: 'Product',
     ServiceBooking: 'ServiceBooking',
-    Gallery: 'Gallery'
+    Gallery: 'Gallery',
+    Technician: 'Technician',
+    ServiceAssignment: 'ServiceAssignment',
+    ServiceEvent: 'ServiceEvent',
+    ServiceOtp: 'ServiceOtp',
+    SellRequest: 'SellRequest',
+    SellOffer: 'SellOffer',
+    DocumentLog: 'DocumentLog',
+    ProductOrder: 'ProductOrder'
 };
 /*
  * Enums
@@ -57,8 +65,17 @@ export const UserScalarFieldEnum = {
     id: 'id',
     name: 'name',
     email: 'email',
+    phone: 'phone',
     password: 'password',
     role: 'role',
+    verifyOtp: 'verifyOtp',
+    verifyOtpExpiryAt: 'verifyOtpExpiryAt',
+    isAccountVerified: 'isAccountVerified',
+    phoneVerifyOtp: 'phoneVerifyOtp',
+    phoneVerifyOtpExpiryAt: 'phoneVerifyOtpExpiryAt',
+    isPhoneVerified: 'isPhoneVerified',
+    resetOtp: 'resetOtp',
+    resetOtpExpiryAt: 'resetOtpExpiryAt',
     createdAt: 'createdAt'
 };
 export const ProductScalarFieldEnum = {
@@ -73,6 +90,9 @@ export const ProductScalarFieldEnum = {
     warrantyType: 'warrantyType',
     warrantyExpiry: 'warrantyExpiry',
     warrantyCertificateUrl: 'warrantyCertificateUrl',
+    stockQty: 'stockQty',
+    isDeleted: 'isDeleted',
+    serialNumber: 'serialNumber',
     images: 'images',
     status: 'status',
     sellerId: 'sellerId',
@@ -81,6 +101,10 @@ export const ProductScalarFieldEnum = {
 export const ServiceBookingScalarFieldEnum = {
     id: 'id',
     customerId: 'customerId',
+    guestName: 'guestName',
+    guestPhone: 'guestPhone',
+    contactName: 'contactName',
+    contactPhone: 'contactPhone',
     appliance: 'appliance',
     issue: 'issue',
     aiDiagnosis: 'aiDiagnosis',
@@ -97,8 +121,85 @@ export const ServiceBookingScalarFieldEnum = {
 export const GalleryScalarFieldEnum = {
     id: 'id',
     imageUrl: 'imageUrl',
+    mediaType: 'mediaType',
     caption: 'caption',
     createdAt: 'createdAt'
+};
+export const TechnicianScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    phone: 'phone',
+    role: 'role',
+    pincode: 'pincode',
+    active: 'active',
+    createdAt: 'createdAt'
+};
+export const ServiceAssignmentScalarFieldEnum = {
+    bookingId: 'bookingId',
+    technicianId: 'technicianId',
+    pincode: 'pincode',
+    routeNote: 'routeNote',
+    assignedAt: 'assignedAt'
+};
+export const ServiceEventScalarFieldEnum = {
+    id: 'id',
+    bookingId: 'bookingId',
+    status: 'status',
+    note: 'note',
+    createdAt: 'createdAt'
+};
+export const ServiceOtpScalarFieldEnum = {
+    id: 'id',
+    bookingId: 'bookingId',
+    otp: 'otp',
+    expiresAt: 'expiresAt',
+    verified: 'verified',
+    createdAt: 'createdAt'
+};
+export const SellRequestScalarFieldEnum = {
+    id: 'id',
+    userId: 'userId',
+    applianceType: 'applianceType',
+    brandModel: 'brandModel',
+    conditionNote: 'conditionNote',
+    expectedPrice: 'expectedPrice',
+    pincode: 'pincode',
+    imageUrl: 'imageUrl',
+    status: 'status',
+    createdAt: 'createdAt'
+};
+export const SellOfferScalarFieldEnum = {
+    id: 'id',
+    requestId: 'requestId',
+    offerPrice: 'offerPrice',
+    pickupSlot: 'pickupSlot',
+    status: 'status',
+    createdAt: 'createdAt'
+};
+export const DocumentLogScalarFieldEnum = {
+    id: 'id',
+    docType: 'docType',
+    bookingId: 'bookingId',
+    meta: 'meta',
+    createdAt: 'createdAt'
+};
+export const ProductOrderScalarFieldEnum = {
+    id: 'id',
+    productId: 'productId',
+    customerId: 'customerId',
+    productTitle: 'productTitle',
+    productImageUrl: 'productImageUrl',
+    price: 'price',
+    customerName: 'customerName',
+    deliveryPhone: 'deliveryPhone',
+    deliveryAddress: 'deliveryAddress',
+    orderStatus: 'orderStatus',
+    paymentStatus: 'paymentStatus',
+    internalNote: 'internalNote',
+    paymentQR: 'paymentQR',
+    invoiceUrl: 'invoiceUrl',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
 };
 export const SortOrder = {
     asc: 'asc',

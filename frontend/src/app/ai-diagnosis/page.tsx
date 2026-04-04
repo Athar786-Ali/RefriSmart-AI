@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { Camera } from "lucide-react";
 import { toast } from "sonner";
 import DiagnosisSkeleton from "@/components/DiagnosisSkeleton";
 import EstimateCard from "@/components/EstimateCard";
@@ -32,13 +34,14 @@ type HistoryItem = {
   createdAt: string;
 };
 
-const SERVICE_PIN_PREFIXES = ["500", "506"];
+const SERVICE_PIN_PREFIXES = ["813210"];
 const HISTORY_KEY = "gr_ai_diagnosis_history";
 
 export default function AIDiagnosis() {
   const { user } = useAuth();
   const [appliance, setAppliance] = useState("Refrigerator");
   const [issue, setIssue] = useState("");
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [result, setResult] = useState("");
   const [estimatedCostRange, setEstimatedCostRange] = useState("");
   const [contact, setContact] = useState<ContactInfo>({
@@ -124,11 +127,17 @@ export default function AIDiagnosis() {
     setChatLocked(true);
 
     try {
+      const formData = new FormData();
+      formData.append("applianceType", appliance);
+      formData.append("issueDetails", issue);
+      if (mediaFile) {
+        formData.append("media", mediaFile);
+      }
+
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ai/diagnose`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ applianceType: appliance, issueDetails: issue }),
+        body: formData,
       });
 
       const data = await res.json();
@@ -239,27 +248,53 @@ export default function AIDiagnosis() {
 
   const handleClearChat = () => {
     setIssue("");
+    setMediaFile(null);
     setResult("");
     setEstimatedCostRange("");
     setChatLocked(false);
   };
 
   return (
-    <main className="min-h-screen pt-20 md:pt-24 pb-12 flex flex-col bg-slate-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full grid gap-6 md:gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 flex flex-col gap-8 md:gap-12">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">AI Assistant</p>
-          <h1 className="mt-3 text-4xl font-extrabold tracking-tight text-slate-900 md:text-5xl lg:text-6xl">Smart appliance diagnosis</h1>
-          <p className="mb-8 mt-3 text-slate-600">Describe the problem and get technician-style guidance in seconds.</p>
+    <main className="min-h-screen pt-20 md:pt-24 pb-16 flex flex-col font-sans bg-slate-50">
+      
+      {/* PREMIUM HEADER */}
+      <section className="bg-slate-900 border-b-4 border-blue-600 relative overflow-hidden py-12 md:py-20 mb-10">
+        <div className="absolute inset-0 bg-blue-900/10 mix-blend-color-dodge"></div>
+        <div className="absolute top-0 left-0 p-10 opacity-[0.03] pointer-events-none transform -rotate-12">
+          {/* Subtle tech pattern */}
+          <div className="grid grid-cols-4 gap-4">
+            {[...Array(16)].map((_, i) => <div key={i} className="w-16 h-16 rounded-full bg-blue-500"></div>)}
+          </div>
+        </div>
+        
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10 text-center flex flex-col items-center gap-4">
+          <p className="text-sm font-black uppercase tracking-[0.3em] text-cyan-400 mb-2 border border-cyan-400/30 bg-cyan-400/10 px-4 py-1.5 rounded-full">Intelligent Assistant</p>
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tight">
+            AI <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Diagnosis Tool</span>
+          </h1>
+          <p className="text-slate-300 text-lg md:text-xl font-medium max-w-2xl mt-4">
+            Describe the problem and get expert-level troubleshooting advice in seconds, powered by Golden Refrigeration AI.
+          </p>
+        </div>
+      </section>
 
-          <form onSubmit={handleDiagnose} className="max-w-3xl mx-auto w-full flex flex-col gap-6">
-            <div>
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Appliance type</label>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full grid gap-8 lg:gap-12 lg:grid-cols-[1.2fr_0.8fr]">
+        
+        {/* INTERACTIVE AI CARD */}
+        <section className="rounded-[2.5rem] border border-slate-100 bg-white p-8 md:p-12 shadow-2xl shadow-blue-900/5 flex flex-col gap-10">
+          <div className="border-b border-slate-100 pb-6">
+            <h2 className="text-3xl font-black text-slate-900">Start Diagnosis</h2>
+          </div>
+
+          <form onSubmit={handleDiagnose} className="w-full flex flex-col gap-8">
+            <div className="space-y-3">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Appliance Type</label>
               <select
                 value={appliance}
                 onChange={(e) => setAppliance(e.target.value)}
                 disabled={chatLocked || loading}
-                className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white p-4 font-medium text-slate-900 outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-70"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-base font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer appearance-none"
+                style={{ backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%231E293B%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1.5rem top 50%', backgroundSize: '0.65rem auto' }}
               >
                 <option>Refrigerator</option>
                 <option>Air Conditioner</option>
@@ -268,214 +303,238 @@ export default function AIDiagnosis() {
               </select>
             </div>
 
-            <div>
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Issue details</label>
+            <div className="space-y-3 relative">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Describe The Issue</label>
               <textarea
-                placeholder="Example: Cooling is inconsistent and there is noise near the compressor."
-                className="min-h-[150px] w-full rounded-xl border border-slate-200 bg-white p-4 text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500"
+                placeholder="Example: The AC is blowing warm air and making a rattling noise..."
+                className="w-full min-h-[160px] pb-16 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-5 text-base text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50 resize-y"
                 value={issue}
                 onChange={(e) => setIssue(e.target.value)}
-                required
               />
-              <div className="mt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={startVoiceInput}
-                  className="min-h-[48px] rounded-lg border border-blue-200 px-3 py-2 text-xs text-blue-700 hover:bg-blue-50"
-                >
-                  {isListening ? "Listening..." : "Voice Input"}
-                </button>
+              <div className="absolute left-3 bottom-3 flex items-center gap-2">
+                <label className="relative flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 px-3 py-2 text-xs font-bold transition shadow-sm overflow-hidden">
+                  <input 
+                    type="file" 
+                    accept="image/*,video/*" 
+                    className="absolute inset-0 opacity-0 cursor-pointer" 
+                    onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
+                  />
+                  <Camera className="w-4 h-4" />
+                  {mediaFile ? <span className="truncate max-w-[100px] text-blue-600">{mediaFile.name}</span> : <span>Add Media</span>}
+                </label>
               </div>
+              <button
+                type="button"
+                onClick={startVoiceInput}
+                className="absolute right-3 bottom-3 flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2 text-xs font-bold text-blue-700 shadow-sm transition hover:bg-blue-50 hover:shadow-md"
+              >
+                <span className={`w-2 h-2 rounded-full ${isListening ? 'bg-red-500 animate-pulse' : 'bg-blue-500'}`}></span>
+                {isListening ? "Listening..." : "Dictate"}
+              </button>
             </div>
 
-            <button
-              disabled={loading}
-              className="min-h-[48px] w-full rounded-xl bg-blue-600 py-4 font-semibold text-white shadow-sm transition-transform hover:bg-blue-700 active:scale-95 disabled:opacity-60"
-            >
-              {loading ? "Analyzing..." : "Get AI Diagnosis"}
-            </button>
-            <button
-              type="button"
-              onClick={handleClearChat}
-              className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white py-4 font-semibold text-slate-600 shadow-sm transition-transform active:scale-95"
-            >
-              Clear Chat
-            </button>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+              <button
+                disabled={loading}
+                className="md:col-span-2 rounded-2xl bg-slate-900 py-5 text-lg font-black tracking-wide text-white shadow-xl shadow-slate-900/20 transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-60"
+              >
+                {loading ? "Analyzing..." : "Diagnose Now"}
+              </button>
+              <button
+                type="button"
+                onClick={handleClearChat}
+                className="rounded-2xl border-2 border-slate-200 bg-white py-5 text-lg font-bold text-slate-600 transition-all hover:bg-slate-50 hover:border-slate-300 active:scale-95"
+              >
+                Reset
+              </button>
+            </div>
           </form>
 
           {loading ? (
-            <div className="flex flex-col gap-6 md:gap-8">
+            <div className="pt-8 border-t border-slate-100 flex flex-col gap-6">
               <DiagnosisSkeleton />
             </div>
           ) : result ? (
-            <div className="flex flex-col gap-6 md:gap-8">
-              <div className="rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-500 to-blue-600 p-6 text-white shadow-lg">
-                <h3 className="mb-2 text-lg font-bold">Golden Refrigeration Senior Consultant</h3>
-                <p className="whitespace-pre-wrap leading-relaxed text-cyan-50">{result}</p>
+            <div className="pt-8 border-t border-slate-100 flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
+              
+              <div className="relative rounded-[2rem] bg-gradient-to-br from-slate-900 to-blue-950 p-8 text-white shadow-2xl">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-400/10 rounded-bl-[100px] pointer-events-none"></div>
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 rounded-full border border-blue-400 border-dashed animate-[spin_10s_linear_infinite] flex items-center justify-center p-1">
+                    <div className="w-full h-full bg-blue-500 rounded-full"></div>
+                  </div>
+                  <h3 className="text-xl font-black tracking-wide text-cyan-300 uppercase">Analysis Results</h3>
+                </div>
+                <p className="whitespace-pre-wrap leading-relaxed text-slate-200 text-lg font-medium">{result}</p>
               </div>
 
               <EstimateCard estimatedCostRange={estimatedCostRange} onBook={openBooking} />
 
-              <div className="flex flex-col gap-4 rounded-2xl border border-blue-200 bg-blue-50/70 p-5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h4 className="font-bold text-slate-900">Need On-Site Help?</h4>
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
-                    Booking starts only after confirmation
-                  </span>
+              <div className="rounded-[2rem] border border-emerald-100 bg-emerald-50/70 p-8 flex flex-col gap-5">
+                <div>
+                  <h4 className="text-xl font-black text-emerald-950">Immediate Help Required?</h4>
+                  <p className="mt-2 text-sm font-medium text-emerald-700">Service is guaranteed with full transparency. No hidden charges.</p>
                 </div>
-                <p className="text-sm text-slate-700">
-                  Get a verified Golden Refrigeration technician at your doorstep with transparent pricing and service tracking.
-                </p>
-                <a
-                  href={contact.call}
-                  className="min-h-[48px] w-full rounded-xl border border-blue-200 bg-white px-5 py-3 text-center text-sm font-semibold text-blue-700 transition-transform active:scale-95"
-                >
-                  Call Technician Now
-                </a>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <a href={contact.call} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">Call: {contact.phone}</a>
-                  <a href={contact.whatsapp} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white">WhatsApp</a>
-                  <a href={`${contact.sms}?body=Hello technician, I need service support.`} className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white">Message</a>
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <a href={contact.call} className="sm:col-span-2 flex items-center justify-center gap-2 rounded-xl bg-slate-900 py-4 font-bold text-white shadow-md hover:bg-slate-800 transition">
+                    📞 Call Technician
+                  </a>
+                  <a href={contact.whatsapp} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center rounded-xl bg-[#25D366] py-4 font-bold text-white shadow-md hover:opacity-90 transition">
+                    WhatsApp
+                  </a>
                 </div>
               </div>
+
             </div>
           ) : null}
         </section>
 
-        <section className="h-fit rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 flex flex-col gap-6 md:gap-8">
-          <h2 className="text-2xl font-black text-slate-900">Consultation history</h2>
-          <p className="mb-6 mt-2 text-sm text-slate-600">Review your previous AI diagnosis records (saved locally).</p>
+        {/* HISTORY SIDEBAR */}
+        <section className="h-fit rounded-[2.5rem] border border-slate-100 bg-white p-8 shadow-xl shadow-slate-200/40 flex flex-col gap-8">
+          <div className="border-b border-slate-100 pb-4">
+            <h2 className="text-2xl font-black text-slate-900">Diagnosis <br/><span className="text-blue-600">History</span></h2>
+            <p className="mt-2 text-sm font-medium text-slate-500">Saved locally to this device.</p>
+          </div>
 
           {history.length > 0 ? (
-            <div className="max-h-[28rem] space-y-3 overflow-auto pr-1">
+            <div className="max-h-[36rem] overflow-auto pr-2 space-y-4">
               {history.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setSelectedItem(item)}
-                  className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-blue-300 hover:bg-blue-50/50"
+                  className="w-full text-left bg-slate-50 border border-slate-100 rounded-2xl p-5 hover:border-blue-300 hover:bg-blue-50/50 hover:shadow-md transition-all duration-300 group"
                 >
-                  <div className="mb-1 flex items-start justify-between gap-2">
-                    <span className="text-sm font-semibold uppercase text-blue-600">{item.appliance}</span>
-                    <span className="text-xs text-slate-500">{new Date(item.createdAt).toLocaleDateString()}</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-black uppercase tracking-wider text-blue-600">{item.appliance}</span>
+                    <span className="text-[10px] font-bold text-slate-400 bg-white border border-slate-100 px-2 py-1 rounded-md">{new Date(item.createdAt).toLocaleDateString()}</span>
                   </div>
-                  <p className="line-clamp-2 text-sm font-medium text-slate-900">{item.issue}</p>
-                  <p className="mt-1 text-[11px] uppercase tracking-wide text-slate-500">Local session</p>
+                  <p className="line-clamp-2 text-sm font-semibold text-slate-800 group-hover:text-slate-900 leading-relaxed">{item.issue}</p>
                 </button>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No consultations yet. Submit your first diagnosis request.</p>
+            <div className="py-12 text-center flex flex-col items-center">
+              <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center mb-4">
+                <span className="text-2xl opacity-50">🤖</span>
+              </div>
+              <p className="text-sm font-medium text-slate-500 w-2/3">Your future diagnoses will be saved here automatically.</p>
+            </div>
           )}
         </section>
       </div>
 
+      {/* MODALS */}
       {selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-0 backdrop-blur-sm md:items-center md:p-4">
-          <div className="relative w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl sm:p-8 md:rounded-2xl">
-            <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-slate-300 md:hidden" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-xl rounded-[2.5rem] border border-slate-200 bg-white p-8 md:p-10 shadow-2xl">
             <button
               onClick={() => setSelectedItem(null)}
-              className="absolute right-5 top-5 text-2xl font-semibold text-slate-400 hover:text-slate-900"
+              className="absolute right-8 top-8 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-xl font-bold text-slate-500 hover:bg-slate-200 hover:text-slate-900 transition"
             >
               ×
             </button>
 
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">{selectedItem.appliance}</p>
-            <h3 className="mt-2 text-2xl font-black text-slate-900">Diagnosis details</h3>
+            <span className="inline-block rounded-full bg-blue-100 px-4 py-1.5 text-xs font-black uppercase tracking-widest text-blue-800 mb-6">{selectedItem.appliance}</span>
+            <h3 className="text-3xl font-black text-slate-900 mb-8">Diagnosis Details</h3>
 
-            <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Issue</p>
-              <p className="text-slate-900">{selectedItem.issue}</p>
-            </div>
-
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-600">Recommendation</p>
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{selectedItem.aiDiagnosis}</p>
-            </div>
-            {selectedItem.estimatedCostRange && (
-              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-600">Estimated Cost</p>
-                <p className="text-sm font-semibold text-emerald-800">{selectedItem.estimatedCostRange}</p>
+            <div className="space-y-6">
+              <div className="rounded-2xl bg-slate-50 p-6 border border-slate-100">
+                <p className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400">Reported Issue</p>
+                <p className="text-slate-900 font-medium leading-relaxed">{selectedItem.issue}</p>
               </div>
-            )}
 
-            <button
-              onClick={() => setSelectedItem(null)}
-              className="mt-7 min-h-[48px] w-full rounded-xl bg-blue-600 py-3 font-semibold text-white transition-transform hover:bg-blue-700 active:scale-95"
-            >
-              Close
-            </button>
+              <div className="rounded-2xl border-l-4 border-blue-500 bg-blue-50 p-6">
+                <p className="mb-2 text-xs font-bold uppercase tracking-widest text-blue-700">AI Recommendation</p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800 font-medium">{selectedItem.aiDiagnosis}</p>
+              </div>
+              
+              {selectedItem.estimatedCostRange && (
+                <div className="flex items-center justify-between rounded-2xl bg-emerald-50 border border-emerald-100 p-6">
+                  <p className="text-xs font-bold uppercase tracking-widest text-emerald-800">Estimated Repair Cost</p>
+                  <p className="text-xl font-black text-emerald-600">{selectedItem.estimatedCostRange}</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {bookingOpen && (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/35 p-0 backdrop-blur-sm md:items-center md:p-4">
-          <div className="relative w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl md:rounded-2xl">
-            <div className="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-300 md:hidden" />
+        <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-slate-950/60 p-0 md:p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-2xl rounded-t-[2.5rem] md:rounded-[2.5rem] border border-slate-200 bg-white p-8 md:p-12 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div className="mx-auto mb-6 h-1.5 w-16 rounded-full bg-slate-200 md:hidden" />
             <button
               onClick={() => setBookingOpen(false)}
-              className="absolute right-5 top-5 text-2xl font-semibold text-slate-400 hover:text-slate-900"
+              className="absolute right-8 top-8 hidden md:flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-xl font-bold text-slate-500 hover:bg-slate-200 hover:text-slate-900 transition"
             >
               ×
             </button>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Service Booking</p>
-            <h3 className="mt-2 text-2xl font-black text-slate-900">Book Technician</h3>
-            <p className="mt-1 text-sm text-slate-600">Provide your details so we can assign the nearest technician.</p>
+            <div className="border-b border-slate-100 pb-6 mb-8 text-center md:text-left pr-10">
+              <span className="inline-block rounded-full bg-blue-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-blue-800 mb-4">Urgent Dispatch</span>
+              <h3 className="text-3xl font-black text-slate-900">Book Technician</h3>
+            </div>
 
-            <div className="mt-6 grid gap-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="block text-sm font-semibold text-slate-700">
-                  Full Name
+            {user?.id ? (
+              <div className="grid gap-6">
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Full Name</label>
+                    <input
+                      value={bookingFullName}
+                      onChange={(e) => setBookingFullName(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Phone Number</label>
+                    <input
+                      value={bookingPhone}
+                      onChange={(e) => setBookingPhone(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                      inputMode="numeric"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">PIN Code</label>
                   <input
-                    value={bookingFullName}
-                    onChange={(e) => setBookingFullName(e.target.value)}
-                    className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Your full name"
-                  />
-                </label>
-                <label className="block text-sm font-semibold text-slate-700">
-                  Phone Number
-                  <input
-                    value={bookingPhone}
-                    onChange={(e) => setBookingPhone(e.target.value)}
-                    className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="10-digit mobile number"
+                    value={bookingPincode}
+                    onChange={(e) => setBookingPincode(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
                     inputMode="numeric"
                   />
-                </label>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Complete Address</label>
+                  <textarea
+                    value={bookingAddress}
+                    onChange={(e) => setBookingAddress(e.target.value)}
+                    className="w-full min-h-[100px] rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleBookTechnician}
+                  disabled={bookingSubmitting}
+                  className="mt-4 w-full rounded-2xl bg-slate-900 py-5 text-lg font-black tracking-wide text-white shadow-xl shadow-slate-900/20 transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-60"
+                >
+                  {bookingSubmitting ? "Processing Request..." : "Confirm Doorstep Visit"}
+                </button>
               </div>
-
-              <label className="block text-sm font-semibold text-slate-700">
-                PIN Code
-                <input
-                  value={bookingPincode}
-                  onChange={(e) => setBookingPincode(e.target.value)}
-                  className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Example: 500001"
-                  inputMode="numeric"
-                />
-              </label>
-
-              <label className="block text-sm font-semibold text-slate-700">
-                Full Address
-                <textarea
-                  value={bookingAddress}
-                  onChange={(e) => setBookingAddress(e.target.value)}
-                  className="mt-2 min-h-[110px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="House no, street, locality, city"
-                />
-              </label>
-
-              <button
-                type="button"
-                onClick={handleBookTechnician}
-                disabled={bookingSubmitting}
-                className="min-h-[48px] w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition-transform active:scale-95 disabled:opacity-60"
-              >
-                {bookingSubmitting ? "Booking..." : "Confirm & Book Technician"}
-              </button>
-            </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 text-center">
+                <h4 className="text-2xl font-black text-slate-900 mb-3">Authentication Required</h4>
+                <p className="text-slate-600 mb-6 max-w-sm text-sm font-medium leading-relaxed">
+                  To assign a technician based on your AI diagnosis, please securely log in via OTP.
+                </p>
+                <Link href="/login" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-blue-900/20 active:scale-95">
+                  Securely Login to Book
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       )}

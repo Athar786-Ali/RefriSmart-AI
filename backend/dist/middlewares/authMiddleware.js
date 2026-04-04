@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/runtime.js";
+import { prisma } from "../config/prisma.js";
 export const userAuth = async (req, res, next) => {
     try {
         const token = req.cookies?.token;
@@ -14,4 +15,21 @@ export const userAuth = async (req, res, next) => {
     catch {
         return res.status(401).json({ error: "Unauthorized. Invalid or expired token." });
     }
+};
+export const adminAuth = async (req, res, next) => {
+    await userAuth(req, res, async () => {
+        try {
+            const userId = req.userId;
+            if (!userId)
+                return res.status(403).json({ error: "Admin access required." });
+            const user = await prisma.user.findUnique({ where: { id: userId } });
+            if (!user || user.role !== "ADMIN") {
+                return res.status(403).json({ error: "Admin access required." });
+            }
+            next();
+        }
+        catch {
+            return res.status(403).json({ error: "Admin access required." });
+        }
+    });
 };

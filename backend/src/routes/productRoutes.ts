@@ -22,7 +22,9 @@ import { adminAuth, userAuth } from "../middlewares/authMiddleware.js";
 const productRoutes = Router();
 
 productRoutes.get("/products", getProducts);
-productRoutes.post("/orders", createOrder);
+// Issue #3 Fix: createOrder had no auth middleware — anyone could create orders for any userId.
+// Now requires userAuth so userId comes from the verified JWT, not the request body.
+productRoutes.post("/orders", userAuth, createOrder);
 productRoutes.get("/orders/my", userAuth, getMyOrders);
 productRoutes.get("/orders/my/invoice/:orderId", userAuth, downloadCustomerOrderInvoice);
 productRoutes.post("/orders/:orderId/razorpay", userAuth, createRazorpayOrder);

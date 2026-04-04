@@ -8,8 +8,16 @@ import authRoutes from "./routes/authRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import { PORT } from "./config/runtime.js";
 const app = express();
+// Issue #1 Fix: origin:true allows ANY website to make credentialed requests.
+// In production we restrict to an explicit comma-separated allowlist.
+const getAllowedOrigins = () => {
+    if (process.env.NODE_ENV !== "production")
+        return true;
+    const raw = process.env.ALLOWED_ORIGINS || "";
+    return raw.split(",").map((s) => s.trim()).filter(Boolean);
+};
 app.use(cors({
-    origin: true,
+    origin: getAllowedOrigins(),
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -20,6 +28,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api", productRoutes);
 app.use("/api", adminRoutes);
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(`✅ Server is ACTIVE on http://localhost:${PORT}`);
+const HOST = process.env.HOST || "127.0.0.1";
+app.listen(PORT, HOST, () => {
+    console.log(`✅ Server is ACTIVE on http://${HOST}:${PORT}`);
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, type ComponentType, useEffect, useMemo, useState } from "react";
 import { AirVent, Microwave, Refrigerator, WashingMachine, Wrench } from "lucide-react";
 import { toast } from "sonner";
@@ -207,7 +208,7 @@ export default function ServicePage() {
   const onSubmitBooking = async (e: FormEvent) => {
     e.preventDefault();
     const trimmedPincode = form.pincode.trim();
-    const SERVICE_PIN_PREFIXES = ["500", "506"];
+    const SERVICE_PIN_PREFIXES = ["813210"];
     if (!form.fullName.trim() || !form.phoneNumber.trim() || !form.issue.trim() || !form.address.trim() || !trimmedPincode) {
       toast.error("Name, phone, issue, address, and PIN code are required.");
       return;
@@ -438,12 +439,40 @@ export default function ServicePage() {
   };
 
   return (
-    <main className="min-h-screen pt-20 md:pt-24 pb-12 flex flex-col bg-slate-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col gap-8 md:gap-12">
+    <main className="min-h-screen pt-20 md:pt-24 pb-16 flex flex-col font-sans bg-slate-50">
+      
+      {/* PREMIUM BACKGROUND HEADER */}
+      <section className="relative flex w-full flex-col items-center justify-center overflow-hidden bg-slate-950 py-20 md:py-32 mb-10 shadow-[0_15px_40px_-15px_rgba(0,0,0,0.5)] border-b border-slate-800">
+        <div className="absolute inset-0 z-0">
+          {/* Guaranteed working high-res Unsplash image for AC / Industrial Repair */}
+          <div
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-100"
+            style={{ backgroundImage: `url('https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=2000&auto=format&fit=crop')` }}
+          />
+          {/* Minimal gradient at the top so the image is 100% visible, fading only at the bottom text boundary */}
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/30 to-slate-950/90"></div>
+          <div className="absolute inset-0 bg-blue-600/5 mix-blend-overlay"></div>
+        </div>
+        
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full text-center flex flex-col items-center gap-5">
+          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-slate-900/60 backdrop-blur-md px-5 py-2 text-sm font-semibold text-blue-300 shadow-lg mb-1">
+            <Wrench className="w-4 h-4" />
+            <span>Industrial Grade Service</span>
+          </div>
+          <h1 className="text-4xl md:text-5xl lg:text-7xl font-black text-white tracking-tight drop-shadow-[0_5px_8px_rgba(0,0,0,0.8)] leading-[1.1]">
+            Book a <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-cyan-300">Certified Technician</span>
+          </h1>
+          <p className="text-slate-100 text-lg md:text-2xl font-semibold max-w-3xl mt-2 drop-shadow-[0_4px_4px_rgba(0,0,0,0.9)] bg-slate-950/20 backdrop-blur-sm rounded-lg py-2 px-4">
+            Schedule a doorstep visit for your AC, Refrigerator, or Washing Machine. Fast response, guaranteed repair.
+          </p>
+        </div>
+      </section>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col gap-10 md:gap-14">
         {loading || !hasMounted ? (
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-3 text-sm text-slate-600">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+          <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50">
+            <div className="flex items-center justify-center gap-3 text-lg font-semibold text-slate-600">
+              <span className="h-6 w-6 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
               Loading your service tracker...
             </div>
           </section>
@@ -467,140 +496,156 @@ export default function ServicePage() {
 
         <section
           id="quick-booking-desk"
-          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-6 md:gap-8"
+          className="rounded-[2.5rem] border border-slate-100 bg-white p-8 md:p-12 shadow-2xl shadow-blue-900/5 flex flex-col gap-8"
         >
-          <h3 className="text-lg font-bold text-slate-900">Quick Booking Desk</h3>
-          <p className="mt-1 text-sm text-slate-600">Book a technician with customer details and full address.</p>
-
-          <form className="max-w-3xl mx-auto w-full flex flex-col gap-6" onSubmit={onSubmitBooking}>
-            <div className="grid grid-cols-2 gap-6 md:gap-8 sm:grid-cols-4">
-              {APPLIANCE_OPTIONS.map((option) => {
-                const Icon = option.icon;
-                const selected = form.appliance === option.label;
-                return (
-                  <button
-                    key={option.label}
-                    type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, appliance: option.label }))}
-                    className={`flex min-h-[48px] items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
-                      selected
-                        ? "border-blue-500 bg-blue-50 text-blue-700"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-blue-300"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="grid gap-6 md:gap-8 sm:grid-cols-2">
-              <input
-                value={form.fullName}
-                onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
-                className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500"
-                placeholder="Full Name"
-                required
-              />
-              <input
-                value={form.phoneNumber}
-                onChange={(e) => setForm((prev) => ({ ...prev, phoneNumber: e.target.value }))}
-                className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500"
-                placeholder="Phone Number"
-                inputMode="numeric"
-                required
-              />
-              <input
-                value={form.pincode}
-                onChange={(e) => setForm((prev) => ({ ...prev, pincode: e.target.value }))}
-                className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500"
-                placeholder="PIN Code"
-                inputMode="numeric"
-                required
-              />
-            </div>
-
-            <textarea
-              value={form.issue}
-              onChange={(e) => setForm((prev) => ({ ...prev, issue: e.target.value }))}
-              className="min-h-28 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500"
-              placeholder="Describe your appliance problem"
-              required
-            />
-
-            <textarea
-              value={form.address}
-              onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
-              className="min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500"
-              placeholder="Full service address (editable)"
-              required
-            />
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
-              Please enter your full service address with landmark for quick technician reach.
-            </div>
-
-            <button
-              type="submit"
-              disabled={bookingSubmitting}
-              className="min-h-[48px] w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition-transform hover:bg-blue-700 active:scale-95 disabled:opacity-60"
-            >
-              {bookingSubmitting ? "Booking..." : "Confirm & Book Technician"}
-            </button>
-          </form>
-
-          <div className="flex flex-wrap gap-2 text-xs">
-            <a href="tel:9060877595" className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">Call Technician</a>
-            <a href="https://wa.me/919060877595" target="_blank" rel="noopener noreferrer" className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700">WhatsApp</a>
-            <a href="sms:+919060877595" className="rounded-full border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700">Message</a>
+          <div className="border-b border-slate-100 pb-6">
+            <p className="text-sm uppercase tracking-[0.2em] text-blue-600 font-bold mb-2">Schedule Request</p>
+            <h3 className="text-3xl font-black text-slate-900">Quick Booking Desk</h3>
           </div>
-        </section>
+          {currentUser?.id ? (
+            <form className="w-full flex flex-col gap-8" onSubmit={onSubmitBooking}>
+              <div className="grid grid-cols-2 gap-4 md:gap-6 sm:grid-cols-4">
+                {APPLIANCE_OPTIONS.map((option) => {
+                  const Icon = option.icon;
+                  const selected = form.appliance === option.label;
+                  return (
+                    <button
+                      key={option.label}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, appliance: option.label }))}
+                      className={`flex flex-col items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all duration-300 ${
+                        selected
+                          ? "border-blue-500 bg-blue-50 shadow-md shadow-blue-100 scale-105"
+                          : "border-slate-100 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-white"
+                      }`}
+                    >
+                      <Icon className={`h-8 w-8 ${selected ? "text-blue-600" : "text-slate-400"}`} />
+                      <span className={`text-sm font-bold ${selected ? "text-blue-800" : "text-slate-500"}`}>{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-        {!currentUser?.id && (
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-6 md:gap-8">
-            <div className="flex flex-col gap-2">
-              <h3 className="text-lg font-bold text-slate-900">Track Guest Booking</h3>
-              <p className="text-sm text-slate-600">Enter your booking ID and phone number to view status updates.</p>
-            </div>
-
-            <form className="max-w-3xl mx-auto w-full flex flex-col gap-6" onSubmit={onSubmitGuestLookup}>
               <div className="grid gap-6 md:gap-8 sm:grid-cols-2">
-                <input
-                  value={guestLookup.bookingId}
-                  onChange={(e) => setGuestLookup((prev) => ({ ...prev, bookingId: e.target.value }))}
-                  className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500"
-                  placeholder="Booking ID"
-                  required
-                />
-                <input
-                  value={guestLookup.phone}
-                  onChange={(e) => setGuestLookup((prev) => ({ ...prev, phone: e.target.value }))}
-                  className="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500"
-                  placeholder="Phone Number"
-                  inputMode="numeric"
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Full Name</label>
+                  <input
+                    value={form.fullName}
+                    onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-base text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                    placeholder="John Doe"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Phone Number</label>
+                  <input
+                    value={form.phoneNumber}
+                    onChange={(e) => setForm((prev) => ({ ...prev, phoneNumber: e.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-base text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                    placeholder="9876543210"
+                    inputMode="numeric"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Description of Issue</label>
+                <textarea
+                  value={form.issue}
+                  onChange={(e) => setForm((prev) => ({ ...prev, issue: e.target.value }))}
+                  className="w-full min-h-[120px] rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-base text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50 resize-y"
+                  placeholder="E.g., The AC is blowing warm air and making a rattling noise..."
                   required
                 />
               </div>
 
+              <div className="grid gap-6 md:gap-8 sm:grid-cols-3">
+                <div className="sm:col-span-2 space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Service Address</label>
+                  <input
+                    value={form.address}
+                    onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-base text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                    placeholder="House No, Landmark, Street"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">PIN Code</label>
+                  <input
+                    value={form.pincode}
+                    onChange={(e) => setForm((prev) => ({ ...prev, pincode: e.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-base text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                    placeholder="813210"
+                    inputMode="numeric"
+                    required
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={bookingSubmitting}
+                className="mt-4 w-full rounded-2xl bg-blue-600 py-5 text-lg font-black tracking-wide text-white transition-all hover:bg-blue-500 hover:shadow-xl hover:shadow-blue-900/20 active:scale-95 disabled:opacity-60"
+              >
+                {bookingSubmitting ? "Processing..." : "Confirm & Book Technician"}
+              </button>
+            </form>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 px-6 text-center bg-slate-50 rounded-2xl border border-slate-200 mt-4">
+              <h4 className="text-2xl font-black text-slate-900 mb-3">Authentication Required</h4>
+              <p className="text-slate-600 mb-8 max-w-md text-sm font-medium leading-relaxed">
+                To guarantee priority tracking and verify technical dispatch, you must securely log in with your mobile number before booking.
+              </p>
+              <Link href="/login" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 rounded-2xl transition-all shadow-xl shadow-blue-900/20 active:scale-95">
+                Login / Register to Book
+              </Link>
+            </div>
+          )}
+        </section>
+
+        {!currentUser?.id && (
+          <section className="rounded-[2.5rem] border border-slate-100 bg-white p-8 md:p-12 shadow-xl shadow-slate-200/40 flex flex-col gap-8">
+            <div className="border-b border-slate-100 pb-6">
+              <h3 className="text-2xl font-black text-slate-900">Track Guest Booking</h3>
+              <p className="mt-1 text-sm text-slate-500">Already booked? Enter your ID to check status.</p>
+            </div>
+
+            <form className="w-full flex flex-col md:flex-row gap-6" onSubmit={onSubmitGuestLookup}>
+              <input
+                value={guestLookup.bookingId}
+                onChange={(e) => setGuestLookup((prev) => ({ ...prev, bookingId: e.target.value }))}
+                className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-base text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white"
+                placeholder="Booking ID"
+                required
+              />
+              <input
+                value={guestLookup.phone}
+                onChange={(e) => setGuestLookup((prev) => ({ ...prev, phone: e.target.value }))}
+                className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-base text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white"
+                placeholder="Phone Number"
+                inputMode="numeric"
+                required
+              />
               <button
                 type="submit"
                 disabled={guestLookupLoading}
-                className="min-h-[48px] w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition-transform hover:bg-blue-700 active:scale-95 disabled:opacity-60"
+                className="rounded-2xl bg-slate-900 px-8 py-4 text-base font-bold text-white transition-transform hover:bg-slate-800 active:scale-95 disabled:opacity-60 whitespace-nowrap"
               >
-                {guestLookupLoading ? "Checking..." : "Track Booking"}
+                {guestLookupLoading ? "Checking..." : "Track Status"}
               </button>
             </form>
 
             {guestBooking && (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                <div className="grid gap-2 md:grid-cols-2">
-                  <p><span className="text-slate-500">Appliance:</span> {guestBooking.appliance}</p>
-                  <p><span className="text-slate-500">Status:</span> {guestBooking.status.replace(/_/g, " ")}</p>
-                  <p><span className="text-slate-500">Issue:</span> {guestBooking.issue}</p>
-                  <p><span className="text-slate-500">Scheduled:</span> {new Date(guestBooking.scheduledAt).toLocaleString("en-IN")}</p>
-                  <p className="md:col-span-2"><span className="text-slate-500">Address:</span> {guestBooking.address || "Not provided"}</p>
-                  <p className="md:col-span-2"><span className="text-slate-500">Technician:</span> {guestBooking.technician?.name || "Auto-assigned shortly"}</p>
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-6 text-sm text-slate-700 mt-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <p><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Appliance</span> <br/> {guestBooking.appliance}</p>
+                  <p><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Status</span> <br/> <strong className="text-emerald-700">{guestBooking.status.replace(/_/g, " ")}</strong></p>
+                  <p className="md:col-span-2"><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Issue</span> <br/> {guestBooking.issue}</p>
+                  <p><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Scheduled</span> <br/> {new Date(guestBooking.scheduledAt).toLocaleString("en-IN")}</p>
+                  <p><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Technician</span> <br/> {guestBooking.technician?.name || "Assigning..."}</p>
                 </div>
               </div>
             )}
@@ -608,46 +653,6 @@ export default function ServicePage() {
         )}
 
         <ServiceHistoryCard completedBookings={completedBookings} onDownloadInvoice={downloadInvoice} />
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-6 md:gap-8">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h3 className="text-xl font-bold text-slate-900">Verified Live Repairs</h3>
-              <p className="text-sm text-slate-600">Recent on-site technician work gallery.</p>
-            </div>
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-blue-200 bg-blue-50">
-              <Wrench className="h-5 w-5 text-blue-600" />
-            </span>
-          </div>
-
-          <div className="grid gap-6 md:gap-8 sm:grid-cols-2 xl:grid-cols-4">
-            {galleryItems.map((item) => (
-              <article
-                key={item.id}
-                className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300"
-              >
-                <div className="relative aspect-[4/3] overflow-hidden">
-                  {item.mediaType === "video" || item.imageUrl.toLowerCase().includes(".mp4") || item.imageUrl.toLowerCase().includes(".webm") ? (
-                    <video src={item.imageUrl} controls preload="metadata" className="h-full w-full object-cover" />
-                  ) : (
-                    <img
-                      src={item.imageUrl}
-                      alt={item.caption || "repair"}
-                      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                      onError={(event) => {
-                        const img = event.currentTarget;
-                        img.onerror = null;
-                        img.src = FALLBACK_GALLERY_IMAGE;
-                      }}
-                    />
-                  )}
-                  <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-900/60 to-transparent" />
-                </div>
-                <p className="px-3 pb-3 pt-2 text-sm font-medium text-slate-700">{item.caption || "Golden Refrigeration field repair"}</p>
-              </article>
-            ))}
-          </div>
-        </section>
       </div>
     </main>
   );
