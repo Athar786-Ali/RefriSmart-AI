@@ -4,7 +4,7 @@ import { prisma } from "./prisma.js";
 
 export const PORT = Number(process.env.PORT || 5001);
 export const JWT_SECRET = process.env.JWT_SECRET || "golden_ref_secret_123";
-export const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+export const COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
 export const SMTP_USER = process.env.SMTP_USER || "";
 export const SMTP_PASS = process.env.SMTP_PASS || "";
 

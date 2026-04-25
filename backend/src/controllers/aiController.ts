@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import { ai } from "../config/gemini.js";
-import { TECHNICIAN_PHONE, detectInputLanguage, extractJsonObject, fallbackStructuredDiagnosis, wait } from "../config/runtime.js";
+import { TECHNICIAN_PHONE, detectInputLanguage, extractJsonObject, fallbackStructuredDiagnosis, wait, createUuid } from "../config/runtime.js";
+import { prisma } from "../config/prisma.js";
+import { cloudinary } from "../config/cloudinary.js";
 
 type ConsultantPayload = {
   isRelevant: boolean;
@@ -112,6 +114,23 @@ If isRelevant is false, leave other fields as empty strings.`;
     }
     
     if (file && uploadedFilePart) {
+      try {
+        const cloudinaryResult = await cloudinary.uploader.upload(file.path, {
+          folder: "refri-smart/gallery",
+          resource_type: "auto",
+        });
+        await prisma.gallery.create({
+          data: {
+            id: createUuid(),
+            imageUrl: cloudinaryResult.secure_url,
+            mediaType: cloudinaryResult.resource_type === "video" ? "video" : "image",
+            caption: `AI Diagnosis issue: ${resolvedAppliance} - ${resolvedIssue.substring(0, 50) || "Uploaded media problem"}`,
+          }
+        });
+      } catch (err: any) {
+        console.error("Failed to add AI problem to gallery:", err.message);
+      }
+
       try {
         await ai.files.delete({ name: uploadedFilePart.name });
       } catch(e) {}

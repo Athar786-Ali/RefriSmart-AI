@@ -35,7 +35,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api", productRoutes);
 app.use("/api", adminRoutes);
 
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || "localhost";
 
 app.listen(PORT, HOST, () => {
   console.log(`✅ Server is ACTIVE on http://${HOST}:${PORT}`);

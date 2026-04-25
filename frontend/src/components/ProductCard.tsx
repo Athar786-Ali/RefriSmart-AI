@@ -131,6 +131,11 @@ export default function ProductCard({ product }: ProductCardProps) {
     });
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        toast.error("Session expired. Please log in securely to continue checkout.");
+        window.location.href = "/login";
+        return null;
+      }
       toast.error(payload?.error || "Failed to place order.");
       return null;
     }

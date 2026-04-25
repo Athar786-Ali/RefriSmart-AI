@@ -53,10 +53,9 @@ const STATUS_STEPS: Array<{ key: BookingStatus; label: string }> = [
 const getStepIndex = (status: BookingStatus) => {
   const idx = STATUS_STEPS.findIndex((step) => step.key === status);
   if (idx >= 0) return idx;
+  if (status === "ESTIMATE_APPROVED") return STATUS_STEPS.findIndex((step) => step.key === "ASSIGNED");
   if (status === "FIXED") return STATUS_STEPS.findIndex((step) => step.key === "PAYMENT_PENDING");
   if (status === "COMPLETED") return STATUS_STEPS.length - 1;
-  // Issue #24 Fix: CANCELLED must NOT map to the last step — it should not appear
-  // as a completed flow. Return -1 so all steps render as unfilled (grey).
   if (status === "CANCELLED") return -1;
   return 0;
 };

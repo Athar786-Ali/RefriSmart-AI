@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, type ComponentType, useEffect, useMemo, useState } from "react";
-import { AirVent, Microwave, Refrigerator, WashingMachine, Wrench } from "lucide-react";
+import { FormEvent, type ComponentType, useEffect, useMemo, useRef, useState } from "react";
+import { AirVent, Microwave, Refrigerator, WashingMachine, Navigation, Wrench } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 import ServiceActiveTrackerCard, { type ServiceBooking } from "@/components/ServiceActiveTrackerCard";
 import ServiceHistoryCard from "@/components/ServiceHistoryCard";
 import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/razorpay";
@@ -91,13 +92,14 @@ const EmptyServiceState = ({ onBookNow }: EmptyServiceStateProps) => (
 export default function ServicePage() {
   const [hasMounted, setHasMounted] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id: string; name?: string; email?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name?: string; email?: string; phone?: string | null } | null>(null);
   const [bookings, setBookings] = useState<ServiceBooking[]>([]);
   const [activeBooking, setActiveBooking] = useState<ServiceBooking | null>(null);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [ratingLoading, setRatingLoading] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
   const [ratingValue, setRatingValue] = useState(0);
   const [guestLookupLoading, setGuestLookupLoading] = useState(false);
   const [guestLookup, setGuestLookup] = useState({ bookingId: "", phone: "" });
@@ -117,11 +119,15 @@ export default function ServicePage() {
     setHasMounted(true);
   }, []);
 
+  // Use AuthContext so the navbar stays in sync on refresh
+  const { user: authUser } = useAuth();
+
+  // Also keep local currentUser for backwards-compat with existing handlers
   useEffect(() => {
     if (typeof window === "undefined") return;
     const raw = localStorage.getItem("user");
     try {
-      setCurrentUser(raw ? (JSON.parse(raw) as { id: string; name?: string; email?: string }) : null);
+      setCurrentUser(raw ? (JSON.parse(raw) as { id: string; name?: string; email?: string; phone?: string | null }) : null);
     } catch {
       setCurrentUser(null);
     } finally {
@@ -129,45 +135,89 @@ export default function ServicePage() {
     }
   }, []);
 
+  // Keep currentUser synced with authUser from context (handles refresh correctly)
+  useEffect(() => {
+    if (authUser) {
+      setCurrentUser({
+        id: authUser.id,
+        name: authUser.name,
+        email: authUser.email,
+        phone: authUser.phone,
+      });
+    }
+  }, [authUser]);
+
+  // Load local guest booking if not logged in
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (!currentUser?.id) {
+      const localGuestBooking = localStorage.getItem("gr_guest_booking");
+      let hasDispatched = false;
+      if (localGuestBooking) {
+        try {
+          const payload = JSON.parse(localGuestBooking);
+          if (payload?.bookingId && payload?.phone) {
+             hasDispatched = true;
+             setGuestLookupLoading(true);
+             fetch(`${API}/service/guest-booking?bookingId=${encodeURIComponent(payload.bookingId)}&phone=${encodeURIComponent(payload.phone)}`, { cache: "no-store", credentials: "include" })
+               .then(res => res.json())
+               .then(data => {
+                  if (data?.booking) setGuestBooking(data.booking);
+               })
+               .finally(() => {
+                 setGuestLookupLoading(false);
+                 setLoading(false);
+               });
+          }
+        } catch(e) {}
+      }
+      if (!hasDispatched) setLoading(false);
+    }
+  }, [isHydrated, currentUser?.id]);
+
   const loadData = async (userId?: string) => {
     if (!API) {
-      setBookings([]);
-      setActiveBooking(null);
-      setGallery([]);
-      if (typeof window !== "undefined") {
-        ["serviceBookingType", "bookingType", "activeServiceBooking"].forEach((key) => localStorage.removeItem(key));
-      }
       setLoading(false);
       return;
     }
 
     try {
-      const bookingsPromise = userId
-        ? fetch(`${API}/service/my-bookings?userId=${userId}`, {
+      const galleryPromise = fetch(`${API}/gallery`, { credentials: "include" }).then((res) =>
+        res.ok ? res.json().catch(() => []) : []
+      );
+
+      if (userId) {
+        const [bookingsRes, galleryPayload] = await Promise.all([
+          fetch(`${API}/service/my-bookings?userId=${userId}`, {
             credentials: "include",
             cache: "no-store",
-          }).then((res) => res.json().catch(() => []))
-        : Promise.resolve([]);
-      const galleryPromise = fetch(`${API}/gallery`, { credentials: "include" }).then((res) => res.json().catch(() => []));
-      const [bookingsPayload, galleryPayload] = await Promise.all([bookingsPromise, galleryPromise]);
-      const nextBookings = Array.isArray(bookingsPayload) ? (bookingsPayload as ServiceBooking[]) : [];
-      const activeBookings = nextBookings.filter((booking) => !["COMPLETED", "CANCELLED"].includes(booking.status));
+          }),
+          galleryPromise,
+        ]);
 
-      if (activeBookings.length === 0) {
-        setBookings([]);
-        setActiveBooking(null);
-        if (typeof window !== "undefined") {
-          ["serviceBookingType", "bookingType", "activeServiceBooking"].forEach((key) => localStorage.removeItem(key));
+        if (bookingsRes.ok) {
+          const bookingsPayload = await bookingsRes.json().catch(() => null);
+          if (Array.isArray(bookingsPayload)) {
+            const activeBookings = bookingsPayload.filter(
+              (b) => !["COMPLETED", "CANCELLED"].includes(b.status)
+            );
+            if (activeBookings.length > 0) {
+              setBookings(activeBookings);
+              setActiveBooking((prev) => prev ?? activeBookings[0]);
+            } else {
+              setBookings([]);
+              setActiveBooking(null);
+            }
+          }
+          // If not ok or not array, preserve existing state (don't wipe tracker)
         }
+        setGallery(Array.isArray(galleryPayload) ? galleryPayload.slice(0, 8) : []);
       } else {
-        setBookings(activeBookings);
-        setActiveBooking(activeBookings[0] || null);
+        const galleryPayload = await galleryPromise;
+        setGallery(Array.isArray(galleryPayload) ? galleryPayload.slice(0, 8) : []);
       }
-      setGallery(Array.isArray(galleryPayload) ? galleryPayload.slice(0, 8) : []);
     } catch {
-      setBookings([]);
-      setActiveBooking(null);
-      setGallery([]);
+      // Network error — preserve existing booking state, don't wipe tracker
     } finally {
       setLoading(false);
     }
@@ -180,6 +230,48 @@ export default function ServicePage() {
   }, [isHydrated, currentUser?.id]);
 
   const hasActiveBookings = Array.isArray(bookings) && bookings.length > 0;
+
+  // ── 2-second live poll: only fetch booking status (not gallery) ──────────
+  const userIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => { userIdRef.current = currentUser?.id; }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!isHydrated || !currentUser?.id || !hasActiveBookings) return;
+    if (!API) return;
+
+    const poll = async () => {
+      const uid = userIdRef.current;
+      if (!uid) return;
+      try {
+        const res = await fetch(`${API}/service/my-bookings?userId=${uid}`, {
+          credentials: "include", cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (!Array.isArray(data)) return;
+        const active = data.filter((b) => !["COMPLETED", "CANCELLED"].includes(b.status));
+        if (active.length > 0) {
+          setBookings(active);
+          setActiveBooking((prev) => {
+            const updated = active.find((b) => b.id === prev?.id);
+            return updated ?? active[0];
+          });
+        } else {
+          // All done — reload full data to show completed booking in history
+          setBookings([]);
+          setActiveBooking(null);
+          void loadData(uid);
+        }
+      } catch {
+        // Network blip — keep existing tracker visible, do not clear
+      }
+    };
+
+    const id = setInterval(poll, 2_000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydrated, currentUser?.id, hasActiveBookings]);
+  // ─────────────────────────────────────────────────────────────────────────
 
   const completedBookings = useMemo(
     () => bookings.filter((booking) => ["COMPLETED", "CANCELLED"].includes(booking.status)),
@@ -200,15 +292,89 @@ export default function ServicePage() {
     setForm((prev) => ({
       ...prev,
       fullName: prev.fullName || currentUser?.name || "",
+      phoneNumber: prev.phoneNumber || currentUser?.phone || "",
     }));
-  }, [currentUser?.name]);
+  }, [currentUser?.name, currentUser?.phone]);
 
-  // GPS-based address lookup removed by request.
+  const handleGetLocation = () => {
+    setIsLocating(true);
+    toast.info("Fetching your location...");
+
+    const fallbackToIPAddress = async () => {
+      try {
+        toast.info("GPS blocked. Trying network location...");
+        const res = await fetch("https://ipapi.co/json/");
+        if (!res.ok) throw new Error("Network fallback failed");
+        const data = await res.json();
+        
+        const postal = data?.postal || "";
+        const cityInfo = [data?.city, data?.region].filter(Boolean).join(", ");
+
+        setForm((prev) => ({
+          ...prev,
+          address: cityInfo || prev.address,
+          pincode: postal || prev.pincode,
+        }));
+        toast.success("Location found using network!");
+      } catch (err) {
+        toast.error("Could not fetch location automatically.");
+      } finally {
+        setIsLocating(false);
+      }
+    };
+
+    if (!navigator.geolocation) {
+      void fallbackToIPAddress();
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          let fetchedAddress = `GPS Location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+          let fetchedPincode = "";
+
+          try {
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`,
+              { headers: { "User-Agent": "RefriSmart-AI/1.0 (contact@refrismart.in)" } }
+            );
+            if (res.ok) {
+              const data = await res.json();
+              fetchedPincode = data?.address?.postcode || "";
+              let nomAddress = data?.display_name || "";
+              if (nomAddress) {
+                fetchedAddress = nomAddress.replace(/, India$/i, "").replace(new RegExp(`, ${fetchedPincode}$`), "").trim();
+              }
+            }
+          } catch (apiErr) {
+            // Reverse geocoding failed (rate limit/firewall), silently keep raw GPS coordinates
+          }
+
+          setForm((prev) => ({
+            ...prev,
+            address: fetchedAddress || prev.address,
+            pincode: fetchedPincode || prev.pincode,
+          }));
+          toast.success("Exact GPS location secured!");
+          setIsLocating(false);
+        } catch (err) {
+          void fallbackToIPAddress();
+        }
+      },
+      () => {
+        // If user denies permission or browser blocks it, run the IP fallback
+        void fallbackToIPAddress();
+      },
+      { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
+    );
+  };
 
   const onSubmitBooking = async (e: FormEvent) => {
     e.preventDefault();
     const trimmedPincode = form.pincode.trim();
-    const SERVICE_PIN_PREFIXES = ["813210"];
+    const SERVICE_PIN_PREFIXES = ["812", "813", "853"];
     if (!form.fullName.trim() || !form.phoneNumber.trim() || !form.issue.trim() || !form.address.trim() || !trimmedPincode) {
       toast.error("Name, phone, issue, address, and PIN code are required.");
       return;
@@ -251,19 +417,25 @@ export default function ServicePage() {
       if (!res.ok) throw new Error(payload?.error || "Booking failed.");
 
       toast.success("Service booking created successfully.");
-      const createdBooking = payload?.booking as ServiceBooking | undefined;
-      if (!createdBooking) {
+      const createdBookingInfo = payload?.booking;
+      if (!createdBookingInfo) {
         throw new Error("Booking could not be confirmed. Please try again.");
       }
+      
+      const createdBooking = {
+        ...createdBookingInfo,
+        technician: payload?.assignedTechnician || null,
+      } as ServiceBooking;
+
       if (currentUser?.id) {
-        await loadData(currentUser.id);
+        setBookings((prev) => [createdBooking, ...prev]);
+        setActiveBooking(createdBooking);
+        void loadData(currentUser.id);
       } else {
         setGuestBooking(createdBooking);
+        localStorage.setItem("gr_guest_booking", JSON.stringify({ bookingId: createdBooking.id, phone: form.phoneNumber.replace(/\D/g, "") }));
       }
       setForm((prev) => ({ ...prev, issue: "" }));
-      if (currentUser?.id) {
-        void loadData(currentUser.id);
-      }
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Booking failed.");
     } finally {
@@ -317,6 +489,7 @@ export default function ServicePage() {
       const booking = payload?.booking as ServiceBooking | undefined;
       if (!booking) throw new Error("Booking details not available.");
       setGuestBooking(booking);
+      localStorage.setItem("gr_guest_booking", JSON.stringify({ bookingId: booking.id, phone: cleanedPhone }));
     } catch (error: unknown) {
       setGuestBooking(null);
       toast.error(error instanceof Error ? error.message : "Unable to find booking.");
@@ -476,11 +649,11 @@ export default function ServicePage() {
               Loading your service tracker...
             </div>
           </section>
-        ) : (bookings && bookings.length > 0 && activeBooking) ? (
+        ) : (activeBooking || guestBooking) ? (
           <ServiceActiveTrackerCard
             loading={loading}
-            hasActiveBooking={hasActiveBookings}
-            activeBooking={activeBooking}
+            hasActiveBooking={true}
+            activeBooking={(activeBooking || guestBooking)!}
             ratingValue={ratingValue}
             setRatingValue={setRatingValue}
             ratingLoading={ratingLoading}
@@ -502,7 +675,19 @@ export default function ServicePage() {
             <p className="text-sm uppercase tracking-[0.2em] text-blue-600 font-bold mb-2">Schedule Request</p>
             <h3 className="text-3xl font-black text-slate-900">Quick Booking Desk</h3>
           </div>
-          {currentUser?.id ? (
+          {(activeBooking || guestBooking) ? (
+            <div className="flex flex-col items-center justify-center p-8 bg-blue-50/50 rounded-2xl border border-blue-100/60 shadow-inner">
+              <div className="bg-blue-100/50 text-blue-600 p-4 rounded-full mb-4">
+                <Wrench className="w-8 h-8" />
+              </div>
+              <h4 className="text-xl font-bold text-blue-900 text-center mb-2">
+                Active Request In Progress
+              </h4>
+              <p className="text-sm font-medium text-blue-700/80 text-center max-w-md">
+                You already have an active service request being processed. Please wait for the current request to complete or be cancelled before booking an entirely new one.
+              </p>
+            </div>
+          ) : currentUser?.id ? (
             <form className="w-full flex flex-col gap-8" onSubmit={onSubmitBooking}>
               <div className="grid grid-cols-2 gap-4 md:gap-6 sm:grid-cols-4">
                 {APPLIANCE_OPTIONS.map((option) => {
@@ -532,8 +717,9 @@ export default function ServicePage() {
                   <input
                     value={form.fullName}
                     onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-base text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                    className={`w-full rounded-2xl border border-slate-200 px-5 py-4 text-base text-slate-900 outline-none transition ${currentUser?.name ? 'bg-slate-100 cursor-not-allowed opacity-80' : 'bg-slate-50 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50'}`}
                     placeholder="John Doe"
+                    readOnly={Boolean(currentUser?.name)}
                     required
                   />
                 </div>
@@ -542,9 +728,10 @@ export default function ServicePage() {
                   <input
                     value={form.phoneNumber}
                     onChange={(e) => setForm((prev) => ({ ...prev, phoneNumber: e.target.value }))}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-base text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                    className={`w-full rounded-2xl border border-slate-200 px-5 py-4 text-base text-slate-900 outline-none transition ${currentUser?.phone ? 'bg-slate-100 cursor-not-allowed opacity-80' : 'bg-slate-50 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50'}`}
                     placeholder="9876543210"
                     inputMode="numeric"
+                    readOnly={Boolean(currentUser?.phone)}
                     required
                   />
                 </div>
@@ -563,7 +750,18 @@ export default function ServicePage() {
 
               <div className="grid gap-6 md:gap-8 sm:grid-cols-3">
                 <div className="sm:col-span-2 space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Service Address</label>
+                  <div className="flex items-center justify-between ml-1 mb-1">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Service Address</label>
+                    <button
+                      type="button"
+                      onClick={handleGetLocation}
+                      disabled={isLocating}
+                      className="text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50/50 hover:bg-blue-100 px-3 py-1.5 rounded-full flex items-center gap-1.5 transition-colors border border-blue-100 disabled:opacity-50"
+                    >
+                      <Navigation className="w-3 h-3" />
+                      {isLocating ? "Locating..." : "Auto-Locate"}
+                    </button>
+                  </div>
                   <input
                     value={form.address}
                     onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}

@@ -65,8 +65,8 @@ adminRoutes.post("/bookings/:bookingId/confirm-payment", userAuth, confirmManual
 adminRoutes.post("/bookings/:bookingId/cancel", userAuth, cancelServiceBooking);
 adminRoutes.get("/booking/:id/reminders", adminAuth, getBookingReminders);
 
-adminRoutes.get("/service/my-bookings/:userId", userAuth, getMyBookingsByPath);
-adminRoutes.get("/service/my-bookings", userAuth, getMyBookingsByQuery);
+adminRoutes.get("/service/my-bookings/:userId", getMyBookingsByPath);
+adminRoutes.get("/service/my-bookings", getMyBookingsByQuery);
 adminRoutes.get("/service/guest-booking", getGuestBooking);
 adminRoutes.patch("/admin/service/:id", adminAuth, updateAdminService);
 adminRoutes.post("/service/:id/rating", saveServiceRating);

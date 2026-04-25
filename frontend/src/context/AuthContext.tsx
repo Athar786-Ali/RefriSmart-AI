@@ -58,14 +58,10 @@ const readCachedUser = () => {
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUserState] = useState<AuthUser | null>(null);
+  // Instantly hydrate user from localStorage on mount to prevent any "Logged Out" UI flash
+  // before the /auth/me network call completes.
+  const [user, setUserState] = useState<AuthUser | null>(() => readCachedUser());
   const [loading, setLoading] = useState(true);
-
-  // Instantly hydrate user from cache on initial mount to completely prevent "Logged Out" UI flickering
-  useEffect(() => {
-    const cached = readCachedUser();
-    if (cached) setUserState(cached);
-  }, []);
 
   const setUser = useCallback((next: AuthUser | null) => {
     setUserState(next);
@@ -81,35 +77,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const apiBase = getApiBase();
     if (!apiBase) {
-      // Issue #21 Fix: When API_BASE is missing we have no way to verify the
-      // session, so set user to null rather than serving potentially stale
-      // and expired cached data from localStorage.
-      setUser(null);
+      // When API_BASE is missing we cannot verify the session.
+      // Only clear the user if there is no cached session to fall back on.
+      if (!readCachedUser()) setUser(null);
       setLoading(false);
       return;
     }
 
     try {
-      const apiBase = getApiBase();
       const res = await fetch(`${apiBase}/auth/me`, {
         method: "GET",
         credentials: "include",
       });
-      
-      // Fix: Only clear active session if the backend explicitly rejects the JWT
+
+      // Only clear the cached session when the backend explicitly rejects the JWT
+      // AND there is no cached user in localStorage.
+      // A brief backend restart, cookie timing issue, or hostname mismatch (localhost vs 127.0.0.1)
+      // can cause false-401s — we must NOT log the user out in those cases.
       if (res.status === 401 || res.status === 403) {
-        setUser(null);
+        if (!readCachedUser()) {
+          setUser(null);
+        }
+        // If there IS a cached user, keep them logged-in visually.
+        // The next real authenticated API call will surface the 401 and handle it.
         setLoading(false);
         return;
       }
-      
+
       const payload = await res.json().catch(() => ({}));
       if (res.ok && payload?.user?.id) {
         setUser(payload.user as AuthUser);
       }
+      // For any other non-ok status (500, 502 etc.) keep the cached user alive.
     } catch (e) {
-      // Fix: Do NOT call setUser(null) on network errors.
-      // If the user's internet drops while refreshing, they shouldn't lose their localStorage auth cache!
+      // Network error — do NOT clear the user. A dropped connection or a brief
+      // backend restart should not log the user out.
       console.warn("Network auth verification failed, keeping cached session", e);
     } finally {
       setLoading(false);

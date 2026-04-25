@@ -3,9 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Image as ImageIcon } from "lucide-react";
-import dynamic from "next/dynamic";
-
-const ReactPlayer = dynamic(() => import('react-player'), { ssr: false });
 
 type GalleryItem = {
   id: string;
@@ -25,7 +22,8 @@ export default function GalleryPage() {
         const res = await fetch(`${apiUrl}/gallery`);
         if (res.ok) {
           const data = await res.json();
-          setItems(data);
+          const imageOnlyData = data.filter((item: any) => item.mediaType !== "video" && !item.imageUrl.match(/\.(mp4|webm|mov|m3u8)$/i));
+          setItems(imageOnlyData);
         }
       } catch (err) {
         console.error("Gallery fetch error:", err);
@@ -80,29 +78,12 @@ export default function GalleryPage() {
           <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-6 space-y-6">
             {items.map((item) => (
               <div key={item.id} className="relative group break-inside-avoid overflow-hidden rounded-3xl bg-white shadow-md shadow-slate-200/50 border border-slate-200 hover:shadow-2xl hover:-translate-y-1 transition-all duration-500">
-                {/* Handle HLS */ item.imageUrl.includes('.m3u8') ? (
-                  <div className="w-full aspect-[3/4] relative pointer-events-none transform transition-transform duration-700 group-hover:scale-105">
-                    <ReactPlayer 
-                      url={item.imageUrl} 
-                      playing loop muted playsinline 
-                      width="100%" height="100%" 
-                      style={{ position: 'absolute', top: 0, left: 0, objectFit: 'cover' }} 
-                    />
-                  </div>
-                ) : /* Handle Native Video */ item.mediaType === "video" || item.imageUrl.match(/\.(mp4|webm|mov)$/i) ? (
-                  <video 
-                    src={item.imageUrl} 
-                    className="w-full h-auto object-cover transform transition-transform duration-700 group-hover:scale-105 pointer-events-none"
-                    autoPlay loop muted playsInline 
-                  />
-                ) : (
-                  <img 
-                    src={item.imageUrl} 
-                    alt={item.caption || "Appliance repair snapshot"} 
-                    className="w-full h-auto object-cover transform transition-transform duration-700 group-hover:scale-105"
-                    loading="lazy"
-                  />
-                )}
+                <img 
+                  src={item.imageUrl} 
+                  alt={item.caption || "Appliance repair snapshot"} 
+                  className="w-full h-auto object-cover transform transition-transform duration-700 group-hover:scale-105"
+                  loading="lazy"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end">
                   <div className="p-6 transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
                     <p className="text-white text-sm font-bold leading-relaxed drop-shadow-md border-l-4 border-blue-500 pl-4">

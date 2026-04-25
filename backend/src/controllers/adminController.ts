@@ -84,9 +84,12 @@ export const getBookingSlots = async (req: Request, res: Response) => {
       WHERE "active" = TRUE
       ORDER BY "id" ASC
     `;
-    const technicians = pincode
+    let technicians = pincode
       ? techRows.filter((t) => t.pincode === pincode || t.pincode.slice(0, 3) === pincode.slice(0, 3))
       : techRows;
+    if (!technicians.length) {
+      technicians = techRows; // Fallback to any active technician to cover broader areas mapped to single district.
+    }
     const slots = generateSuggestedSlots(targetDate).map((slot) => ({
       ...slot,
       technician: technicians[0] ? { id: technicians[0].id, name: technicians[0].name } : null,
@@ -145,7 +148,7 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response) =>
     if (!/^\d{6}$/.test(trimmedPincode)) {
       return res.status(400).json({ error: "Pincode must be a 6-digit number." });
     }
-    const SERVICE_PIN_PREFIXES = ["813210"];
+    const SERVICE_PIN_PREFIXES = ["812", "813", "853"];
     if (!SERVICE_PIN_PREFIXES.some((prefix) => trimmedPincode.startsWith(prefix))) {
       return res.status(400).json({ error: "Sorry, your location is outside our current service area." });
     }
@@ -164,11 +167,13 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response) =>
     if (!techRows.length) {
       return res.status(503).json({ error: "No technicians are available right now. Please try again later." });
     }
-    const matchingTechs = techRows.filter(
+    let matchingTechs = techRows.filter(
       (t) => trimmedPincode && (t.pincode === trimmedPincode || t.pincode.slice(0, 3) === trimmedPincode.slice(0, 3)),
     );
     if (!matchingTechs.length) {
-      return res.status(400).json({ error: "No technician available for this area right now." });
+      // Fallback for broad district coverage — assign ANY active technician 
+      // if the user's pincode was already verified as part of the service area prefixes.
+      matchingTechs = techRows;
     }
     const selectedTech = matchingTechs[0];
 
@@ -283,7 +288,7 @@ export const bookService = async (req: Request, res: Response) => {
     if (!/^\d{6}$/.test(trimmedPincode)) {
       return res.status(400).json({ error: "Pincode must be a 6-digit number." });
     }
-    const SERVICE_PIN_PREFIXES = ["813210"];
+    const SERVICE_PIN_PREFIXES = ["812", "813", "853"];
     if (!SERVICE_PIN_PREFIXES.some((prefix) => trimmedPincode.startsWith(prefix))) {
       return res.status(400).json({ error: "Sorry, your location is outside our current service area." });
     }
@@ -302,11 +307,13 @@ export const bookService = async (req: Request, res: Response) => {
     if (!techRows.length) {
       return res.status(503).json({ error: "No technicians are available right now. Please try again later." });
     }
-    const matchingTechs = techRows.filter(
+    let matchingTechs = techRows.filter(
       (t) => trimmedPincode && (t.pincode === trimmedPincode || t.pincode.slice(0, 3) === trimmedPincode.slice(0, 3)),
     );
     if (!matchingTechs.length) {
-      return res.status(400).json({ error: "No technician available for this area right now." });
+      // Fallback for broad district coverage — assign ANY active technician 
+      // if the user's pincode was already verified as part of the service area prefixes.
+      matchingTechs = techRows;
     }
     const selectedTech = matchingTechs[0];
 

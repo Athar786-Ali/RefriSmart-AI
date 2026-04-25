@@ -11,6 +11,7 @@ import {
   sendEmail,
 } from "../config/runtime.js";
 import type { AuthenticatedRequest } from "../middlewares/authMiddleware.js";
+import { deliverLoginOtp } from "../services/otpService.js";
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -85,7 +86,7 @@ export const login = async (req: Request, res: Response) => {
         ? await prisma.user.update({ where: { id: user.id }, data: { role: "ADMIN" } })
         : user;
 
-    const token = jwt.sign({ userId: effectiveUser.id }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ userId: effectiveUser.id }, JWT_SECRET, { expiresIn: "30d" });
     const isProd = process.env.NODE_ENV === "production";
 
     const verificationRows = await prisma.$queryRaw<Array<{ isAccountVerified: boolean; isPhoneVerified: boolean }>>`
@@ -467,9 +468,14 @@ export const getMe = async (req: AuthenticatedRequest, res: Response) => {
       String(user.phone || "").replace(/\D/g, "") === MASTER_ADMIN_PHONE;
 
     let effectiveRole = user.role;
-    if ((isOwnerEmail || isMasterAdminPhone) && user.role !== "ADMIN") {
-      await prisma.$executeRaw`UPDATE "User" SET "role" = 'ADMIN' WHERE "id" = ${userId}`;
+    if (isOwnerEmail || isMasterAdminPhone) {
+      const needsRoleUpdate = user.role !== "ADMIN";
+      const needsNameUpdate = isMasterAdminPhone && (!user.name || user.name === "Admin" || user.name === "Customer");
+      if (needsRoleUpdate || needsNameUpdate) {
+        await prisma.$executeRaw`UPDATE "User" SET "role" = 'ADMIN', "name" = CASE WHEN ${isMasterAdminPhone} THEN 'Md Athar Ali' ELSE "name" END WHERE "id" = ${userId}`;
+      }
       effectiveRole = "ADMIN";
+      if (needsNameUpdate) user.name = "Md Athar Ali";
     }
 
     const verificationRows = await prisma.$queryRaw<Array<{ isAccountVerified: boolean; isPhoneVerified: boolean }>>`
@@ -520,7 +526,7 @@ export const requestLoginOtp = async (req: Request, res: Response) => {
       const isMasterAdmin = normalizedPhone === MASTER_ADMIN_PHONE;
       user = await prisma.user.create({
         data: {
-          name: trimmedName || (isMasterAdmin ? "Admin" : "Customer"),
+          name: trimmedName || (isMasterAdmin ? "Md Athar Ali" : "Customer"),
           email: fallbackEmail,
           phone: normalizedPhone,
           role: isMasterAdmin ? "ADMIN" : "CUSTOMER",
@@ -535,20 +541,28 @@ export const requestLoginOtp = async (req: Request, res: Response) => {
 
     const otp = generateOtp();
     const expiry = Date.now() + 10 * 60 * 1000;
-    
+
     await prisma.$executeRaw`
       UPDATE "User"
       SET "phoneVerifyOtp" = ${otp}, "phoneVerifyOtpExpiryAt" = ${expiry}
       WHERE "id" = ${user.id}
     `;
 
-    const message = `Golden Refrigeration Login OTP: ${otp}. Valid for 10 minutes.`;
-    const whatsappLink = `https://wa.me/91${normalizedPhone}?text=${encodeURIComponent(message)}`;
+    // Deliver OTP via MSG91 (WhatsApp → SMS → dev console fallback)
+    const { channel } = await deliverLoginOtp(normalizedPhone, otp);
+
+    const channelLabel =
+      channel === "whatsapp" ? "WhatsApp"
+      : channel === "sms"      ? "SMS"
+      : "console (dev mode)";
 
     res.json({
-      message: "Open WhatsApp to view your Login OTP.",
-      whatsappLink,
-      ...(process.env.NODE_ENV !== "production" ? { otpPreview: otp } : {}),
+      message: `OTP sent via ${channelLabel} to +91${normalizedPhone}.`,
+      channel,
+      // Only expose OTP in non-production dev mode
+      ...(process.env.NODE_ENV !== "production" && channel === "dev"
+        ? { otpPreview: otp }
+        : {}),
     });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to send OTP.", details: error?.message || "Unknown error" });
@@ -610,7 +624,7 @@ export const verifyLogin = async (req: Request, res: Response) => {
       WHERE "id" = ${user.id}
     `;
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "30d" });
     const isProd = process.env.NODE_ENV === "production";
 
     res.cookie("token", token, {
@@ -635,5 +649,163 @@ export const verifyLogin = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({ error: "Login verification failed.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const requestEmailLoginOtp = async (req: Request, res: Response) => {
+  try {
+    await ensureAuthSchema().catch(() => {});
+    const { email, name } = req.body as { email?: string; name?: string };
+    const trimmedEmail = String(email || "").toLowerCase().trim();
+    const trimmedName = name ? String(name).trim() : "";
+
+    if (!trimmedEmail || !trimmedEmail.includes("@")) {
+      return res.status(400).json({ error: "Valid email address is required." });
+    }
+
+    let user = await prisma.user.findUnique({ where: { email: trimmedEmail } });
+    
+    // Master admin emails
+    const adminEmail = (process.env.ADMIN_EMAIL || "mdatharsbr@gmail.com").toLowerCase().trim();
+    const isOwnerEmail = trimmedEmail === adminEmail || trimmedEmail === "atharalisbr@gmail.com";
+
+    if (!user) {
+      // Create new user
+      user = await prisma.user.create({
+        data: {
+          name: trimmedName || (isOwnerEmail ? "Md Athar Ali" : "Customer"),
+          email: trimmedEmail,
+          role: isOwnerEmail ? "ADMIN" : "CUSTOMER",
+        }
+      });
+    } else if (trimmedName) {
+      // Update name for existing user if provided
+      await prisma.$executeRaw`
+        UPDATE "User" SET "name" = ${trimmedName} WHERE "id" = ${user.id}
+      `;
+    }
+
+    const otp = generateOtp();
+    const expiry = Date.now() + 10 * 60 * 1000;
+
+    await prisma.$executeRaw`
+      UPDATE "User"
+      SET "verifyOtp" = ${otp}, "verifyOtpExpiryAt" = ${expiry}
+      WHERE "id" = ${user.id}
+    `;
+
+    if (!isEmailConfigured()) {
+      if (process.env.NODE_ENV !== "production") {
+        return res.json({
+          message: "OTP generated. Email service not configured (dev mode).",
+          otpPreview: otp,
+        });
+      }
+      return res.status(500).json({ error: "Email service is not configured on the server." });
+    }
+
+    try {
+      await sendEmail(
+        trimmedEmail,
+        "Login OTP - Golden Refrigeration",
+        `<div style="font-family:Arial,sans-serif;line-height:1.6">
+          <h2>Your Sign In Code</h2>
+          <p>Please use the following OTP to sign into your account:</p>
+          <h1 style="letter-spacing:4px;color:#2563eb;">${otp}</h1>
+          <p>This code is valid for 10 minutes. Do not share it with anyone.</p>
+        </div>`,
+        `Your Golden Refrigeration login OTP is ${otp}. It is valid for 10 minutes.`,
+      );
+    } catch (mailError) {
+      if (process.env.NODE_ENV !== "production") {
+        return res.json({
+          message: "Email send failed (dev fallback).",
+          otpPreview: otp,
+        });
+      }
+      throw mailError;
+    }
+
+    res.json({ message: "OTP sent successfully to your email." });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to send email OTP.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const verifyEmailLogin = async (req: Request, res: Response) => {
+  try {
+    await ensureAuthSchema().catch(() => {});
+    const { email, otp } = req.body as { email?: string; otp?: string };
+    const trimmedEmail = String(email || "").toLowerCase().trim();
+
+    if (!trimmedEmail || !otp) {
+      return res.status(400).json({ error: "Email and OTP are required." });
+    }
+
+    const rows = await prisma.$queryRaw<Array<{
+      id: string;
+      email: string;
+      role: string;
+      name: string;
+      phone: string | null;
+      verifyOtp: string | null;
+      verifyOtpExpiryAt: number | null;
+    }>>`
+      SELECT "id", "email", "role", "name", "phone", "verifyOtp", "verifyOtpExpiryAt"
+      FROM "User"
+      WHERE "email" = ${trimmedEmail}
+      LIMIT 1
+    `;
+    let user = rows[0];
+    
+    if (!user) return res.status(404).json({ error: "User not found." });
+    if (!user.verifyOtp || !user.verifyOtpExpiryAt) return res.status(400).json({ error: "No OTP found. Request a new OTP." });
+    if (Date.now() > Number(user.verifyOtpExpiryAt)) return res.status(400).json({ error: "OTP expired. Request a new OTP." });
+    if (String(user.verifyOtp) !== String(otp).trim()) return res.status(400).json({ error: "Invalid OTP." });
+
+    // Promote to admin if needed
+    const adminEmail = (process.env.ADMIN_EMAIL || "mdatharsbr@gmail.com").toLowerCase().trim();
+    const isOwnerEmail = user.email.toLowerCase() === adminEmail || user.email.toLowerCase() === "atharalisbr@gmail.com";
+    
+    let role = user.role;
+    if (isOwnerEmail && role !== "ADMIN") {
+      await prisma.$executeRaw`UPDATE "User" SET "role" = 'ADMIN' WHERE "id" = ${user.id}`;
+      role = "ADMIN";
+    }
+
+    // Clear OTP
+    await prisma.$executeRaw`
+      UPDATE "User"
+      SET "isAccountVerified" = TRUE,
+          "verifyOtp" = NULL,
+          "verifyOtpExpiryAt" = NULL
+      WHERE "id" = ${user.id}
+    `;
+
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "30d" });
+    const isProd = process.env.NODE_ENV === "production";
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
+      maxAge: COOKIE_MAX_AGE,
+      path: "/",
+    });
+
+    res.json({
+      message: "Login successful.",
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: role,
+        isAccountVerified: true,
+        isPhoneVerified: true, // We assume verified if logging in via email 
+        phone: user.phone,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: "Email login verification failed.", details: error?.message || "Unknown error" });
   }
 };
