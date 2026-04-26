@@ -48,19 +48,23 @@ app.get("/", (req, res) => {
 
 const HOST = process.env.HOST || "0.0.0.0";
 
-const server = app.listen(PORT, HOST, () => {
-  console.log(`✅ Server is ACTIVE on http://${HOST}:${PORT}`);
-});
+if (!process.env.VERCEL) {
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`✅ Server is ACTIVE on http://${HOST}:${PORT}`);
+  });
 
-server.on("error", (err: NodeJS.ErrnoException) => {
-  if (err.code === "EADDRINUSE") {
-    console.error(`❌ Port ${PORT} is already in use. Kill the existing process first:`);
-    console.error(`   Run: lsof -ti:${PORT} | xargs kill -9`);
-  } else {
-    console.error("❌ Server failed to start:", err.message);
-  }
-  process.exit(1);
-});
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`❌ Port ${PORT} is already in use. Kill the existing process first:`);
+      console.error(`   Run: lsof -ti:${PORT} | xargs kill -9`);
+    } else {
+      console.error("❌ Server failed to start:", err.message);
+    }
+    process.exit(1);
+  });
+}
+
+export default app;
 
 process.on("uncaughtException", (err) => {
   console.error("❌ Uncaught Exception:", err.message, err.stack);
