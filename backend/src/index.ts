@@ -41,6 +41,11 @@ app.use("/api/ai", aiRoutes);
 app.use("/api", productRoutes);
 app.use("/api", adminRoutes);
 
+// Root Health Check Route (Fix for UptimeRobot 404)
+app.get("/", (req, res) => {
+  res.status(200).send("RefriSmart AI Backend is Live!");
+});
+
 const HOST = process.env.HOST || "0.0.0.0";
 
 const server = app.listen(PORT, HOST, () => {
