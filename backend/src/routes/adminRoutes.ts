@@ -46,7 +46,7 @@ import {
 import { adminAuth, userAuth } from "../middlewares/authMiddleware.js";
 
 const adminRoutes = Router();
-const galleryUpload = multer({ dest: "tmp/", limits: { fileSize: 100 * 1024 * 1024 } });
+const galleryUpload = multer({ dest: "/tmp", limits: { fileSize: 100 * 1024 * 1024 } });
 
 adminRoutes.get("/history/:userId", userAuth, getHistory);
 
