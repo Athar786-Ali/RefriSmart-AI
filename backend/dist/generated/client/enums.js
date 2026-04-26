@@ -36,7 +36,7 @@ export const Status = {
     CANCELLED: 'CANCELLED'
 };
 export const OrderStatus = {
-    ORDER_PLACED: 'ORDER_PLACED',
+    PLACED: 'PLACED',
     DISPATCHED: 'DISPATCHED',
     OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
     DELIVERED: 'DELIVERED',

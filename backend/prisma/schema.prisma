@@ -28,6 +28,7 @@ model User {
   products           Product[]
   bookings           ServiceBooking[]
   orders             ProductOrder[]
+  diagnosisLogs      DiagnosisLog[]
   sellRequests       SellRequest[]
   createdAt          DateTime @default(now())
 }
@@ -90,10 +91,29 @@ model Gallery {
   createdAt DateTime @default(now())
 }
 
+model DiagnosisLog {
+  id                 String   @id @default(uuid())
+  customerId         String?
+  customer           User?    @relation(fields: [customerId], references: [id])
+  guestName          String?
+  guestPhone         String?
+  appliance          String
+  issue              String
+  diagnosis          String
+  estimatedCostRange String?
+  mediaUrl           String?
+  mediaType          String?  @default("image")
+  createdAt          DateTime @default(now())
+
+  @@index([customerId, createdAt])
+  @@index([createdAt])
+}
+
 model Technician {
   id         String              @id @default(uuid())
   name       String
   phone      String              @unique
+  email      String?             @unique
   role       Role                @default(TECHNICIAN)
   pincode    String
   active     Boolean             @default(true)
@@ -135,6 +155,8 @@ model SellRequest {
   userId        String
   applianceType String
   brandModel    String
+  contactName   String?
+  address       String?
   conditionNote String
   expectedPrice Float?
   pincode       String?
@@ -174,7 +196,7 @@ model ProductOrder {
   customerName    String?
   deliveryPhone   String
   deliveryAddress String
-  orderStatus     OrderStatus   @default(ORDER_PLACED)
+  status          OrderStatus   @default(PLACED) @map("orderStatus")
   paymentStatus   PaymentStatus @default(PENDING)
   internalNote    String?
   paymentQR       String?
@@ -183,6 +205,15 @@ model ProductOrder {
   updatedAt       DateTime      @updatedAt
   product         Product       @relation(fields: [productId], references: [id])
   customer        User?         @relation(fields: [customerId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userEmail String
+  message   String
+  bookingId String
+  createdAt DateTime @default(now())
+  read      Boolean  @default(false)
 }
 
 // Semicolons (;) hata kar space ya new line use karo
@@ -220,7 +251,7 @@ enum Status {
 }
 
 enum OrderStatus {
-  ORDER_PLACED
+  PLACED @map("ORDER_PLACED")
   DISPATCHED
   OUT_FOR_DELIVERY
   DELIVERED

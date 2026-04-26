@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import DiagnosisSkeleton from "@/components/DiagnosisSkeleton";
 import EstimateCard from "@/components/EstimateCard";
 import { useAuth } from "@/context/AuthContext";
+import { getApiBase } from "@/lib/api";
+import type { DiagnosisItem } from "@/types";
 
 type ContactInfo = {
   phone: string;
@@ -25,20 +27,14 @@ type SpeechRecognitionCtor = new () => {
   onend: (() => void) | null;
 };
 
-type HistoryItem = {
-  id: string;
-  appliance: string;
-  issue: string;
-  aiDiagnosis: string;
-  estimatedCostRange?: string;
-  createdAt: string;
-};
+type HistoryItem = DiagnosisItem;
 
 const SERVICE_PIN_PREFIXES = ["813210"];
 const HISTORY_KEY = "gr_ai_diagnosis_history";
 
 export default function AIDiagnosis() {
   const { user } = useAuth();
+  const API = getApiBase();
   const [appliance, setAppliance] = useState("Refrigerator");
   const [issue, setIssue] = useState("");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
@@ -74,18 +70,44 @@ export default function AIDiagnosis() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = localStorage.getItem(HISTORY_KEY);
-    if (!stored) return;
-    try {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) {
-        setHistory(parsed);
+    if (!API) return;
+    if (!user?.id) {
+      if (typeof window === "undefined") return;
+      const stored = localStorage.getItem(HISTORY_KEY);
+      if (!stored) return;
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setHistory(parsed);
+        }
+      } catch (err) {
+        console.error("History load error", err);
       }
-    } catch (err) {
-      console.error("History load error", err);
+      return;
     }
-  }, []);
+
+    let cancelled = false;
+    const loadHistory = async () => {
+      try {
+        const res = await fetch(`${API}/ai/history`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const payload = await res.json().catch(() => []);
+        if (!cancelled && Array.isArray(payload)) {
+          setHistory(payload);
+          persistHistory(payload);
+        }
+      } catch (err) {
+        console.error("Diagnosis history fetch error", err);
+      }
+    };
+
+    void loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [API, persistHistory, user?.id]);
 
   const startVoiceInput = () => {
     const speechWindow = window as unknown as {
@@ -134,7 +156,7 @@ export default function AIDiagnosis() {
         formData.append("media", mediaFile);
       }
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ai/diagnose`, {
+      const res = await fetch(`${API}/ai/diagnose`, {
         method: "POST",
         credentials: "include",
         body: formData,
@@ -149,7 +171,7 @@ export default function AIDiagnosis() {
         if (data.contact) setContact(data.contact as ContactInfo);
         if (diagnosisText) {
           const newItem: HistoryItem = {
-            id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}`,
+            id: String(data?.id || (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}`)),
             appliance,
             issue,
             aiDiagnosis: diagnosisText,
@@ -213,7 +235,7 @@ export default function AIDiagnosis() {
       const diagnosisSummary = result
         ? `${result}${estimatedCostRange ? `\nEstimated cost range: ${estimatedCostRange}` : ""}`
         : "";
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/service/book`, {
+      const res = await fetch(`${API}/service/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -393,7 +415,7 @@ export default function AIDiagnosis() {
         <section className="h-fit rounded-[2.5rem] border border-slate-100 bg-white p-8 shadow-xl shadow-slate-200/40 flex flex-col gap-8">
           <div className="border-b border-slate-100 pb-4">
             <h2 className="text-2xl font-black text-slate-900">Diagnosis <br/><span className="text-blue-600">History</span></h2>
-            <p className="mt-2 text-sm font-medium text-slate-500">Saved locally to this device.</p>
+            <p className="mt-2 text-sm font-medium text-slate-500">{user?.id ? "Synced with your account." : "Saved locally to this device."}</p>
           </div>
 
           {history.length > 0 ? (
@@ -406,7 +428,9 @@ export default function AIDiagnosis() {
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-black uppercase tracking-wider text-blue-600">{item.appliance}</span>
-                    <span className="text-[10px] font-bold text-slate-400 bg-white border border-slate-100 px-2 py-1 rounded-md">{new Date(item.createdAt).toLocaleDateString()}</span>
+                    <span className="text-[10px] font-bold text-slate-400 bg-white border border-slate-100 px-2 py-1 rounded-md">
+                      {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "Saved"}
+                    </span>
                   </div>
                   <p className="line-clamp-2 text-sm font-semibold text-slate-800 group-hover:text-slate-900 leading-relaxed">{item.issue}</p>
                 </button>

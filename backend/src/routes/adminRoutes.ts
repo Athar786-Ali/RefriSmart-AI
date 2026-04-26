@@ -1,5 +1,7 @@
 import { Router } from "express";
+import multer from "multer";
 import {
+  assignTechnician,
   bookService,
   cancelServiceBooking,
   cancelBooking,
@@ -35,12 +37,16 @@ import {
   updateBookingStatus,
   updateTechnicianJobStatus,
   uploadGalleryItem,
+  uploadSellRequestImage,
   verifyServiceRazorpayPayment,
   verifyBookingOtp,
+  getTechnicianNotifications,
+  markNotificationAsRead,
 } from "../controllers/adminController.js";
 import { adminAuth, userAuth } from "../middlewares/authMiddleware.js";
 
 const adminRoutes = Router();
+const galleryUpload = multer({ dest: "tmp/", limits: { fileSize: 100 * 1024 * 1024 } });
 
 adminRoutes.get("/history/:userId", userAuth, getHistory);
 
@@ -65,21 +71,25 @@ adminRoutes.post("/bookings/:bookingId/confirm-payment", userAuth, confirmManual
 adminRoutes.post("/bookings/:bookingId/cancel", userAuth, cancelServiceBooking);
 adminRoutes.get("/booking/:id/reminders", adminAuth, getBookingReminders);
 
-adminRoutes.get("/service/my-bookings/:userId", getMyBookingsByPath);
-adminRoutes.get("/service/my-bookings", getMyBookingsByQuery);
+adminRoutes.get("/service/my-bookings/:userId", userAuth, getMyBookingsByPath);
+adminRoutes.get("/service/my-bookings", userAuth, getMyBookingsByQuery);
 adminRoutes.get("/service/guest-booking", getGuestBooking);
+adminRoutes.put("/admin/assign-technician/:id", adminAuth, assignTechnician);
 adminRoutes.patch("/admin/service/:id", adminAuth, updateAdminService);
 adminRoutes.post("/service/:id/rating", saveServiceRating);
 
-adminRoutes.post("/admin/gallery", adminAuth, uploadGalleryItem);
+adminRoutes.post("/admin/gallery", adminAuth, galleryUpload.single("media"), uploadGalleryItem);
 adminRoutes.get("/gallery", getGallery);
 adminRoutes.delete("/admin/gallery/:id", adminAuth, deleteGalleryItem);
 
 adminRoutes.get("/technician/jobs", adminAuth, getTechnicianJobs);
 adminRoutes.patch("/technician/jobs/:bookingId/status", adminAuth, updateTechnicianJobStatus);
+adminRoutes.get("/technician/notifications", userAuth, getTechnicianNotifications);
+adminRoutes.put("/technician/notifications/:id/read", userAuth, markNotificationAsRead);
 
-adminRoutes.post("/sell/request", createSellRequest);
-adminRoutes.get("/sell/requests", adminAuth, getSellRequests);
+adminRoutes.post("/sell/upload-image", userAuth, uploadSellRequestImage);
+adminRoutes.post("/sell/request", userAuth, createSellRequest);
+adminRoutes.get("/sell/requests", userAuth, getSellRequests);
 adminRoutes.post("/sell/requests/:id/offer", adminAuth, sendSellOffer);
 // R2 Fix: respondSellOffer had NO auth — anyone could accept/reject any offer anonymously.
 // This is customer-facing so userAuth is used (not adminAuth).
@@ -93,6 +103,6 @@ adminRoutes.get("/admin/stats-basic", adminAuth, getStatsBasic);
 adminRoutes.get("/admin/stats", adminAuth, getStats);
 
 adminRoutes.post("/docs/:docType", adminAuth, generateDocument);
-adminRoutes.get("/docs/invoice/:bookingId", adminAuth, generateInvoiceByBooking);
+adminRoutes.get("/docs/invoice/:bookingId", userAuth, generateInvoiceByBooking);
 
 export default adminRoutes;

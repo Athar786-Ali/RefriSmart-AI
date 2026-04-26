@@ -101,10 +101,10 @@ export function ProductsSection({ stats, setStats, API }: SectionProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input required value={prod.title} onChange={e=>setProd(p=>({...p,title:e.target.value}))} placeholder="Product title *" className={inp} />
-            <div className="flex gap-2">
-              <input required value={prod.price} onChange={e=>setProd(p=>({...p,price:e.target.value}))} placeholder="Price ₹ *" type="number" min="0" className={inp} />
+            <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+              <input required value={prod.price} onChange={e=>setProd(p=>({...p,price:e.target.value}))} placeholder="Price ₹ *" type="number" min="0" className={`${inp} flex-1 min-w-0`} />
               <button type="button" onClick={suggestPrice} disabled={priceAI}
-                className={btn("border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 whitespace-nowrap shrink-0")}>
+                className={btn("border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 shrink-0")}>
                 {priceAI ? <Loader2 className="w-4 h-4 animate-spin" /> : "AI Price"}
               </button>
             </div>

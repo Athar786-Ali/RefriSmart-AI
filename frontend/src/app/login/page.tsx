@@ -9,8 +9,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "";
+import { getApiBase } from "@/lib/api";
 
 type LoginResponse = {
   message?: string;
@@ -28,6 +27,7 @@ const RESEND_COOLDOWN = 30; // seconds
 export default function LoginPage() {
   const router = useRouter();
   const { setUser } = useAuth();
+  const API = getApiBase();
 
   const [method,    setMethod]  = useState<"email" | "phone">("email");
   const [step,      setStep]    = useState<1 | 2>(1);

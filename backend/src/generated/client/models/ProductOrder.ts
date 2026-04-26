@@ -44,7 +44,7 @@ export type ProductOrderMinAggregateOutputType = {
   customerName: string | null
   deliveryPhone: string | null
   deliveryAddress: string | null
-  orderStatus: $Enums.OrderStatus | null
+  status: $Enums.OrderStatus | null
   paymentStatus: $Enums.PaymentStatus | null
   internalNote: string | null
   paymentQR: string | null
@@ -63,7 +63,7 @@ export type ProductOrderMaxAggregateOutputType = {
   customerName: string | null
   deliveryPhone: string | null
   deliveryAddress: string | null
-  orderStatus: $Enums.OrderStatus | null
+  status: $Enums.OrderStatus | null
   paymentStatus: $Enums.PaymentStatus | null
   internalNote: string | null
   paymentQR: string | null
@@ -82,7 +82,7 @@ export type ProductOrderCountAggregateOutputType = {
   customerName: number
   deliveryPhone: number
   deliveryAddress: number
-  orderStatus: number
+  status: number
   paymentStatus: number
   internalNote: number
   paymentQR: number
@@ -111,7 +111,7 @@ export type ProductOrderMinAggregateInputType = {
   customerName?: true
   deliveryPhone?: true
   deliveryAddress?: true
-  orderStatus?: true
+  status?: true
   paymentStatus?: true
   internalNote?: true
   paymentQR?: true
@@ -130,7 +130,7 @@ export type ProductOrderMaxAggregateInputType = {
   customerName?: true
   deliveryPhone?: true
   deliveryAddress?: true
-  orderStatus?: true
+  status?: true
   paymentStatus?: true
   internalNote?: true
   paymentQR?: true
@@ -149,7 +149,7 @@ export type ProductOrderCountAggregateInputType = {
   customerName?: true
   deliveryPhone?: true
   deliveryAddress?: true
-  orderStatus?: true
+  status?: true
   paymentStatus?: true
   internalNote?: true
   paymentQR?: true
@@ -255,7 +255,7 @@ export type ProductOrderGroupByOutputType = {
   customerName: string | null
   deliveryPhone: string
   deliveryAddress: string
-  orderStatus: $Enums.OrderStatus
+  status: $Enums.OrderStatus
   paymentStatus: $Enums.PaymentStatus
   internalNote: string | null
   paymentQR: string | null
@@ -297,7 +297,7 @@ export type ProductOrderWhereInput = {
   customerName?: Prisma.StringNullableFilter<"ProductOrder"> | string | null
   deliveryPhone?: Prisma.StringFilter<"ProductOrder"> | string
   deliveryAddress?: Prisma.StringFilter<"ProductOrder"> | string
-  orderStatus?: Prisma.EnumOrderStatusFilter<"ProductOrder"> | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFilter<"ProductOrder"> | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFilter<"ProductOrder"> | $Enums.PaymentStatus
   internalNote?: Prisma.StringNullableFilter<"ProductOrder"> | string | null
   paymentQR?: Prisma.StringNullableFilter<"ProductOrder"> | string | null
@@ -318,7 +318,7 @@ export type ProductOrderOrderByWithRelationInput = {
   customerName?: Prisma.SortOrderInput | Prisma.SortOrder
   deliveryPhone?: Prisma.SortOrder
   deliveryAddress?: Prisma.SortOrder
-  orderStatus?: Prisma.SortOrder
+  status?: Prisma.SortOrder
   paymentStatus?: Prisma.SortOrder
   internalNote?: Prisma.SortOrderInput | Prisma.SortOrder
   paymentQR?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -342,7 +342,7 @@ export type ProductOrderWhereUniqueInput = Prisma.AtLeast<{
   customerName?: Prisma.StringNullableFilter<"ProductOrder"> | string | null
   deliveryPhone?: Prisma.StringFilter<"ProductOrder"> | string
   deliveryAddress?: Prisma.StringFilter<"ProductOrder"> | string
-  orderStatus?: Prisma.EnumOrderStatusFilter<"ProductOrder"> | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFilter<"ProductOrder"> | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFilter<"ProductOrder"> | $Enums.PaymentStatus
   internalNote?: Prisma.StringNullableFilter<"ProductOrder"> | string | null
   paymentQR?: Prisma.StringNullableFilter<"ProductOrder"> | string | null
@@ -363,7 +363,7 @@ export type ProductOrderOrderByWithAggregationInput = {
   customerName?: Prisma.SortOrderInput | Prisma.SortOrder
   deliveryPhone?: Prisma.SortOrder
   deliveryAddress?: Prisma.SortOrder
-  orderStatus?: Prisma.SortOrder
+  status?: Prisma.SortOrder
   paymentStatus?: Prisma.SortOrder
   internalNote?: Prisma.SortOrderInput | Prisma.SortOrder
   paymentQR?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -390,7 +390,7 @@ export type ProductOrderScalarWhereWithAggregatesInput = {
   customerName?: Prisma.StringNullableWithAggregatesFilter<"ProductOrder"> | string | null
   deliveryPhone?: Prisma.StringWithAggregatesFilter<"ProductOrder"> | string
   deliveryAddress?: Prisma.StringWithAggregatesFilter<"ProductOrder"> | string
-  orderStatus?: Prisma.EnumOrderStatusWithAggregatesFilter<"ProductOrder"> | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusWithAggregatesFilter<"ProductOrder"> | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusWithAggregatesFilter<"ProductOrder"> | $Enums.PaymentStatus
   internalNote?: Prisma.StringNullableWithAggregatesFilter<"ProductOrder"> | string | null
   paymentQR?: Prisma.StringNullableWithAggregatesFilter<"ProductOrder"> | string | null
@@ -407,7 +407,7 @@ export type ProductOrderCreateInput = {
   customerName?: string | null
   deliveryPhone: string
   deliveryAddress: string
-  orderStatus?: $Enums.OrderStatus
+  status?: $Enums.OrderStatus
   paymentStatus?: $Enums.PaymentStatus
   internalNote?: string | null
   paymentQR?: string | null
@@ -428,7 +428,7 @@ export type ProductOrderUncheckedCreateInput = {
   customerName?: string | null
   deliveryPhone: string
   deliveryAddress: string
-  orderStatus?: $Enums.OrderStatus
+  status?: $Enums.OrderStatus
   paymentStatus?: $Enums.PaymentStatus
   internalNote?: string | null
   paymentQR?: string | null
@@ -445,7 +445,7 @@ export type ProductOrderUpdateInput = {
   customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryPhone?: Prisma.StringFieldUpdateOperationsInput | string
   deliveryAddress?: Prisma.StringFieldUpdateOperationsInput | string
-  orderStatus?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFieldUpdateOperationsInput | $Enums.PaymentStatus
   internalNote?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -466,7 +466,7 @@ export type ProductOrderUncheckedUpdateInput = {
   customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryPhone?: Prisma.StringFieldUpdateOperationsInput | string
   deliveryAddress?: Prisma.StringFieldUpdateOperationsInput | string
-  orderStatus?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFieldUpdateOperationsInput | $Enums.PaymentStatus
   internalNote?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -485,7 +485,7 @@ export type ProductOrderCreateManyInput = {
   customerName?: string | null
   deliveryPhone: string
   deliveryAddress: string
-  orderStatus?: $Enums.OrderStatus
+  status?: $Enums.OrderStatus
   paymentStatus?: $Enums.PaymentStatus
   internalNote?: string | null
   paymentQR?: string | null
@@ -502,7 +502,7 @@ export type ProductOrderUpdateManyMutationInput = {
   customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryPhone?: Prisma.StringFieldUpdateOperationsInput | string
   deliveryAddress?: Prisma.StringFieldUpdateOperationsInput | string
-  orderStatus?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFieldUpdateOperationsInput | $Enums.PaymentStatus
   internalNote?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -521,7 +521,7 @@ export type ProductOrderUncheckedUpdateManyInput = {
   customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryPhone?: Prisma.StringFieldUpdateOperationsInput | string
   deliveryAddress?: Prisma.StringFieldUpdateOperationsInput | string
-  orderStatus?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFieldUpdateOperationsInput | $Enums.PaymentStatus
   internalNote?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -550,7 +550,7 @@ export type ProductOrderCountOrderByAggregateInput = {
   customerName?: Prisma.SortOrder
   deliveryPhone?: Prisma.SortOrder
   deliveryAddress?: Prisma.SortOrder
-  orderStatus?: Prisma.SortOrder
+  status?: Prisma.SortOrder
   paymentStatus?: Prisma.SortOrder
   internalNote?: Prisma.SortOrder
   paymentQR?: Prisma.SortOrder
@@ -573,7 +573,7 @@ export type ProductOrderMaxOrderByAggregateInput = {
   customerName?: Prisma.SortOrder
   deliveryPhone?: Prisma.SortOrder
   deliveryAddress?: Prisma.SortOrder
-  orderStatus?: Prisma.SortOrder
+  status?: Prisma.SortOrder
   paymentStatus?: Prisma.SortOrder
   internalNote?: Prisma.SortOrder
   paymentQR?: Prisma.SortOrder
@@ -592,7 +592,7 @@ export type ProductOrderMinOrderByAggregateInput = {
   customerName?: Prisma.SortOrder
   deliveryPhone?: Prisma.SortOrder
   deliveryAddress?: Prisma.SortOrder
-  orderStatus?: Prisma.SortOrder
+  status?: Prisma.SortOrder
   paymentStatus?: Prisma.SortOrder
   internalNote?: Prisma.SortOrder
   paymentQR?: Prisma.SortOrder
@@ -705,7 +705,7 @@ export type ProductOrderCreateWithoutCustomerInput = {
   customerName?: string | null
   deliveryPhone: string
   deliveryAddress: string
-  orderStatus?: $Enums.OrderStatus
+  status?: $Enums.OrderStatus
   paymentStatus?: $Enums.PaymentStatus
   internalNote?: string | null
   paymentQR?: string | null
@@ -724,7 +724,7 @@ export type ProductOrderUncheckedCreateWithoutCustomerInput = {
   customerName?: string | null
   deliveryPhone: string
   deliveryAddress: string
-  orderStatus?: $Enums.OrderStatus
+  status?: $Enums.OrderStatus
   paymentStatus?: $Enums.PaymentStatus
   internalNote?: string | null
   paymentQR?: string | null
@@ -772,7 +772,7 @@ export type ProductOrderScalarWhereInput = {
   customerName?: Prisma.StringNullableFilter<"ProductOrder"> | string | null
   deliveryPhone?: Prisma.StringFilter<"ProductOrder"> | string
   deliveryAddress?: Prisma.StringFilter<"ProductOrder"> | string
-  orderStatus?: Prisma.EnumOrderStatusFilter<"ProductOrder"> | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFilter<"ProductOrder"> | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFilter<"ProductOrder"> | $Enums.PaymentStatus
   internalNote?: Prisma.StringNullableFilter<"ProductOrder"> | string | null
   paymentQR?: Prisma.StringNullableFilter<"ProductOrder"> | string | null
@@ -789,7 +789,7 @@ export type ProductOrderCreateWithoutProductInput = {
   customerName?: string | null
   deliveryPhone: string
   deliveryAddress: string
-  orderStatus?: $Enums.OrderStatus
+  status?: $Enums.OrderStatus
   paymentStatus?: $Enums.PaymentStatus
   internalNote?: string | null
   paymentQR?: string | null
@@ -808,7 +808,7 @@ export type ProductOrderUncheckedCreateWithoutProductInput = {
   customerName?: string | null
   deliveryPhone: string
   deliveryAddress: string
-  orderStatus?: $Enums.OrderStatus
+  status?: $Enums.OrderStatus
   paymentStatus?: $Enums.PaymentStatus
   internalNote?: string | null
   paymentQR?: string | null
@@ -852,7 +852,7 @@ export type ProductOrderCreateManyCustomerInput = {
   customerName?: string | null
   deliveryPhone: string
   deliveryAddress: string
-  orderStatus?: $Enums.OrderStatus
+  status?: $Enums.OrderStatus
   paymentStatus?: $Enums.PaymentStatus
   internalNote?: string | null
   paymentQR?: string | null
@@ -869,7 +869,7 @@ export type ProductOrderUpdateWithoutCustomerInput = {
   customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryPhone?: Prisma.StringFieldUpdateOperationsInput | string
   deliveryAddress?: Prisma.StringFieldUpdateOperationsInput | string
-  orderStatus?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFieldUpdateOperationsInput | $Enums.PaymentStatus
   internalNote?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -888,7 +888,7 @@ export type ProductOrderUncheckedUpdateWithoutCustomerInput = {
   customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryPhone?: Prisma.StringFieldUpdateOperationsInput | string
   deliveryAddress?: Prisma.StringFieldUpdateOperationsInput | string
-  orderStatus?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFieldUpdateOperationsInput | $Enums.PaymentStatus
   internalNote?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -906,7 +906,7 @@ export type ProductOrderUncheckedUpdateManyWithoutCustomerInput = {
   customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryPhone?: Prisma.StringFieldUpdateOperationsInput | string
   deliveryAddress?: Prisma.StringFieldUpdateOperationsInput | string
-  orderStatus?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFieldUpdateOperationsInput | $Enums.PaymentStatus
   internalNote?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -924,7 +924,7 @@ export type ProductOrderCreateManyProductInput = {
   customerName?: string | null
   deliveryPhone: string
   deliveryAddress: string
-  orderStatus?: $Enums.OrderStatus
+  status?: $Enums.OrderStatus
   paymentStatus?: $Enums.PaymentStatus
   internalNote?: string | null
   paymentQR?: string | null
@@ -941,7 +941,7 @@ export type ProductOrderUpdateWithoutProductInput = {
   customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryPhone?: Prisma.StringFieldUpdateOperationsInput | string
   deliveryAddress?: Prisma.StringFieldUpdateOperationsInput | string
-  orderStatus?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFieldUpdateOperationsInput | $Enums.PaymentStatus
   internalNote?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -960,7 +960,7 @@ export type ProductOrderUncheckedUpdateWithoutProductInput = {
   customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryPhone?: Prisma.StringFieldUpdateOperationsInput | string
   deliveryAddress?: Prisma.StringFieldUpdateOperationsInput | string
-  orderStatus?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFieldUpdateOperationsInput | $Enums.PaymentStatus
   internalNote?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -978,7 +978,7 @@ export type ProductOrderUncheckedUpdateManyWithoutProductInput = {
   customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   deliveryPhone?: Prisma.StringFieldUpdateOperationsInput | string
   deliveryAddress?: Prisma.StringFieldUpdateOperationsInput | string
-  orderStatus?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
+  status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus
   paymentStatus?: Prisma.EnumPaymentStatusFieldUpdateOperationsInput | $Enums.PaymentStatus
   internalNote?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   paymentQR?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -999,7 +999,7 @@ export type ProductOrderSelect<ExtArgs extends runtime.Types.Extensions.Internal
   customerName?: boolean
   deliveryPhone?: boolean
   deliveryAddress?: boolean
-  orderStatus?: boolean
+  status?: boolean
   paymentStatus?: boolean
   internalNote?: boolean
   paymentQR?: boolean
@@ -1020,7 +1020,7 @@ export type ProductOrderSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   customerName?: boolean
   deliveryPhone?: boolean
   deliveryAddress?: boolean
-  orderStatus?: boolean
+  status?: boolean
   paymentStatus?: boolean
   internalNote?: boolean
   paymentQR?: boolean
@@ -1041,7 +1041,7 @@ export type ProductOrderSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   customerName?: boolean
   deliveryPhone?: boolean
   deliveryAddress?: boolean
-  orderStatus?: boolean
+  status?: boolean
   paymentStatus?: boolean
   internalNote?: boolean
   paymentQR?: boolean
@@ -1062,7 +1062,7 @@ export type ProductOrderSelectScalar = {
   customerName?: boolean
   deliveryPhone?: boolean
   deliveryAddress?: boolean
-  orderStatus?: boolean
+  status?: boolean
   paymentStatus?: boolean
   internalNote?: boolean
   paymentQR?: boolean
@@ -1071,7 +1071,7 @@ export type ProductOrderSelectScalar = {
   updatedAt?: boolean
 }
 
-export type ProductOrderOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "productId" | "customerId" | "productTitle" | "productImageUrl" | "price" | "customerName" | "deliveryPhone" | "deliveryAddress" | "orderStatus" | "paymentStatus" | "internalNote" | "paymentQR" | "invoiceUrl" | "createdAt" | "updatedAt", ExtArgs["result"]["productOrder"]>
+export type ProductOrderOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "productId" | "customerId" | "productTitle" | "productImageUrl" | "price" | "customerName" | "deliveryPhone" | "deliveryAddress" | "status" | "paymentStatus" | "internalNote" | "paymentQR" | "invoiceUrl" | "createdAt" | "updatedAt", ExtArgs["result"]["productOrder"]>
 export type ProductOrderInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   product?: boolean | Prisma.ProductDefaultArgs<ExtArgs>
   customer?: boolean | Prisma.ProductOrder$customerArgs<ExtArgs>
@@ -1101,7 +1101,7 @@ export type $ProductOrderPayload<ExtArgs extends runtime.Types.Extensions.Intern
     customerName: string | null
     deliveryPhone: string
     deliveryAddress: string
-    orderStatus: $Enums.OrderStatus
+    status: $Enums.OrderStatus
     paymentStatus: $Enums.PaymentStatus
     internalNote: string | null
     paymentQR: string | null
@@ -1542,7 +1542,7 @@ export interface ProductOrderFieldRefs {
   readonly customerName: Prisma.FieldRef<"ProductOrder", 'String'>
   readonly deliveryPhone: Prisma.FieldRef<"ProductOrder", 'String'>
   readonly deliveryAddress: Prisma.FieldRef<"ProductOrder", 'String'>
-  readonly orderStatus: Prisma.FieldRef<"ProductOrder", 'OrderStatus'>
+  readonly status: Prisma.FieldRef<"ProductOrder", 'OrderStatus'>
   readonly paymentStatus: Prisma.FieldRef<"ProductOrder", 'PaymentStatus'>
   readonly internalNote: Prisma.FieldRef<"ProductOrder", 'String'>
   readonly paymentQR: Prisma.FieldRef<"ProductOrder", 'String'>

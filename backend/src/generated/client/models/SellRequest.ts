@@ -39,6 +39,8 @@ export type SellRequestMinAggregateOutputType = {
   userId: string | null
   applianceType: string | null
   brandModel: string | null
+  contactName: string | null
+  address: string | null
   conditionNote: string | null
   expectedPrice: number | null
   pincode: string | null
@@ -52,6 +54,8 @@ export type SellRequestMaxAggregateOutputType = {
   userId: string | null
   applianceType: string | null
   brandModel: string | null
+  contactName: string | null
+  address: string | null
   conditionNote: string | null
   expectedPrice: number | null
   pincode: string | null
@@ -65,6 +69,8 @@ export type SellRequestCountAggregateOutputType = {
   userId: number
   applianceType: number
   brandModel: number
+  contactName: number
+  address: number
   conditionNote: number
   expectedPrice: number
   pincode: number
@@ -88,6 +94,8 @@ export type SellRequestMinAggregateInputType = {
   userId?: true
   applianceType?: true
   brandModel?: true
+  contactName?: true
+  address?: true
   conditionNote?: true
   expectedPrice?: true
   pincode?: true
@@ -101,6 +109,8 @@ export type SellRequestMaxAggregateInputType = {
   userId?: true
   applianceType?: true
   brandModel?: true
+  contactName?: true
+  address?: true
   conditionNote?: true
   expectedPrice?: true
   pincode?: true
@@ -114,6 +124,8 @@ export type SellRequestCountAggregateInputType = {
   userId?: true
   applianceType?: true
   brandModel?: true
+  contactName?: true
+  address?: true
   conditionNote?: true
   expectedPrice?: true
   pincode?: true
@@ -214,6 +226,8 @@ export type SellRequestGroupByOutputType = {
   userId: string
   applianceType: string
   brandModel: string
+  contactName: string | null
+  address: string | null
   conditionNote: string
   expectedPrice: number | null
   pincode: string | null
@@ -250,6 +264,8 @@ export type SellRequestWhereInput = {
   userId?: Prisma.StringFilter<"SellRequest"> | string
   applianceType?: Prisma.StringFilter<"SellRequest"> | string
   brandModel?: Prisma.StringFilter<"SellRequest"> | string
+  contactName?: Prisma.StringNullableFilter<"SellRequest"> | string | null
+  address?: Prisma.StringNullableFilter<"SellRequest"> | string | null
   conditionNote?: Prisma.StringFilter<"SellRequest"> | string
   expectedPrice?: Prisma.FloatNullableFilter<"SellRequest"> | number | null
   pincode?: Prisma.StringNullableFilter<"SellRequest"> | string | null
@@ -265,6 +281,8 @@ export type SellRequestOrderByWithRelationInput = {
   userId?: Prisma.SortOrder
   applianceType?: Prisma.SortOrder
   brandModel?: Prisma.SortOrder
+  contactName?: Prisma.SortOrderInput | Prisma.SortOrder
+  address?: Prisma.SortOrderInput | Prisma.SortOrder
   conditionNote?: Prisma.SortOrder
   expectedPrice?: Prisma.SortOrderInput | Prisma.SortOrder
   pincode?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -283,6 +301,8 @@ export type SellRequestWhereUniqueInput = Prisma.AtLeast<{
   userId?: Prisma.StringFilter<"SellRequest"> | string
   applianceType?: Prisma.StringFilter<"SellRequest"> | string
   brandModel?: Prisma.StringFilter<"SellRequest"> | string
+  contactName?: Prisma.StringNullableFilter<"SellRequest"> | string | null
+  address?: Prisma.StringNullableFilter<"SellRequest"> | string | null
   conditionNote?: Prisma.StringFilter<"SellRequest"> | string
   expectedPrice?: Prisma.FloatNullableFilter<"SellRequest"> | number | null
   pincode?: Prisma.StringNullableFilter<"SellRequest"> | string | null
@@ -298,6 +318,8 @@ export type SellRequestOrderByWithAggregationInput = {
   userId?: Prisma.SortOrder
   applianceType?: Prisma.SortOrder
   brandModel?: Prisma.SortOrder
+  contactName?: Prisma.SortOrderInput | Prisma.SortOrder
+  address?: Prisma.SortOrderInput | Prisma.SortOrder
   conditionNote?: Prisma.SortOrder
   expectedPrice?: Prisma.SortOrderInput | Prisma.SortOrder
   pincode?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -319,6 +341,8 @@ export type SellRequestScalarWhereWithAggregatesInput = {
   userId?: Prisma.StringWithAggregatesFilter<"SellRequest"> | string
   applianceType?: Prisma.StringWithAggregatesFilter<"SellRequest"> | string
   brandModel?: Prisma.StringWithAggregatesFilter<"SellRequest"> | string
+  contactName?: Prisma.StringNullableWithAggregatesFilter<"SellRequest"> | string | null
+  address?: Prisma.StringNullableWithAggregatesFilter<"SellRequest"> | string | null
   conditionNote?: Prisma.StringWithAggregatesFilter<"SellRequest"> | string
   expectedPrice?: Prisma.FloatNullableWithAggregatesFilter<"SellRequest"> | number | null
   pincode?: Prisma.StringNullableWithAggregatesFilter<"SellRequest"> | string | null
@@ -331,6 +355,8 @@ export type SellRequestCreateInput = {
   id?: string
   applianceType: string
   brandModel: string
+  contactName?: string | null
+  address?: string | null
   conditionNote: string
   expectedPrice?: number | null
   pincode?: string | null
@@ -346,6 +372,8 @@ export type SellRequestUncheckedCreateInput = {
   userId: string
   applianceType: string
   brandModel: string
+  contactName?: string | null
+  address?: string | null
   conditionNote: string
   expectedPrice?: number | null
   pincode?: string | null
@@ -359,6 +387,8 @@ export type SellRequestUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   applianceType?: Prisma.StringFieldUpdateOperationsInput | string
   brandModel?: Prisma.StringFieldUpdateOperationsInput | string
+  contactName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   conditionNote?: Prisma.StringFieldUpdateOperationsInput | string
   expectedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   pincode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -374,6 +404,8 @@ export type SellRequestUncheckedUpdateInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
   applianceType?: Prisma.StringFieldUpdateOperationsInput | string
   brandModel?: Prisma.StringFieldUpdateOperationsInput | string
+  contactName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   conditionNote?: Prisma.StringFieldUpdateOperationsInput | string
   expectedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   pincode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -388,6 +420,8 @@ export type SellRequestCreateManyInput = {
   userId: string
   applianceType: string
   brandModel: string
+  contactName?: string | null
+  address?: string | null
   conditionNote: string
   expectedPrice?: number | null
   pincode?: string | null
@@ -400,6 +434,8 @@ export type SellRequestUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   applianceType?: Prisma.StringFieldUpdateOperationsInput | string
   brandModel?: Prisma.StringFieldUpdateOperationsInput | string
+  contactName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   conditionNote?: Prisma.StringFieldUpdateOperationsInput | string
   expectedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   pincode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -413,6 +449,8 @@ export type SellRequestUncheckedUpdateManyInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
   applianceType?: Prisma.StringFieldUpdateOperationsInput | string
   brandModel?: Prisma.StringFieldUpdateOperationsInput | string
+  contactName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   conditionNote?: Prisma.StringFieldUpdateOperationsInput | string
   expectedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   pincode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -436,6 +474,8 @@ export type SellRequestCountOrderByAggregateInput = {
   userId?: Prisma.SortOrder
   applianceType?: Prisma.SortOrder
   brandModel?: Prisma.SortOrder
+  contactName?: Prisma.SortOrder
+  address?: Prisma.SortOrder
   conditionNote?: Prisma.SortOrder
   expectedPrice?: Prisma.SortOrder
   pincode?: Prisma.SortOrder
@@ -453,6 +493,8 @@ export type SellRequestMaxOrderByAggregateInput = {
   userId?: Prisma.SortOrder
   applianceType?: Prisma.SortOrder
   brandModel?: Prisma.SortOrder
+  contactName?: Prisma.SortOrder
+  address?: Prisma.SortOrder
   conditionNote?: Prisma.SortOrder
   expectedPrice?: Prisma.SortOrder
   pincode?: Prisma.SortOrder
@@ -466,6 +508,8 @@ export type SellRequestMinOrderByAggregateInput = {
   userId?: Prisma.SortOrder
   applianceType?: Prisma.SortOrder
   brandModel?: Prisma.SortOrder
+  contactName?: Prisma.SortOrder
+  address?: Prisma.SortOrder
   conditionNote?: Prisma.SortOrder
   expectedPrice?: Prisma.SortOrder
   pincode?: Prisma.SortOrder
@@ -547,6 +591,8 @@ export type SellRequestCreateWithoutUserInput = {
   id?: string
   applianceType: string
   brandModel: string
+  contactName?: string | null
+  address?: string | null
   conditionNote: string
   expectedPrice?: number | null
   pincode?: string | null
@@ -560,6 +606,8 @@ export type SellRequestUncheckedCreateWithoutUserInput = {
   id?: string
   applianceType: string
   brandModel: string
+  contactName?: string | null
+  address?: string | null
   conditionNote: string
   expectedPrice?: number | null
   pincode?: string | null
@@ -603,6 +651,8 @@ export type SellRequestScalarWhereInput = {
   userId?: Prisma.StringFilter<"SellRequest"> | string
   applianceType?: Prisma.StringFilter<"SellRequest"> | string
   brandModel?: Prisma.StringFilter<"SellRequest"> | string
+  contactName?: Prisma.StringNullableFilter<"SellRequest"> | string | null
+  address?: Prisma.StringNullableFilter<"SellRequest"> | string | null
   conditionNote?: Prisma.StringFilter<"SellRequest"> | string
   expectedPrice?: Prisma.FloatNullableFilter<"SellRequest"> | number | null
   pincode?: Prisma.StringNullableFilter<"SellRequest"> | string | null
@@ -615,6 +665,8 @@ export type SellRequestCreateWithoutOffersInput = {
   id?: string
   applianceType: string
   brandModel: string
+  contactName?: string | null
+  address?: string | null
   conditionNote: string
   expectedPrice?: number | null
   pincode?: string | null
@@ -629,6 +681,8 @@ export type SellRequestUncheckedCreateWithoutOffersInput = {
   userId: string
   applianceType: string
   brandModel: string
+  contactName?: string | null
+  address?: string | null
   conditionNote: string
   expectedPrice?: number | null
   pincode?: string | null
@@ -657,6 +711,8 @@ export type SellRequestUpdateWithoutOffersInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   applianceType?: Prisma.StringFieldUpdateOperationsInput | string
   brandModel?: Prisma.StringFieldUpdateOperationsInput | string
+  contactName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   conditionNote?: Prisma.StringFieldUpdateOperationsInput | string
   expectedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   pincode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -671,6 +727,8 @@ export type SellRequestUncheckedUpdateWithoutOffersInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
   applianceType?: Prisma.StringFieldUpdateOperationsInput | string
   brandModel?: Prisma.StringFieldUpdateOperationsInput | string
+  contactName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   conditionNote?: Prisma.StringFieldUpdateOperationsInput | string
   expectedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   pincode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -683,6 +741,8 @@ export type SellRequestCreateManyUserInput = {
   id?: string
   applianceType: string
   brandModel: string
+  contactName?: string | null
+  address?: string | null
   conditionNote: string
   expectedPrice?: number | null
   pincode?: string | null
@@ -695,6 +755,8 @@ export type SellRequestUpdateWithoutUserInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   applianceType?: Prisma.StringFieldUpdateOperationsInput | string
   brandModel?: Prisma.StringFieldUpdateOperationsInput | string
+  contactName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   conditionNote?: Prisma.StringFieldUpdateOperationsInput | string
   expectedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   pincode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -708,6 +770,8 @@ export type SellRequestUncheckedUpdateWithoutUserInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   applianceType?: Prisma.StringFieldUpdateOperationsInput | string
   brandModel?: Prisma.StringFieldUpdateOperationsInput | string
+  contactName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   conditionNote?: Prisma.StringFieldUpdateOperationsInput | string
   expectedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   pincode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -721,6 +785,8 @@ export type SellRequestUncheckedUpdateManyWithoutUserInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   applianceType?: Prisma.StringFieldUpdateOperationsInput | string
   brandModel?: Prisma.StringFieldUpdateOperationsInput | string
+  contactName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  address?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   conditionNote?: Prisma.StringFieldUpdateOperationsInput | string
   expectedPrice?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   pincode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -765,6 +831,8 @@ export type SellRequestSelect<ExtArgs extends runtime.Types.Extensions.InternalA
   userId?: boolean
   applianceType?: boolean
   brandModel?: boolean
+  contactName?: boolean
+  address?: boolean
   conditionNote?: boolean
   expectedPrice?: boolean
   pincode?: boolean
@@ -781,6 +849,8 @@ export type SellRequestSelectCreateManyAndReturn<ExtArgs extends runtime.Types.E
   userId?: boolean
   applianceType?: boolean
   brandModel?: boolean
+  contactName?: boolean
+  address?: boolean
   conditionNote?: boolean
   expectedPrice?: boolean
   pincode?: boolean
@@ -795,6 +865,8 @@ export type SellRequestSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.E
   userId?: boolean
   applianceType?: boolean
   brandModel?: boolean
+  contactName?: boolean
+  address?: boolean
   conditionNote?: boolean
   expectedPrice?: boolean
   pincode?: boolean
@@ -809,6 +881,8 @@ export type SellRequestSelectScalar = {
   userId?: boolean
   applianceType?: boolean
   brandModel?: boolean
+  contactName?: boolean
+  address?: boolean
   conditionNote?: boolean
   expectedPrice?: boolean
   pincode?: boolean
@@ -817,7 +891,7 @@ export type SellRequestSelectScalar = {
   createdAt?: boolean
 }
 
-export type SellRequestOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "applianceType" | "brandModel" | "conditionNote" | "expectedPrice" | "pincode" | "imageUrl" | "status" | "createdAt", ExtArgs["result"]["sellRequest"]>
+export type SellRequestOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "applianceType" | "brandModel" | "contactName" | "address" | "conditionNote" | "expectedPrice" | "pincode" | "imageUrl" | "status" | "createdAt", ExtArgs["result"]["sellRequest"]>
 export type SellRequestInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   user?: boolean | Prisma.UserDefaultArgs<ExtArgs>
   offers?: boolean | Prisma.SellRequest$offersArgs<ExtArgs>
@@ -841,6 +915,8 @@ export type $SellRequestPayload<ExtArgs extends runtime.Types.Extensions.Interna
     userId: string
     applianceType: string
     brandModel: string
+    contactName: string | null
+    address: string | null
     conditionNote: string
     expectedPrice: number | null
     pincode: string | null
@@ -1276,6 +1352,8 @@ export interface SellRequestFieldRefs {
   readonly userId: Prisma.FieldRef<"SellRequest", 'String'>
   readonly applianceType: Prisma.FieldRef<"SellRequest", 'String'>
   readonly brandModel: Prisma.FieldRef<"SellRequest", 'String'>
+  readonly contactName: Prisma.FieldRef<"SellRequest", 'String'>
+  readonly address: Prisma.FieldRef<"SellRequest", 'String'>
   readonly conditionNote: Prisma.FieldRef<"SellRequest", 'String'>
   readonly expectedPrice: Prisma.FieldRef<"SellRequest", 'Float'>
   readonly pincode: Prisma.FieldRef<"SellRequest", 'String'>

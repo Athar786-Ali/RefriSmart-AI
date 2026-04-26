@@ -3,6 +3,60 @@ import { cloudinary } from "../config/cloudinary.js";
 import { prisma } from "../config/prisma.js";
 import { razorpay, razorpayKeyId, razorpayKeySecret } from "../config/razorpay.js";
 import { ORDER_STATUS_FLOW, SHOP_UPI_ID, TECHNICIAN_PHONE, clamp, cloudinaryOptimizeUrl, createUuid, decodeCompatMetaFromDescription, demoProducts, encodeCompatMetaInDescription, ensurePhase1ProductSchema, ensurePhase2Schema, makeSimplePdfBuffer, median, parseFlexibleDate, parseOptionalNumber, tokenize, } from "../config/runtime.js";
+const ALLOWED_ORDER_STATUSES = new Set([...ORDER_STATUS_FLOW, "CANCELLED"]);
+const ORDER_STATUS_NORMALIZATION_MAP = {
+    PLACED: "PLACED",
+    ORDER_PLACED: "PLACED",
+    DISPATCHED: "DISPATCHED",
+    OUT_FOR_DELIVERY: "OUT_FOR_DELIVERY",
+    OUTFORDELIVERY: "OUT_FOR_DELIVERY",
+    DELIVERED: "DELIVERED",
+    CANCELLED: "CANCELLED",
+};
+const ORDER_RELATION_INCLUDE = {
+    product: {
+        select: { stockQty: true },
+    },
+    customer: {
+        select: {
+            name: true,
+            email: true,
+            phone: true,
+        },
+    },
+};
+const normalizeOrderStatusValue = (value) => {
+    const normalized = String(value || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    return ORDER_STATUS_NORMALIZATION_MAP[normalized] || null;
+};
+const normalizeEmailLookup = (value) => String(value || "").trim().toLowerCase();
+const normalizePhoneLookup = (value) => String(value || "").replace(/\D/g, "");
+const serializeOrder = (order) => ({
+    id: String(order.id),
+    productId: String(order.productId),
+    customerId: order.customerId ? String(order.customerId) : null,
+    productTitle: String(order.productTitle || ""),
+    productImageUrl: order.productImageUrl ? String(order.productImageUrl) : null,
+    price: Number(order.price || 0),
+    customerName: order.customerName ? String(order.customerName) : null,
+    deliveryPhone: String(order.deliveryPhone || ""),
+    deliveryAddress: String(order.deliveryAddress || ""),
+    status: normalizeOrderStatusValue(order.status ?? order.orderStatus) || "PLACED",
+    paymentStatus: String(order.paymentStatus || "PENDING"),
+    internalNote: order.internalNote ? String(order.internalNote) : null,
+    paymentQR: order.paymentQR ? String(order.paymentQR) : null,
+    invoiceUrl: order.invoiceUrl ? String(order.invoiceUrl) : null,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+    stockQty: order.product?.stockQty ?? order.stockQty ?? null,
+    userName: order.customer?.name ?? order.userName ?? null,
+    userEmail: order.customer?.email ?? order.userEmail ?? null,
+    userPhone: order.customer?.phone ?? order.userPhone ?? null,
+});
 export const getProducts = async (_req, res) => {
     try {
         await ensurePhase1ProductSchema().catch(() => { });
@@ -126,43 +180,23 @@ export const createOrder = async (req, res) => {
             const productImageUrl = Array.isArray(product.images) && product.images[0] ? String(product.images[0]) : "";
             const safeCustomerName = trimmedName || String(user.name || "Customer").trim() || "Customer";
             const paymentQR = `upi://pay?pa=${SHOP_UPI_ID}&pn=Golden%20Refrigeration&am=${amount}&cu=INR`;
-            const orderId = createUuid();
-            const rows = await tx.$queryRaw `
-        INSERT INTO "ProductOrder"
-        (
-          "id",
-          "productId",
-          "customerId",
-          "productTitle",
-          "productImageUrl",
-          "price",
-          "customerName",
-          "deliveryPhone",
-          "deliveryAddress",
-          "orderStatus",
-          "paymentStatus",
-          "paymentQR",
-          "updatedAt"
-        )
-        VALUES
-        (
-          ${orderId},
-          ${product.id},
-          ${user.id},
-          ${product.title},
-          ${productImageUrl ? cloudinaryOptimizeUrl(productImageUrl) : null},
-          ${amount},
-          ${safeCustomerName},
-          ${cleanedPhone},
-          ${trimmedAddress},
-          ${"ORDER_PLACED"},
-          ${"PENDING"},
-          ${paymentQR},
-          ${new Date()}
-        )
-        RETURNING *
-      `;
-            return { order: rows[0] || null, paymentQR };
+            const order = await tx.productOrder.create({
+                data: {
+                    id: createUuid(),
+                    productId: product.id,
+                    customerId: user.id,
+                    productTitle: product.title,
+                    productImageUrl: productImageUrl ? cloudinaryOptimizeUrl(productImageUrl) : null,
+                    price: amount,
+                    customerName: safeCustomerName,
+                    deliveryPhone: cleanedPhone,
+                    deliveryAddress: trimmedAddress,
+                    status: "PLACED",
+                    paymentStatus: "PENDING",
+                    paymentQR,
+                },
+            });
+            return { order: serializeOrder(order), paymentQR };
         });
         res.status(201).json({
             order: inserted.order,
@@ -190,16 +224,12 @@ export const getMyOrders = async (req, res) => {
         const userId = req.userId;
         if (!userId)
             return res.status(401).json({ error: "Unauthorized." });
-        const rows = await prisma.$queryRaw `
-      SELECT
-        o.*,
-        p."stockQty" AS "stockQty"
-      FROM "ProductOrder" o
-      LEFT JOIN "Product" p ON p."id" = o."productId"
-      WHERE o."customerId" = ${userId}
-      ORDER BY o."createdAt" DESC
-    `;
-        res.json(rows);
+        const orders = await prisma.productOrder.findMany({
+            where: { customerId: userId },
+            include: ORDER_RELATION_INCLUDE,
+            orderBy: { createdAt: "desc" },
+        });
+        res.json(orders.map((order) => serializeOrder(order)));
     }
     catch (error) {
         res.status(500).json({ error: "Failed to fetch customer orders.", details: error?.message || "Unknown error" });
@@ -213,17 +243,13 @@ export const getAdminOrders = async (req, res) => {
         const page = Math.max(1, Number(req.query.page || 1));
         const limit = Math.min(500, Math.max(10, Number(req.query.limit || 100)));
         const offset = (page - 1) * limit;
-        const rows = await prisma.$queryRaw `
-      SELECT
-        o.*,
-        u."name" AS "userName",
-        u."email" AS "userEmail"
-      FROM "ProductOrder" o
-      LEFT JOIN "User" u ON u."id" = o."customerId"
-      ORDER BY o."createdAt" DESC
-      LIMIT ${limit} OFFSET ${offset}
-    `;
-        res.json(rows);
+        const orders = await prisma.productOrder.findMany({
+            include: ORDER_RELATION_INCLUDE,
+            orderBy: { createdAt: "desc" },
+            skip: offset,
+            take: limit,
+        });
+        res.json(orders.map((order) => serializeOrder(order)));
     }
     catch (error) {
         res.status(500).json({ error: "Failed to fetch admin orders.", details: error?.message || "Unknown error" });
@@ -233,35 +259,83 @@ export const updateAdminOrderStatus = async (req, res) => {
     try {
         await ensurePhase2Schema().catch(() => { });
         const { id } = req.params;
-        const { orderStatus } = req.body;
-        const allowedStatuses = new Set([...ORDER_STATUS_FLOW, "CANCELLED"]);
-        if (!orderStatus || !allowedStatuses.has(orderStatus)) {
-            return res.status(400).json({ error: "Valid orderStatus is required." });
+        if (!id)
+            return res.status(400).json({ error: "Order id is required.", message: "Order id is required." });
+        const legacyBody = req.body;
+        const status = normalizeOrderStatusValue(legacyBody?.status ?? legacyBody?.orderStatus);
+        if (!status || !ALLOWED_ORDER_STATUSES.has(status)) {
+            return res.status(400).json({ error: "Valid status is required.", message: "Valid status is required." });
         }
-        const existing = await prisma.$queryRaw `
-      SELECT "id", "paymentStatus"
-      FROM "ProductOrder"
-      WHERE "id" = ${id}
-      LIMIT 1
-    `;
-        if (!existing.length)
-            return res.status(404).json({ error: "Order not found." });
-        const paymentStatus = String(existing[0]?.paymentStatus || "PENDING");
-        // Fix #8: CANCELLED is always allowed regardless of payment status.
-        // Any other forward-progression status requires confirmed payment.
-        if (orderStatus !== "ORDER_PLACED" && orderStatus !== "CANCELLED" && paymentStatus !== "PAID") {
-            return res.status(400).json({ error: "Payment not confirmed yet." });
-        }
-        const updated = await prisma.$queryRaw `
-      UPDATE "ProductOrder"
-      SET "orderStatus" = ${orderStatus}, "updatedAt" = ${new Date()}
-      WHERE "id" = ${id}
-      RETURNING *
-    `;
-        res.json({ order: updated[0] });
+        const existing = await prisma.productOrder.findUnique({
+            where: { id },
+            select: { id: true },
+        });
+        if (!existing)
+            return res.status(404).json({ error: "Order not found.", message: "Order not found." });
+        console.log("Admin selected:", status);
+        const updated = await prisma.productOrder.update({
+            where: { id },
+            data: { status },
+        });
+        console.log("Saved status:", updated.status);
+        res.json({ order: serializeOrder(updated) });
     }
     catch (error) {
         res.status(500).json({ error: "Failed to update order status.", details: error?.message || "Unknown error" });
+    }
+};
+export const reassignAdminOrderCustomer = async (req, res) => {
+    try {
+        await ensurePhase2Schema().catch(() => { });
+        const { id } = req.params;
+        if (!id)
+            return res.status(400).json({ error: "Order id is required.", message: "Order id is required." });
+        const { customerId, customerEmail, customerPhone } = req.body;
+        const normalizedCustomerId = String(customerId || "").trim();
+        const normalizedEmail = normalizeEmailLookup(customerEmail);
+        const normalizedPhone = normalizePhoneLookup(customerPhone);
+        if (!normalizedCustomerId && !normalizedEmail && !normalizedPhone) {
+            return res.status(400).json({
+                error: "customerId, customerEmail, or customerPhone is required.",
+                message: "customerId, customerEmail, or customerPhone is required.",
+            });
+        }
+        const existingOrder = await prisma.productOrder.findUnique({
+            where: { id },
+            include: ORDER_RELATION_INCLUDE,
+        });
+        if (!existingOrder)
+            return res.status(404).json({ error: "Order not found.", message: "Order not found." });
+        const targetUser = (normalizedCustomerId
+            ? await prisma.user.findUnique({ where: { id: normalizedCustomerId } })
+            : null) ||
+            (normalizedEmail
+                ? await prisma.user.findUnique({ where: { email: normalizedEmail } })
+                : null) ||
+            (normalizedPhone
+                ? await prisma.user.findFirst({ where: { phone: normalizedPhone } })
+                : null);
+        if (!targetUser) {
+            return res.status(404).json({ error: "Target customer account not found.", message: "Target customer account not found." });
+        }
+        const updatedOrder = await prisma.productOrder.update({
+            where: { id },
+            data: { customerId: targetUser.id },
+            include: ORDER_RELATION_INCLUDE,
+        });
+        console.log("Order customer reassigned:", {
+            orderId: id,
+            fromCustomerId: existingOrder.customerId,
+            toCustomerId: targetUser.id,
+            deliveryContact: existingOrder.customerName || null,
+        });
+        res.json({
+            message: "Order ownership updated successfully.",
+            order: serializeOrder(updatedOrder),
+        });
+    }
+    catch (error) {
+        res.status(500).json({ error: "Failed to reassign order ownership.", details: error?.message || "Unknown error" });
     }
 };
 export const createRazorpayOrder = async (req, res) => {
@@ -347,7 +421,7 @@ export const verifyRazorpayPayment = async (req, res) => {
             if (order.customerId && order.customerId !== userId) {
                 throw new Error("Forbidden.");
             }
-            if (order.orderStatus === "CANCELLED") {
+            if (order.status === "CANCELLED") {
                 return {
                     success: false,
                     order,
@@ -366,7 +440,7 @@ export const verifyRazorpayPayment = async (req, res) => {
                 const cancelled = await tx.productOrder.update({
                     where: { id: orderId },
                     data: {
-                        orderStatus: "CANCELLED",
+                        status: "CANCELLED",
                         paymentStatus: "PAID",
                         internalNote: "System: Payment received but stock depleted. Refund needed.",
                     },
@@ -388,7 +462,6 @@ export const verifyRazorpayPayment = async (req, res) => {
                 where: { id: orderId },
                 data: {
                     paymentStatus: "PAID",
-                    orderStatus: order.orderStatus || "ORDER_PLACED",
                 },
             });
             if (normalizedType === "REFURBISHED") {
@@ -423,10 +496,10 @@ export const verifyRazorpayPayment = async (req, res) => {
             return res.status(200).json({
                 success: false,
                 message: outcome.message,
-                order: outcome.order,
+                order: serializeOrder(outcome.order),
             });
         }
-        res.json({ success: true, order: outcome.order });
+        res.json({ success: true, order: serializeOrder(outcome.order) });
     }
     catch (error) {
         if (error?.message?.includes("Order not found")) {
@@ -448,39 +521,30 @@ export const confirmOrderPayment = async (req, res) => {
     try {
         await ensurePhase2Schema().catch(() => { });
         const { id } = req.params;
+        if (!id)
+            return res.status(400).json({ error: "Order id is required." });
         // Fix #2: This is the admin manual-payment confirmation path.
         // We use SELECT ... FOR UPDATE style locking via a conditional UPDATE to prevent
         // a race condition with verifyRazorpayPayment where both could decrement stock simultaneously.
         const updated = await prisma.$transaction(async (tx) => {
-            const rows = await tx.$queryRaw `
-        SELECT "id", "productId", "paymentStatus", "orderStatus"
-        FROM "ProductOrder"
-        WHERE "id" = ${id}
-        LIMIT 1
-      `;
-            if (!rows.length)
+            const order = await tx.productOrder.findUnique({ where: { id } });
+            if (!order)
                 throw new Error("Order not found.");
-            const order = rows[0];
             // Idempotency guard: if already paid, return current state without touching stock
             if (String(order.paymentStatus || "PENDING") === "PAID") {
-                const refreshed = await tx.$queryRaw `
-          SELECT * FROM "ProductOrder" WHERE "id" = ${id} LIMIT 1
-        `;
-                return refreshed[0] || order;
+                return order;
             }
-            if (String(order.orderStatus) === "CANCELLED") {
+            if (String(order.status) === "CANCELLED") {
                 throw new Error("Cannot confirm payment for a cancelled order.");
             }
             const product = await tx.product.findUnique({ where: { id: order.productId } });
             if (!product)
                 throw new Error("Product not found.");
             const normalizedType = product.productType || (product.isUsed ? "REFURBISHED" : "NEW");
-            // Mark payment as PAID in a single statement
-            await tx.$queryRaw `
-        UPDATE "ProductOrder"
-        SET "paymentStatus" = ${'PAID'}, "updatedAt" = ${new Date()}
-        WHERE "id" = ${id} AND "paymentStatus" <> 'PAID'
-      `;
+            await tx.productOrder.update({
+                where: { id },
+                data: { paymentStatus: "PAID" },
+            });
             if (normalizedType === "REFURBISHED") {
                 // Atomic: only mark SOLD if still AVAILABLE (prevents double-sell)
                 await tx.$queryRaw `
@@ -506,12 +570,12 @@ export const confirmOrderPayment = async (req, res) => {
                     throw new Error("Stock is already depleted.");
                 }
             }
-            const refreshed = await tx.$queryRaw `
-        SELECT * FROM "ProductOrder" WHERE "id" = ${id} LIMIT 1
-      `;
-            return refreshed[0];
+            const refreshed = await tx.productOrder.findUnique({ where: { id } });
+            if (!refreshed)
+                throw new Error("Order not found.");
+            return refreshed;
         });
-        res.json({ order: updated });
+        res.json({ order: serializeOrder(updated) });
     }
     catch (error) {
         if (error?.message?.includes("Order not found")) {
@@ -533,22 +597,17 @@ export const generateAdminOrderInvoice = async (req, res) => {
     try {
         await ensurePhase2Schema().catch(() => { });
         const { id } = req.params;
-        const rows = await prisma.$queryRaw `
-      SELECT *
-      FROM "ProductOrder"
-      WHERE "id" = ${id}
-      LIMIT 1
-    `;
-        if (!rows.length)
+        if (!id)
+            return res.status(400).json({ error: "Order id is required." });
+        const order = await prisma.productOrder.findUnique({ where: { id } });
+        if (!order)
             return res.status(404).json({ error: "Order not found." });
         const invoiceUrl = `${req.protocol}://${req.get("host")}/api/docs/order-invoice/${id}`;
-        const updated = await prisma.$queryRaw `
-      UPDATE "ProductOrder"
-      SET "invoiceUrl" = ${invoiceUrl}, "updatedAt" = ${new Date()}
-      WHERE "id" = ${id}
-      RETURNING *
-    `;
-        res.json({ order: updated[0] || rows[0], invoiceUrl });
+        const updated = await prisma.productOrder.update({
+            where: { id },
+            data: { invoiceUrl },
+        });
+        res.json({ order: serializeOrder(updated), invoiceUrl });
     }
     catch (error) {
         res.status(500).json({ error: "Failed to generate order invoice.", details: error?.message || "Unknown error" });
@@ -558,18 +617,18 @@ export const downloadOrderInvoice = async (req, res) => {
     try {
         await ensurePhase2Schema().catch(() => { });
         const { orderId } = req.params;
-        const rows = await prisma.$queryRaw `
-      SELECT
-        o.*,
-        u."email" AS "customerEmail"
-      FROM "ProductOrder" o
-      LEFT JOIN "User" u ON u."id" = o."customerId"
-      WHERE o."id" = ${orderId}
-      LIMIT 1
-    `;
-        if (!rows.length)
+        if (!orderId)
+            return res.status(400).json({ error: "orderId is required." });
+        const order = await prisma.productOrder.findUnique({
+            where: { id: orderId },
+            include: {
+                customer: {
+                    select: { email: true },
+                },
+            },
+        });
+        if (!order)
             return res.status(404).json({ error: "Order not found." });
-        const order = rows[0];
         const lines = [
             `Order ID: ${order.id}`,
             `Date: ${new Date(order.createdAt).toLocaleString("en-IN")}`,
@@ -577,7 +636,7 @@ export const downloadOrderInvoice = async (req, res) => {
             `Phone: ${order.deliveryPhone || "N/A"}`,
             `Address: ${order.deliveryAddress || "N/A"}`,
             `Product: ${order.productTitle || "N/A"}`,
-            `Order Status: ${order.orderStatus || "ORDER_PLACED"}`,
+            `Order Status: ${order.status || "PLACED"}`,
             `Amount: Rs. ${Number(order.price || 0).toLocaleString("en-IN")}`,
             `Payment Status: ${order.paymentStatus || "PENDING"}`,
         ];
@@ -595,17 +654,13 @@ export const downloadCustomerOrderInvoice = async (req, res) => {
         await ensurePhase2Schema().catch(() => { });
         const { orderId } = req.params;
         const userId = req.userId;
+        if (!orderId)
+            return res.status(400).json({ error: "orderId is required." });
         if (!userId)
             return res.status(401).json({ error: "Unauthorized." });
-        const rows = await prisma.$queryRaw `
-      SELECT *
-      FROM "ProductOrder"
-      WHERE "id" = ${orderId}
-      LIMIT 1
-    `;
-        if (!rows.length)
+        const order = await prisma.productOrder.findUnique({ where: { id: orderId } });
+        if (!order)
             return res.status(404).json({ error: "Order not found." });
-        const order = rows[0];
         if (!order.customerId || order.customerId !== userId) {
             return res.status(403).json({ error: "Forbidden." });
         }
@@ -616,7 +671,7 @@ export const downloadCustomerOrderInvoice = async (req, res) => {
             `Phone: ${order.deliveryPhone || "N/A"}`,
             `Address: ${order.deliveryAddress || "N/A"}`,
             `Product: ${order.productTitle || "N/A"}`,
-            `Order Status: ${order.orderStatus || "ORDER_PLACED"}`,
+            `Order Status: ${order.status || "PLACED"}`,
             `Amount: Rs. ${Number(order.price || 0).toLocaleString("en-IN")}`,
             `Payment Status: ${order.paymentStatus || "PENDING"}`,
         ];

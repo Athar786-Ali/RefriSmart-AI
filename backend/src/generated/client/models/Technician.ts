@@ -28,6 +28,7 @@ export type TechnicianMinAggregateOutputType = {
   id: string | null
   name: string | null
   phone: string | null
+  email: string | null
   role: $Enums.Role | null
   pincode: string | null
   active: boolean | null
@@ -38,6 +39,7 @@ export type TechnicianMaxAggregateOutputType = {
   id: string | null
   name: string | null
   phone: string | null
+  email: string | null
   role: $Enums.Role | null
   pincode: string | null
   active: boolean | null
@@ -48,6 +50,7 @@ export type TechnicianCountAggregateOutputType = {
   id: number
   name: number
   phone: number
+  email: number
   role: number
   pincode: number
   active: number
@@ -60,6 +63,7 @@ export type TechnicianMinAggregateInputType = {
   id?: true
   name?: true
   phone?: true
+  email?: true
   role?: true
   pincode?: true
   active?: true
@@ -70,6 +74,7 @@ export type TechnicianMaxAggregateInputType = {
   id?: true
   name?: true
   phone?: true
+  email?: true
   role?: true
   pincode?: true
   active?: true
@@ -80,6 +85,7 @@ export type TechnicianCountAggregateInputType = {
   id?: true
   name?: true
   phone?: true
+  email?: true
   role?: true
   pincode?: true
   active?: true
@@ -163,6 +169,7 @@ export type TechnicianGroupByOutputType = {
   id: string
   name: string
   phone: string
+  email: string | null
   role: $Enums.Role
   pincode: string
   active: boolean
@@ -194,6 +201,7 @@ export type TechnicianWhereInput = {
   id?: Prisma.StringFilter<"Technician"> | string
   name?: Prisma.StringFilter<"Technician"> | string
   phone?: Prisma.StringFilter<"Technician"> | string
+  email?: Prisma.StringNullableFilter<"Technician"> | string | null
   role?: Prisma.EnumRoleFilter<"Technician"> | $Enums.Role
   pincode?: Prisma.StringFilter<"Technician"> | string
   active?: Prisma.BoolFilter<"Technician"> | boolean
@@ -205,6 +213,7 @@ export type TechnicianOrderByWithRelationInput = {
   id?: Prisma.SortOrder
   name?: Prisma.SortOrder
   phone?: Prisma.SortOrder
+  email?: Prisma.SortOrderInput | Prisma.SortOrder
   role?: Prisma.SortOrder
   pincode?: Prisma.SortOrder
   active?: Prisma.SortOrder
@@ -215,6 +224,7 @@ export type TechnicianOrderByWithRelationInput = {
 export type TechnicianWhereUniqueInput = Prisma.AtLeast<{
   id?: string
   phone?: string
+  email?: string
   AND?: Prisma.TechnicianWhereInput | Prisma.TechnicianWhereInput[]
   OR?: Prisma.TechnicianWhereInput[]
   NOT?: Prisma.TechnicianWhereInput | Prisma.TechnicianWhereInput[]
@@ -224,12 +234,13 @@ export type TechnicianWhereUniqueInput = Prisma.AtLeast<{
   active?: Prisma.BoolFilter<"Technician"> | boolean
   createdAt?: Prisma.DateTimeFilter<"Technician"> | Date | string
   assignments?: Prisma.ServiceAssignmentListRelationFilter
-}, "id" | "phone">
+}, "id" | "phone" | "email">
 
 export type TechnicianOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
   name?: Prisma.SortOrder
   phone?: Prisma.SortOrder
+  email?: Prisma.SortOrderInput | Prisma.SortOrder
   role?: Prisma.SortOrder
   pincode?: Prisma.SortOrder
   active?: Prisma.SortOrder
@@ -246,6 +257,7 @@ export type TechnicianScalarWhereWithAggregatesInput = {
   id?: Prisma.StringWithAggregatesFilter<"Technician"> | string
   name?: Prisma.StringWithAggregatesFilter<"Technician"> | string
   phone?: Prisma.StringWithAggregatesFilter<"Technician"> | string
+  email?: Prisma.StringNullableWithAggregatesFilter<"Technician"> | string | null
   role?: Prisma.EnumRoleWithAggregatesFilter<"Technician"> | $Enums.Role
   pincode?: Prisma.StringWithAggregatesFilter<"Technician"> | string
   active?: Prisma.BoolWithAggregatesFilter<"Technician"> | boolean
@@ -256,6 +268,7 @@ export type TechnicianCreateInput = {
   id?: string
   name: string
   phone: string
+  email?: string | null
   role?: $Enums.Role
   pincode: string
   active?: boolean
@@ -267,6 +280,7 @@ export type TechnicianUncheckedCreateInput = {
   id?: string
   name: string
   phone: string
+  email?: string | null
   role?: $Enums.Role
   pincode: string
   active?: boolean
@@ -278,6 +292,7 @@ export type TechnicianUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   phone?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   role?: Prisma.EnumRoleFieldUpdateOperationsInput | $Enums.Role
   pincode?: Prisma.StringFieldUpdateOperationsInput | string
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -289,6 +304,7 @@ export type TechnicianUncheckedUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   phone?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   role?: Prisma.EnumRoleFieldUpdateOperationsInput | $Enums.Role
   pincode?: Prisma.StringFieldUpdateOperationsInput | string
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -300,6 +316,7 @@ export type TechnicianCreateManyInput = {
   id?: string
   name: string
   phone: string
+  email?: string | null
   role?: $Enums.Role
   pincode: string
   active?: boolean
@@ -310,6 +327,7 @@ export type TechnicianUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   phone?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   role?: Prisma.EnumRoleFieldUpdateOperationsInput | $Enums.Role
   pincode?: Prisma.StringFieldUpdateOperationsInput | string
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -320,6 +338,7 @@ export type TechnicianUncheckedUpdateManyInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   phone?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   role?: Prisma.EnumRoleFieldUpdateOperationsInput | $Enums.Role
   pincode?: Prisma.StringFieldUpdateOperationsInput | string
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -330,6 +349,7 @@ export type TechnicianCountOrderByAggregateInput = {
   id?: Prisma.SortOrder
   name?: Prisma.SortOrder
   phone?: Prisma.SortOrder
+  email?: Prisma.SortOrder
   role?: Prisma.SortOrder
   pincode?: Prisma.SortOrder
   active?: Prisma.SortOrder
@@ -340,6 +360,7 @@ export type TechnicianMaxOrderByAggregateInput = {
   id?: Prisma.SortOrder
   name?: Prisma.SortOrder
   phone?: Prisma.SortOrder
+  email?: Prisma.SortOrder
   role?: Prisma.SortOrder
   pincode?: Prisma.SortOrder
   active?: Prisma.SortOrder
@@ -350,6 +371,7 @@ export type TechnicianMinOrderByAggregateInput = {
   id?: Prisma.SortOrder
   name?: Prisma.SortOrder
   phone?: Prisma.SortOrder
+  email?: Prisma.SortOrder
   role?: Prisma.SortOrder
   pincode?: Prisma.SortOrder
   active?: Prisma.SortOrder
@@ -379,6 +401,7 @@ export type TechnicianCreateWithoutAssignmentsInput = {
   id?: string
   name: string
   phone: string
+  email?: string | null
   role?: $Enums.Role
   pincode: string
   active?: boolean
@@ -389,6 +412,7 @@ export type TechnicianUncheckedCreateWithoutAssignmentsInput = {
   id?: string
   name: string
   phone: string
+  email?: string | null
   role?: $Enums.Role
   pincode: string
   active?: boolean
@@ -415,6 +439,7 @@ export type TechnicianUpdateWithoutAssignmentsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   phone?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   role?: Prisma.EnumRoleFieldUpdateOperationsInput | $Enums.Role
   pincode?: Prisma.StringFieldUpdateOperationsInput | string
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -425,6 +450,7 @@ export type TechnicianUncheckedUpdateWithoutAssignmentsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   phone?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   role?: Prisma.EnumRoleFieldUpdateOperationsInput | $Enums.Role
   pincode?: Prisma.StringFieldUpdateOperationsInput | string
   active?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -466,6 +492,7 @@ export type TechnicianSelect<ExtArgs extends runtime.Types.Extensions.InternalAr
   id?: boolean
   name?: boolean
   phone?: boolean
+  email?: boolean
   role?: boolean
   pincode?: boolean
   active?: boolean
@@ -478,6 +505,7 @@ export type TechnicianSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ex
   id?: boolean
   name?: boolean
   phone?: boolean
+  email?: boolean
   role?: boolean
   pincode?: boolean
   active?: boolean
@@ -488,6 +516,7 @@ export type TechnicianSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ex
   id?: boolean
   name?: boolean
   phone?: boolean
+  email?: boolean
   role?: boolean
   pincode?: boolean
   active?: boolean
@@ -498,13 +527,14 @@ export type TechnicianSelectScalar = {
   id?: boolean
   name?: boolean
   phone?: boolean
+  email?: boolean
   role?: boolean
   pincode?: boolean
   active?: boolean
   createdAt?: boolean
 }
 
-export type TechnicianOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "phone" | "role" | "pincode" | "active" | "createdAt", ExtArgs["result"]["technician"]>
+export type TechnicianOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "phone" | "email" | "role" | "pincode" | "active" | "createdAt", ExtArgs["result"]["technician"]>
 export type TechnicianInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   assignments?: boolean | Prisma.Technician$assignmentsArgs<ExtArgs>
   _count?: boolean | Prisma.TechnicianCountOutputTypeDefaultArgs<ExtArgs>
@@ -521,6 +551,7 @@ export type $TechnicianPayload<ExtArgs extends runtime.Types.Extensions.Internal
     id: string
     name: string
     phone: string
+    email: string | null
     role: $Enums.Role
     pincode: string
     active: boolean
@@ -952,6 +983,7 @@ export interface TechnicianFieldRefs {
   readonly id: Prisma.FieldRef<"Technician", 'String'>
   readonly name: Prisma.FieldRef<"Technician", 'String'>
   readonly phone: Prisma.FieldRef<"Technician", 'String'>
+  readonly email: Prisma.FieldRef<"Technician", 'String'>
   readonly role: Prisma.FieldRef<"Technician", 'Role'>
   readonly pincode: Prisma.FieldRef<"Technician", 'String'>
   readonly active: Prisma.FieldRef<"Technician", 'Boolean'>

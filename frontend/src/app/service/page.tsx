@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { FormEvent, type ComponentType, useEffect, useMemo, useRef, useState } from "react";
-import { AirVent, Microwave, Refrigerator, WashingMachine, Navigation, Wrench } from "lucide-react";
+import { AirVent, Microwave, Refrigerator, WashingMachine, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import ServiceActiveTrackerCard, { type ServiceBooking } from "@/components/ServiceActiveTrackerCard";
 import ServiceHistoryCard from "@/components/ServiceHistoryCard";
+import { getApiBase } from "@/lib/api";
 import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/razorpay";
+import { getServiceStatusLabel, isAwaitingServicePayment, isClosedDisplayStatus } from "@/lib/service-status";
 
 type GalleryItem = {
   id: string;
@@ -25,9 +27,7 @@ type BookingFormState = {
   pincode: string;
 };
 
-const API = process.env.NEXT_PUBLIC_API_URL;
-const FALLBACK_GALLERY_IMAGE =
-  "https://images.unsplash.com/photo-1626806787461-102c1bfaaea1?q=80&w=900&auto=format&fit=crop";
+const SERVICE_BOOKING_CACHE_PREFIX = "gr_service_bookings";
 
 const APPLIANCE_OPTIONS: Array<{
   label: BookingFormState["appliance"];
@@ -66,6 +66,27 @@ type EmptyServiceStateProps = {
   onBookNow: () => void;
 };
 
+type BookingListResponse = {
+  bookings?: ServiceBooking[];
+  activeBookings?: ServiceBooking[];
+  previousBookings?: ServiceBooking[];
+};
+
+const extractBookings = (payload: unknown) => {
+  if (Array.isArray(payload)) return payload as ServiceBooking[];
+  if (payload && typeof payload === "object" && Array.isArray((payload as BookingListResponse).bookings)) {
+    return (payload as BookingListResponse).bookings as ServiceBooking[];
+  }
+  return [];
+};
+
+const isClosedBooking = (booking: Pick<ServiceBooking, "status" | "displayStatus">) =>
+  isClosedDisplayStatus(booking);
+
+const getServiceBookingCacheKey = (userId: string) => `${SERVICE_BOOKING_CACHE_PREFIX}:${userId}`;
+
+const normalizePincode = (value?: string | null) => String(value || "").replace(/\D/g, "").slice(0, 6);
+
 const EmptyServiceState = ({ onBookNow }: EmptyServiceStateProps) => (
   <section className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/70 p-6 shadow-sm">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -90,6 +111,7 @@ const EmptyServiceState = ({ onBookNow }: EmptyServiceStateProps) => (
 );
 
 export default function ServicePage() {
+  const API = getApiBase();
   const [hasMounted, setHasMounted] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ id: string; name?: string; email?: string; phone?: string | null } | null>(null);
@@ -99,7 +121,6 @@ export default function ServicePage() {
   const [loading, setLoading] = useState(true);
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [ratingLoading, setRatingLoading] = useState(false);
-  const [isLocating, setIsLocating] = useState(false);
   const [ratingValue, setRatingValue] = useState(0);
   const [guestLookupLoading, setGuestLookupLoading] = useState(false);
   const [guestLookup, setGuestLookup] = useState({ bookingId: "", phone: "" });
@@ -144,8 +165,16 @@ export default function ServicePage() {
         email: authUser.email,
         phone: authUser.phone,
       });
+      return;
     }
-  }, [authUser]);
+    if (isHydrated) setCurrentUser(null);
+  }, [authUser, isHydrated]);
+
+  useEffect(() => {
+    if (!currentUser?.id || typeof window === "undefined") return;
+    setGuestBooking(null);
+    localStorage.removeItem("gr_guest_booking");
+  }, [currentUser?.id]);
 
   // Load local guest booking if not logged in
   useEffect(() => {
@@ -188,7 +217,7 @@ export default function ServicePage() {
 
       if (userId) {
         const [bookingsRes, galleryPayload] = await Promise.all([
-          fetch(`${API}/service/my-bookings?userId=${userId}`, {
+          fetch(`${API}/service/my-bookings`, {
             credentials: "include",
             cache: "no-store",
           }),
@@ -197,27 +226,32 @@ export default function ServicePage() {
 
         if (bookingsRes.ok) {
           const bookingsPayload = await bookingsRes.json().catch(() => null);
-          if (Array.isArray(bookingsPayload)) {
-            const activeBookings = bookingsPayload.filter(
-              (b) => !["COMPLETED", "CANCELLED"].includes(b.status)
-            );
-            if (activeBookings.length > 0) {
-              setBookings(activeBookings);
-              setActiveBooking((prev) => prev ?? activeBookings[0]);
+          const allBookings = extractBookings(bookingsPayload);
+          const activeBookings = allBookings.filter((booking) => !isClosedBooking(booking));
+          console.log("Bookings API response:", allBookings);
+          setBookings(allBookings);
+          setActiveBooking((prev) => activeBookings.find((booking) => booking.id === prev?.id) ?? activeBookings[0] ?? null);
+          if (typeof window !== "undefined") {
+            if (allBookings.length) {
+              localStorage.setItem(getServiceBookingCacheKey(userId), JSON.stringify(allBookings));
             } else {
-              setBookings([]);
-              setActiveBooking(null);
+              localStorage.removeItem(getServiceBookingCacheKey(userId));
             }
           }
-          // If not ok or not array, preserve existing state (don't wipe tracker)
+        } else {
+          const errorPayload = await bookingsRes.json().catch(() => null);
+          console.error("MY BOOKINGS API FAILED:", {
+            status: bookingsRes.status,
+            body: errorPayload,
+          });
         }
         setGallery(Array.isArray(galleryPayload) ? galleryPayload.slice(0, 8) : []);
       } else {
         const galleryPayload = await galleryPromise;
         setGallery(Array.isArray(galleryPayload) ? galleryPayload.slice(0, 8) : []);
       }
-    } catch {
-      // Network error — preserve existing booking state, don't wipe tracker
+    } catch (error) {
+      console.error("MY BOOKINGS FETCH ERROR:", error);
     } finally {
       setLoading(false);
     }
@@ -225,56 +259,81 @@ export default function ServicePage() {
 
   useEffect(() => {
     if (!isHydrated) return;
+    if (currentUser?.id && typeof window !== "undefined") {
+      const cached = localStorage.getItem(getServiceBookingCacheKey(currentUser.id));
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached) as ServiceBooking[];
+          if (Array.isArray(parsed)) {
+            const activeBookings = parsed.filter((booking) => !isClosedBooking(booking));
+            setBookings(parsed);
+            setActiveBooking((prev) => activeBookings.find((booking) => booking.id === prev?.id) ?? activeBookings[0] ?? null);
+          }
+        } catch {
+          // Ignore malformed local cache and continue with network fetch.
+        }
+      }
+    }
     setLoading(true);
     void loadData(currentUser?.id);
   }, [isHydrated, currentUser?.id]);
+ 
+  const trackerBooking = currentUser?.id ? activeBooking : guestBooking;
+  const hasVisibleTrackerBooking = Boolean(trackerBooking && !isClosedBooking(trackerBooking));
 
-  const hasActiveBookings = Array.isArray(bookings) && bookings.length > 0;
-
-  // ── 2-second live poll: only fetch booking status (not gallery) ──────────
+  // Keep the tracker fresh so admin-side updates appear automatically for the customer.
   const userIdRef = useRef<string | undefined>(undefined);
   useEffect(() => { userIdRef.current = currentUser?.id; }, [currentUser?.id]);
 
   useEffect(() => {
-    if (!isHydrated || !currentUser?.id || !hasActiveBookings) return;
+    if (!isHydrated || !currentUser?.id) return;
     if (!API) return;
 
     const poll = async () => {
       const uid = userIdRef.current;
       if (!uid) return;
       try {
-        const res = await fetch(`${API}/service/my-bookings?userId=${uid}`, {
+        const res = await fetch(`${API}/service/my-bookings`, {
           credentials: "include", cache: "no-store",
         });
-        if (!res.ok) return;
-        const data = await res.json().catch(() => null);
-        if (!Array.isArray(data)) return;
-        const active = data.filter((b) => !["COMPLETED", "CANCELLED"].includes(b.status));
-        if (active.length > 0) {
-          setBookings(active);
-          setActiveBooking((prev) => {
-            const updated = active.find((b) => b.id === prev?.id);
-            return updated ?? active[0];
+        if (!res.ok) {
+          const errorPayload = await res.json().catch(() => null);
+          console.error("MY BOOKINGS POLL FAILED:", {
+            status: res.status,
+            body: errorPayload,
           });
-        } else {
-          // All done — reload full data to show completed booking in history
-          setBookings([]);
-          setActiveBooking(null);
-          void loadData(uid);
+          return;
         }
-      } catch {
-        // Network blip — keep existing tracker visible, do not clear
+        const payload = await res.json().catch(() => null);
+        const data = extractBookings(payload);
+        const active = data.filter((booking) => !isClosedBooking(booking));
+        console.log("Bookings API response:", data);
+        setBookings(data);
+        if (typeof window !== "undefined") {
+          if (data.length) {
+            localStorage.setItem(getServiceBookingCacheKey(uid), JSON.stringify(data));
+          } else {
+            localStorage.removeItem(getServiceBookingCacheKey(uid));
+          }
+        }
+        setActiveBooking((prev) => {
+          if (!active.length) return null;
+          const updated = active.find((booking) => booking.id === prev?.id);
+          return updated ?? active[0];
+        });
+      } catch (error) {
+        console.error("MY BOOKINGS POLL ERROR:", error);
       }
     };
 
-    const id = setInterval(poll, 2_000);
+    void poll();
+    const id = setInterval(poll, 5_000);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHydrated, currentUser?.id, hasActiveBookings]);
-  // ─────────────────────────────────────────────────────────────────────────
+  }, [API, isHydrated, currentUser?.id]);
 
   const completedBookings = useMemo(
-    () => bookings.filter((booking) => ["COMPLETED", "CANCELLED"].includes(booking.status)),
+    () => bookings.filter((booking) => isClosedBooking(booking)),
     [bookings],
   );
 
@@ -295,81 +354,6 @@ export default function ServicePage() {
       phoneNumber: prev.phoneNumber || currentUser?.phone || "",
     }));
   }, [currentUser?.name, currentUser?.phone]);
-
-  const handleGetLocation = () => {
-    setIsLocating(true);
-    toast.info("Fetching your location...");
-
-    const fallbackToIPAddress = async () => {
-      try {
-        toast.info("GPS blocked. Trying network location...");
-        const res = await fetch("https://ipapi.co/json/");
-        if (!res.ok) throw new Error("Network fallback failed");
-        const data = await res.json();
-        
-        const postal = data?.postal || "";
-        const cityInfo = [data?.city, data?.region].filter(Boolean).join(", ");
-
-        setForm((prev) => ({
-          ...prev,
-          address: cityInfo || prev.address,
-          pincode: postal || prev.pincode,
-        }));
-        toast.success("Location found using network!");
-      } catch (err) {
-        toast.error("Could not fetch location automatically.");
-      } finally {
-        setIsLocating(false);
-      }
-    };
-
-    if (!navigator.geolocation) {
-      void fallbackToIPAddress();
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-          let fetchedAddress = `GPS Location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
-          let fetchedPincode = "";
-
-          try {
-            const res = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`,
-              { headers: { "User-Agent": "RefriSmart-AI/1.0 (contact@refrismart.in)" } }
-            );
-            if (res.ok) {
-              const data = await res.json();
-              fetchedPincode = data?.address?.postcode || "";
-              let nomAddress = data?.display_name || "";
-              if (nomAddress) {
-                fetchedAddress = nomAddress.replace(/, India$/i, "").replace(new RegExp(`, ${fetchedPincode}$`), "").trim();
-              }
-            }
-          } catch (apiErr) {
-            // Reverse geocoding failed (rate limit/firewall), silently keep raw GPS coordinates
-          }
-
-          setForm((prev) => ({
-            ...prev,
-            address: fetchedAddress || prev.address,
-            pincode: fetchedPincode || prev.pincode,
-          }));
-          toast.success("Exact GPS location secured!");
-          setIsLocating(false);
-        } catch (err) {
-          void fallbackToIPAddress();
-        }
-      },
-      () => {
-        // If user denies permission or browser blocks it, run the IP fallback
-        void fallbackToIPAddress();
-      },
-      { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
-    );
-  };
 
   const onSubmitBooking = async (e: FormEvent) => {
     e.preventDefault();
@@ -408,8 +392,6 @@ export default function ServicePage() {
           phoneNumber: form.phoneNumber.replace(/\D/g, ""),
           address: form.address,
           pincode: trimmedPincode,
-          lat: undefined,
-          lng: undefined,
         }),
       });
 
@@ -428,7 +410,13 @@ export default function ServicePage() {
       } as ServiceBooking;
 
       if (currentUser?.id) {
-        setBookings((prev) => [createdBooking, ...prev]);
+        setBookings((prev) => {
+          const next = [createdBooking, ...prev.filter((booking) => booking.id !== createdBooking.id)];
+          if (typeof window !== "undefined") {
+            localStorage.setItem(getServiceBookingCacheKey(currentUser.id), JSON.stringify(next));
+          }
+          return next;
+        });
         setActiveBooking(createdBooking);
         void loadData(currentUser.id);
       } else {
@@ -499,29 +487,8 @@ export default function ServicePage() {
   };
 
   const downloadInvoice = async (booking: ServiceBooking) => {
-    if (booking.invoiceUrl) {
-      window.open(booking.invoiceUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-
-    const res = await fetch(`${API}/docs/invoice`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ bookingId: booking.id, amount: booking.finalCost || 0, gst: 18 }),
-    });
-    if (!res.ok) {
-      toast.error("Failed to generate invoice.");
-      return;
-    }
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `invoice-${booking.id}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const invoiceUrl = booking.invoiceUrl || `${API}/docs/invoice/${booking.id}`;
+    window.open(invoiceUrl, "_blank", "noopener,noreferrer");
   };
 
   const handleServicePayment = async () => {
@@ -534,7 +501,7 @@ export default function ServicePage() {
       toast.error("Please login to pay.");
       return;
     }
-    if (activeBooking.status !== "PAYMENT_PENDING" || Number(activeBooking.finalCost || 0) <= 0) {
+    if (!isAwaitingServicePayment(activeBooking) || Number(activeBooking.finalCost || 0) <= 0) {
       toast.error("Payment is not available yet for this booking.");
       return;
     }
@@ -649,11 +616,11 @@ export default function ServicePage() {
               Loading your service tracker...
             </div>
           </section>
-        ) : (activeBooking || guestBooking) ? (
+        ) : hasVisibleTrackerBooking ? (
           <ServiceActiveTrackerCard
             loading={loading}
             hasActiveBooking={true}
-            activeBooking={(activeBooking || guestBooking)!}
+            activeBooking={trackerBooking!}
             ratingValue={ratingValue}
             setRatingValue={setRatingValue}
             ratingLoading={ratingLoading}
@@ -675,7 +642,7 @@ export default function ServicePage() {
             <p className="text-sm uppercase tracking-[0.2em] text-blue-600 font-bold mb-2">Schedule Request</p>
             <h3 className="text-3xl font-black text-slate-900">Quick Booking Desk</h3>
           </div>
-          {(activeBooking || guestBooking) ? (
+          {hasVisibleTrackerBooking ? (
             <div className="flex flex-col items-center justify-center p-8 bg-blue-50/50 rounded-2xl border border-blue-100/60 shadow-inner">
               <div className="bg-blue-100/50 text-blue-600 p-4 rounded-full mb-4">
                 <Wrench className="w-8 h-8" />
@@ -705,7 +672,7 @@ export default function ServicePage() {
                       }`}
                     >
                       <Icon className={`h-8 w-8 ${selected ? "text-blue-600" : "text-slate-400"}`} />
-                      <span className={`text-sm font-bold ${selected ? "text-blue-800" : "text-slate-500"}`}>{option.label}</span>
+                      <span className={`text-sm font-bold text-center leading-tight ${selected ? "text-blue-800" : "text-slate-500"}`}>{option.label}</span>
                     </button>
                   );
                 })}
@@ -750,18 +717,7 @@ export default function ServicePage() {
 
               <div className="grid gap-6 md:gap-8 sm:grid-cols-3">
                 <div className="sm:col-span-2 space-y-2">
-                  <div className="flex items-center justify-between ml-1 mb-1">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Service Address</label>
-                    <button
-                      type="button"
-                      onClick={handleGetLocation}
-                      disabled={isLocating}
-                      className="text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50/50 hover:bg-blue-100 px-3 py-1.5 rounded-full flex items-center gap-1.5 transition-colors border border-blue-100 disabled:opacity-50"
-                    >
-                      <Navigation className="w-3 h-3" />
-                      {isLocating ? "Locating..." : "Auto-Locate"}
-                    </button>
-                  </div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Service Address</label>
                   <input
                     value={form.address}
                     onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
@@ -774,7 +730,7 @@ export default function ServicePage() {
                   <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">PIN Code</label>
                   <input
                     value={form.pincode}
-                    onChange={(e) => setForm((prev) => ({ ...prev, pincode: e.target.value }))}
+                    onChange={(e) => setForm((prev) => ({ ...prev, pincode: normalizePincode(e.target.value) }))}
                     className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-base text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
                     placeholder="813210"
                     inputMode="numeric"
@@ -840,10 +796,10 @@ export default function ServicePage() {
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-6 text-sm text-slate-700 mt-4">
                 <div className="grid gap-3 md:grid-cols-2">
                   <p><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Appliance</span> <br/> {guestBooking.appliance}</p>
-                  <p><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Status</span> <br/> <strong className="text-emerald-700">{guestBooking.status.replace(/_/g, " ")}</strong></p>
+                  <p><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Status</span> <br/> <strong className="text-emerald-700">{guestBooking.statusLabel || getServiceStatusLabel(guestBooking)}</strong></p>
                   <p className="md:col-span-2"><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Issue</span> <br/> {guestBooking.issue}</p>
-                  <p><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Scheduled</span> <br/> {new Date(guestBooking.scheduledAt).toLocaleString("en-IN")}</p>
-                  <p><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Technician</span> <br/> {guestBooking.technician?.name || "Assigning..."}</p>
+                  <p><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Date</span> <br/> {new Date(guestBooking.scheduledAt).toLocaleString("en-IN")}</p>
+                  <p><span className="font-bold text-slate-500 uppercase text-xs mr-2 border-b border-slate-200">Technician</span> <br/> {guestBooking.technicianName || guestBooking.technician?.name || "Assigning..."}</p>
                 </div>
               </div>
             )}

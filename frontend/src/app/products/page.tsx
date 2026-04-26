@@ -3,17 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Search, Info, PackageOpen, BadgeCheck } from "lucide-react";
 import ProductCard from "@/components/ProductCard";
 import ProductSkeleton from "@/components/ProductSkeleton";
+import { getApiBase } from "@/lib/api";
 import type { NormalizedProduct, Product } from "@/types";
-
-const resolveApiBase = () => {
-  const envBase = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (envBase) return envBase;
-  if (typeof window !== "undefined") {
-    const { protocol, hostname } = window.location;
-    return `${protocol}//${hostname}:5001/api`;
-  }
-  return "";
-};
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -21,7 +12,7 @@ export default function ProductsPage() {
 
   const fetchProducts = useCallback(async (showLoader = false) => {
     if (showLoader) setLoading(true);
-    const apiBase = resolveApiBase();
+    const apiBase = getApiBase();
     if (!apiBase) {
       console.error("NEXT_PUBLIC_API_URL is not configured.");
       if (showLoader) setLoading(false);

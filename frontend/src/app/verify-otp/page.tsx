@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { MailCheck, Phone, ShieldCheck } from "lucide-react";
+import { getApiBase } from "@/lib/api";
 
 type VerifyResponse = {
   message?: string;
@@ -13,6 +14,7 @@ type VerifyResponse = {
 
 export default function VerifyOtpPage() {
   const router = useRouter();
+  const API = getApiBase();
   const [otp, setOtp] = useState("");
   const [channel, setChannel] = useState<"email" | "phone">("email");
   const [phone, setPhone] = useState("");
@@ -51,7 +53,7 @@ export default function VerifyOtpPage() {
     setSending(true);
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/${channel === "email" ? "auth/send-verify-otp" : "auth/send-whatsapp-otp"}`,
+        `${API}/${channel === "email" ? "auth/send-verify-otp" : "auth/send-whatsapp-otp"}`,
         {
           method: "POST",
           headers: channel === "phone" ? { "Content-Type": "application/json" } : undefined,
@@ -86,7 +88,7 @@ export default function VerifyOtpPage() {
     setVerifying(true);
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/${channel === "email" ? "auth/verify-otp" : "auth/verify-phone-otp"}`,
+        `${API}/${channel === "email" ? "auth/verify-otp" : "auth/verify-phone-otp"}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

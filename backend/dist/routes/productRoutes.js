@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { addProduct, confirmOrderPayment, createOrder, createRazorpayOrder, deleteProduct, downloadCustomerOrderInvoice, downloadOrderInvoice, generateAdminOrderInvoice, getAdminOrders, getMyOrders, getProducts, seedDemoProducts, suggestPrice, updateAdminOrderStatus, uploadProductImage, verifyRazorpayPayment, } from "../controllers/productController.js";
+import { addProduct, confirmOrderPayment, createOrder, createRazorpayOrder, deleteProduct, downloadCustomerOrderInvoice, downloadOrderInvoice, generateAdminOrderInvoice, getAdminOrders, getMyOrders, getProducts, reassignAdminOrderCustomer, seedDemoProducts, suggestPrice, updateAdminOrderStatus, uploadProductImage, verifyRazorpayPayment, } from "../controllers/productController.js";
 import { adminAuth, userAuth } from "../middlewares/authMiddleware.js";
 const productRoutes = Router();
 productRoutes.get("/products", getProducts);
@@ -12,6 +12,7 @@ productRoutes.post("/orders/:orderId/razorpay", userAuth, createRazorpayOrder);
 productRoutes.post("/orders/:orderId/razorpay/verify", userAuth, verifyRazorpayPayment);
 productRoutes.get("/admin/orders", adminAuth, getAdminOrders);
 productRoutes.patch("/admin/orders/:id", adminAuth, updateAdminOrderStatus);
+productRoutes.patch("/admin/orders/:id/reassign-customer", adminAuth, reassignAdminOrderCustomer);
 productRoutes.patch("/admin/orders/:id/confirm-payment", adminAuth, confirmOrderPayment);
 productRoutes.post("/admin/orders/:id/generate-invoice", adminAuth, generateAdminOrderInvoice);
 productRoutes.get("/docs/order-invoice/:orderId", adminAuth, downloadOrderInvoice);

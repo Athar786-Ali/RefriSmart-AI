@@ -55,6 +55,7 @@ export const ModelName = {
   Product: 'Product',
   ServiceBooking: 'ServiceBooking',
   Gallery: 'Gallery',
+  DiagnosisLog: 'DiagnosisLog',
   Technician: 'Technician',
   ServiceAssignment: 'ServiceAssignment',
   ServiceEvent: 'ServiceEvent',
@@ -62,7 +63,8 @@ export const ModelName = {
   SellRequest: 'SellRequest',
   SellOffer: 'SellOffer',
   DocumentLog: 'DocumentLog',
-  ProductOrder: 'ProductOrder'
+  ProductOrder: 'ProductOrder',
+  Notification: 'Notification'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -161,10 +163,28 @@ export const GalleryScalarFieldEnum = {
 export type GalleryScalarFieldEnum = (typeof GalleryScalarFieldEnum)[keyof typeof GalleryScalarFieldEnum]
 
 
+export const DiagnosisLogScalarFieldEnum = {
+  id: 'id',
+  customerId: 'customerId',
+  guestName: 'guestName',
+  guestPhone: 'guestPhone',
+  appliance: 'appliance',
+  issue: 'issue',
+  diagnosis: 'diagnosis',
+  estimatedCostRange: 'estimatedCostRange',
+  mediaUrl: 'mediaUrl',
+  mediaType: 'mediaType',
+  createdAt: 'createdAt'
+} as const
+
+export type DiagnosisLogScalarFieldEnum = (typeof DiagnosisLogScalarFieldEnum)[keyof typeof DiagnosisLogScalarFieldEnum]
+
+
 export const TechnicianScalarFieldEnum = {
   id: 'id',
   name: 'name',
   phone: 'phone',
+  email: 'email',
   role: 'role',
   pincode: 'pincode',
   active: 'active',
@@ -213,6 +233,8 @@ export const SellRequestScalarFieldEnum = {
   userId: 'userId',
   applianceType: 'applianceType',
   brandModel: 'brandModel',
+  contactName: 'contactName',
+  address: 'address',
   conditionNote: 'conditionNote',
   expectedPrice: 'expectedPrice',
   pincode: 'pincode',
@@ -257,7 +279,7 @@ export const ProductOrderScalarFieldEnum = {
   customerName: 'customerName',
   deliveryPhone: 'deliveryPhone',
   deliveryAddress: 'deliveryAddress',
-  orderStatus: 'orderStatus',
+  status: 'status',
   paymentStatus: 'paymentStatus',
   internalNote: 'internalNote',
   paymentQR: 'paymentQR',
@@ -267,6 +289,18 @@ export const ProductOrderScalarFieldEnum = {
 } as const
 
 export type ProductOrderScalarFieldEnum = (typeof ProductOrderScalarFieldEnum)[keyof typeof ProductOrderScalarFieldEnum]
+
+
+export const NotificationScalarFieldEnum = {
+  id: 'id',
+  userEmail: 'userEmail',
+  message: 'message',
+  bookingId: 'bookingId',
+  createdAt: 'createdAt',
+  read: 'read'
+} as const
+
+export type NotificationScalarFieldEnum = (typeof NotificationScalarFieldEnum)[keyof typeof NotificationScalarFieldEnum]
 
 
 export const SortOrder = {

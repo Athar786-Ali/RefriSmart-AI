@@ -11,6 +11,7 @@ import {
   getAdminOrders,
   getMyOrders,
   getProducts,
+  reassignAdminOrderCustomer,
   seedDemoProducts,
   suggestPrice,
   updateAdminOrderStatus,
@@ -32,6 +33,7 @@ productRoutes.post("/orders/:orderId/razorpay/verify", userAuth, verifyRazorpayP
 
 productRoutes.get("/admin/orders", adminAuth, getAdminOrders);
 productRoutes.patch("/admin/orders/:id", adminAuth, updateAdminOrderStatus);
+productRoutes.patch("/admin/orders/:id/reassign-customer", adminAuth, reassignAdminOrderCustomer);
 productRoutes.patch("/admin/orders/:id/confirm-payment", adminAuth, confirmOrderPayment);
 productRoutes.post("/admin/orders/:id/generate-invoice", adminAuth, generateAdminOrderInvoice);
 productRoutes.get("/docs/order-invoice/:orderId", adminAuth, downloadOrderInvoice);

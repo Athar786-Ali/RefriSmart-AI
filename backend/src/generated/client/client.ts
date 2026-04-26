@@ -62,6 +62,11 @@ export type ServiceBooking = Prisma.ServiceBookingModel
  */
 export type Gallery = Prisma.GalleryModel
 /**
+ * Model DiagnosisLog
+ * 
+ */
+export type DiagnosisLog = Prisma.DiagnosisLogModel
+/**
  * Model Technician
  * 
  */
@@ -101,3 +106,8 @@ export type DocumentLog = Prisma.DocumentLogModel
  * 
  */
 export type ProductOrder = Prisma.ProductOrderModel
+/**
+ * Model Notification
+ * 
+ */
+export type Notification = Prisma.NotificationModel

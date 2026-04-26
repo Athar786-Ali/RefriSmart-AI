@@ -5,15 +5,28 @@ import { prisma } from "../config/prisma.js";
 
 export type AuthenticatedRequest = Request & { userId?: string };
 
+const extractUserIdFromRequest = (req: Request) => {
+  const cookieToken = req.cookies?.token;
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  const token = cookieToken || bearerToken;
+  if (!token) return null;
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload & { userId?: string };
+    return decoded?.userId || null;
+  } catch {
+    return null;
+  }
+};
+
+export const resolveUserIdFromRequest = (req: Request) => extractUserIdFromRequest(req);
+
 export const userAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const token = req.cookies?.token;
-    if (!token) return res.status(401).json({ error: "Unauthorized. Login required." });
-
-    const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload & { userId?: string };
-    if (!decoded?.userId) return res.status(401).json({ error: "Invalid token." });
-
-    req.userId = decoded.userId;
+    const userId = extractUserIdFromRequest(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized. Login required." });
+    req.userId = userId;
     next();
   } catch {
     return res.status(401).json({ error: "Unauthorized. Invalid or expired token." });

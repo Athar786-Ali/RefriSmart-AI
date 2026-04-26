@@ -1,4 +1,6 @@
 // Shared types for the admin panel sections
+import type { OrderStatus } from "@/lib/order-status";
+import type { ServiceDisplayStatus } from "@/lib/service-status";
 
 export type Product = {
   id: string; title: string; price: number;
@@ -19,22 +21,32 @@ export type Stats = {
 export type Booking = {
   id: string; appliance: string; issue: string;
   status: "PENDING"|"ASSIGNED"|"ESTIMATE_APPROVED"|"OUT_FOR_REPAIR"|"REPAIRING"|"PAYMENT_PENDING"|"FIXED"|"COMPLETED"|"CANCELLED";
+  displayStatus?: ServiceDisplayStatus;
+  statusLabel?: string;
   scheduledAt: string; address?: string | null;
   contactName?: string | null; contactPhone?: string | null;
   finalCost?: number | null; paymentQR?: string | null; invoiceUrl?: string | null;
   customer?: { name?: string; email?: string };
   technician?: { name?: string; phone?: string } | null;
+  technicianId?: string | null;
+  technicianName?: string | null;
   pincode?: string | null;
+};
+
+export type TechnicianOption = {
+  id: string;
+  name: string;
+  phone?: string;
 };
 
 export type Order = {
   id: string; productId?: string; productTitle: string;
   productImageUrl?: string | null; customerId?: string | null;
   customerName?: string | null; deliveryPhone: string; deliveryAddress: string;
-  orderStatus: "ORDER_PLACED"|"DISPATCHED"|"OUT_FOR_DELIVERY"|"DELIVERED"|"CANCELLED";
+  status: OrderStatus;
   paymentStatus?: string; internalNote?: string | null;
   price: number; invoiceUrl?: string | null; createdAt: string;
-  userName?: string | null; userEmail?: string | null;
+  userName?: string | null; userEmail?: string | null; userPhone?: string | null;
 };
 
 export type Analytics = {
@@ -48,9 +60,36 @@ export type GalleryItem = {
   mediaType?: "image" | "video"; caption?: string | null; createdAt?: string;
 };
 
+export type SellOffer = {
+  id: string;
+  offerPrice: number;
+  pickupSlot?: string | null;
+  status: string;
+  createdAt: string;
+};
+
 export type SellReq = {
-  id: string; appliance: string; condition: string; phone: string;
-  name: string; offerPrice?: number | null; status: string; createdAt: string;
+  id: string;
+  userId: string;
+  applianceType: string;
+  brandModel: string;
+  contactName?: string | null;
+  address?: string | null;
+  conditionNote: string;
+  expectedPrice?: number | null;
+  pincode?: string | null;
+  imageUrl?: string | null;
+  status: string;
+  createdAt: string;
+  customer?: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  } | null;
+  offers?: SellOffer[];
+  latestOffer?: SellOffer | null;
+  pendingOffer?: SellOffer | null;
 };
 
 export type NewProd = {
@@ -70,6 +109,7 @@ export type SectionProps = {
   analytics: Analytics | null;
   diagnoses: import("@/types").DiagnosisItem[];
   sells: SellReq[]; setSells: React.Dispatch<React.SetStateAction<SellReq[]>>;
+  technicians: TechnicianOption[];
   API: string;
 };
 
@@ -77,14 +117,15 @@ export type SectionProps = {
 export const STATUS_COLORS: Record<string, string> = {
   PENDING:           "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
   ASSIGNED:          "text-blue-400 bg-blue-400/10 border-blue-400/30",
-  ESTIMATE_APPROVED: "text-purple-400 bg-purple-400/10 border-purple-400/30",
+  ESTIMATE_APPROVED: "text-blue-400 bg-blue-400/10 border-blue-400/30",
   OUT_FOR_REPAIR:    "text-orange-400 bg-orange-400/10 border-orange-400/30",
+  ON_THE_WAY:        "text-orange-400 bg-orange-400/10 border-orange-400/30",
   REPAIRING:         "text-cyan-400 bg-cyan-400/10 border-cyan-400/30",
-  PAYMENT_PENDING:   "text-pink-400 bg-pink-400/10 border-pink-400/30",
-  FIXED:             "text-emerald-400 bg-emerald-400/10 border-emerald-400/30",
+  PAYMENT_PENDING:   "text-cyan-400 bg-cyan-400/10 border-cyan-400/30",
+  FIXED:             "text-cyan-400 bg-cyan-400/10 border-cyan-400/30",
   COMPLETED:         "text-green-400 bg-green-400/10 border-green-400/30",
   CANCELLED:         "text-red-400 bg-red-400/10 border-red-400/30",
-  ORDER_PLACED:      "text-blue-400 bg-blue-400/10 border-blue-400/30",
+  PLACED:            "text-blue-400 bg-blue-400/10 border-blue-400/30",
   DISPATCHED:        "text-orange-400 bg-orange-400/10 border-orange-400/30",
   OUT_FOR_DELIVERY:  "text-cyan-400 bg-cyan-400/10 border-cyan-400/30",
   DELIVERED:         "text-green-400 bg-green-400/10 border-green-400/30",

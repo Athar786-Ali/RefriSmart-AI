@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import path from "node:path";
 
 import aiRoutes from "./routes/aiRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
@@ -29,6 +30,11 @@ app.use(
 );
 app.use(cookieParser());
 app.use(express.json({ limit: "100mb" }));
+app.use("/uploads", (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+}, express.static(path.resolve(process.cwd(), "uploads")));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
@@ -37,6 +43,24 @@ app.use("/api", adminRoutes);
 
 const HOST = process.env.HOST || "localhost";
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   console.log(`✅ Server is ACTIVE on http://${HOST}:${PORT}`);
+});
+
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`❌ Port ${PORT} is already in use. Kill the existing process first:`);
+    console.error(`   Run: lsof -ti:${PORT} | xargs kill -9`);
+  } else {
+    console.error("❌ Server failed to start:", err.message);
+  }
+  process.exit(1);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("❌ Uncaught Exception:", err.message, err.stack);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("❌ Unhandled Promise Rejection:", reason);
 });

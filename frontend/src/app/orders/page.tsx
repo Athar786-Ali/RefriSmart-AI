@@ -5,8 +5,15 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { toast as hotToast } from "react-hot-toast";
 import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/razorpay";
-
-type OrderStatus = "ORDER_PLACED" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
+import { useAuth } from "@/context/AuthContext";
+import { getApiBase } from "@/lib/api";
+import {
+  getOrderStepIndex,
+  normalizeOrderApiPayload,
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_STEPS,
+  type OrderStatus,
+} from "@/lib/order-status";
 
 type ProductOrder = {
   id: string;
@@ -15,7 +22,7 @@ type ProductOrder = {
   price: number;
   deliveryPhone: string;
   deliveryAddress: string;
-  orderStatus: OrderStatus;
+  status: OrderStatus;
   paymentStatus?: string;
   stockQty?: number | null;
   internalNote?: string | null;
@@ -23,24 +30,15 @@ type ProductOrder = {
   createdAt: string;
 };
 
-const STATUS_STEPS: Array<{ key: OrderStatus; label: string }> = [
-  { key: "ORDER_PLACED", label: "Order Placed" },
-  { key: "DISPATCHED", label: "Dispatched" },
-  { key: "OUT_FOR_DELIVERY", label: "Out for Delivery" },
-  { key: "DELIVERED", label: "Delivered" },
-];
-
-const getStepIndex = (status: OrderStatus) => {
-  if (status === "CANCELLED") return 0;
-  const index = STATUS_STEPS.findIndex((step) => step.key === status);
-  return index >= 0 ? index : 0;
-};
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+const STATUS_STEPS = ORDER_STATUS_STEPS.map((key) => ({
+  key,
+  label: ORDER_STATUS_LABELS[key],
+}));
 
 export default function OrdersPage() {
+  const { user } = useAuth();
+  const API = getApiBase();
   const [highlightId, setHighlightId] = useState("");
-  const [user, setUser] = useState<{ id: string; name?: string } | null>(null);
   const [orders, setOrders] = useState<ProductOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
@@ -49,15 +47,6 @@ export default function OrdersPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       setHighlightId(params.get("highlight") || "");
-    }
-  }, []);
-
-  useEffect(() => {
-    const raw = localStorage.getItem("user");
-    try {
-      setUser(raw ? (JSON.parse(raw) as { id: string; name?: string }) : null);
-    } catch {
-      setUser(null);
     }
   }, []);
 
@@ -74,17 +63,32 @@ export default function OrdersPage() {
     try {
       const res = await fetch(`${API}/orders/my`, { credentials: "include" });
       const payload = await res.json().catch(() => []);
-      setOrders(Array.isArray(payload) ? payload : []);
+      const nextOrders = (Array.isArray(payload) ? payload : []).filter(Boolean).map((item) =>
+        normalizeOrderApiPayload(item as ProductOrder & { orderStatus?: string }),
+      );
+      const order = nextOrders?.[0];
+      console.log("Orders API:", nextOrders);
+      console.log("Order status:", order?.status);
+      nextOrders.forEach((item) => console.log("Customer order:", item?.status));
+      setOrders(nextOrders);
     } catch {
       setOrders([]);
     } finally {
       if (showLoader) setLoading(false);
     }
-  }, [user?.id]);
+  }, [API, user?.id]);
 
   useEffect(() => {
     void refreshOrders(true);
   }, [refreshOrders]);
+
+  useEffect(() => {
+    if (!user?.id || !API) return;
+    const interval = window.setInterval(() => {
+      void refreshOrders(false);
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [API, refreshOrders, user?.id]);
 
   const handlePay = async (order: ProductOrder) => {
     if (!API) {
@@ -234,10 +238,11 @@ export default function OrdersPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col gap-8 md:gap-10">
         {orderedData.map((order) => {
-          const stepIndex = getStepIndex(order.orderStatus);
+          const currentStatus = order?.status ?? "PLACED";
+          const stepIndex = getOrderStepIndex(currentStatus);
           const isHighlighted = highlightId && highlightId === order.id;
           const isPaid = String(order.paymentStatus || "PENDING") === "PAID";
-          const isDelivered = order.orderStatus === "DELIVERED";
+          const isDelivered = currentStatus === "DELIVERED";
           const showStockBadge = !isPaid && !isDelivered;
 
           return (
@@ -250,9 +255,9 @@ export default function OrdersPage() {
               <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
                 <div className="flex flex-col gap-6">
                   
-                  <div className="border-b border-slate-100 pb-6">
+                  <div className="border-b border-slate-100 pb-6 min-w-0">
                     <div className="flex flex-wrap items-center gap-3 mb-2">
-                      <h2 className="text-2xl font-black text-slate-900">{order.productTitle}</h2>
+                      <h2 className="text-2xl font-black text-slate-900 break-words flex-1 min-w-[200px]">{order.productTitle}</h2>
                       {showStockBadge && typeof order.stockQty === "number" && order.stockQty <= 0 && (
                         <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-red-600">
                            Out of Stock
@@ -282,7 +287,7 @@ export default function OrdersPage() {
                       <p className="mt-1">
                         Payment: <strong className={isPaid ? "text-emerald-600" : "text-amber-500"}>{order.paymentStatus || "PENDING"}</strong>
                       </p>
-                      {order.orderStatus === "CANCELLED" && (
+                      {order?.status === "CANCELLED" && (
                         <p className="mt-2 text-red-500 font-bold text-xs bg-red-50 px-2 py-1 rounded inline-flex">
                           Refund initiating in 3-5 days.
                         </p>
@@ -291,12 +296,12 @@ export default function OrdersPage() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3 pt-2">
-                    {String(order.paymentStatus || "PENDING") !== "PAID" && order.orderStatus !== "CANCELLED" && (
+                    {String(order.paymentStatus || "PENDING") !== "PAID" && order?.status !== "CANCELLED" && (
                       <button
                         type="button"
                         disabled={payingOrderId === order.id || (typeof order.stockQty === "number" && order.stockQty <= 0)}
                         onClick={() => handlePay(order)}
-                        className="rounded-2xl border-b-4 border-emerald-700 bg-emerald-500 px-8 py-3 text-sm font-black tracking-wide text-white transition-transform hover:bg-emerald-400 active:translate-y-1 active:border-b-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                        className="w-full sm:w-auto rounded-2xl border-b-4 border-emerald-700 bg-emerald-500 px-8 py-3 text-sm font-black tracking-wide text-white transition-transform hover:bg-emerald-400 active:translate-y-1 active:border-b-0 disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         {typeof order.stockQty === "number" && order.stockQty <= 0
                           ? "Unavailable"
@@ -308,10 +313,10 @@ export default function OrdersPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        const url = order.invoiceUrl || `${process.env.NEXT_PUBLIC_API_URL}/orders/my/invoice/${order.id}`;
+                        const url = order.invoiceUrl || `${API}/orders/my/invoice/${order.id}`;
                         window.open(url, "_blank", "noopener,noreferrer");
                       }}
-                      className="rounded-2xl border-2 border-cyan-200 bg-cyan-50 px-8 py-3 text-sm font-bold text-cyan-800 transition-colors hover:bg-cyan-100 hover:border-cyan-300"
+                      className="w-full sm:w-auto rounded-2xl border-2 border-cyan-200 bg-cyan-50 px-8 py-3 text-sm font-bold text-cyan-800 transition-colors hover:bg-cyan-100 hover:border-cyan-300"
                     >
                       Download GST Bill
                     </button>

@@ -155,6 +155,16 @@ let phase2SchemaEnsured = false;
 export const ensurePhase2Schema = async () => {
   if (phase2SchemaEnsured) return;
   try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "SellRequest" ADD COLUMN IF NOT EXISTS "contactName" TEXT`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "SellRequest" ADD COLUMN IF NOT EXISTS "address" TEXT`);
+    await prisma.$executeRawUnsafe(`
+      UPDATE "SellRequest" sr
+      SET "contactName" = u."name"
+      FROM "User" u
+      WHERE sr."userId" = u."id"
+        AND (sr."contactName" IS NULL OR BTRIM(sr."contactName") = '')
+    `);
+
     await prisma.technician.upsert({
       where: { id: "tech-1" },
       update: {
@@ -227,7 +237,7 @@ export const isEmailConfigured = () => Boolean(SMTP_USER && SMTP_PASS);
 export const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export const TECHNICIAN_PHONE = "9060877595";
 export const SHOP_UPI_ID = "9060877595-2@ybl";
-export const ORDER_STATUS_FLOW = ["ORDER_PLACED", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED"] as const;
+export const ORDER_STATUS_FLOW = ["PLACED", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED"] as const;
 
 export type StructuredDiagnosis = {
   probableFault: string;

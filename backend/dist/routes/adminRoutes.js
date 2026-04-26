@@ -1,7 +1,9 @@
 import { Router } from "express";
-import { bookService, cancelServiceBooking, cancelBooking, confirmManualPayment, createBooking, createServiceRazorpayOrder, createSellRequest, deleteGalleryItem, generateDocument, generateInvoiceByBooking, getAdminServiceOverview, getAllDiagnoses, getBookingReminders, getBookingSlots, getBookingTimeline, getGallery, getHistory, getGuestBooking, getMyBookingsByPath, getMyBookingsByQuery, getOpsAnalytics, getSellRequests, getStats, getStatsBasic, getTechnicianJobs, moveSellRequestToRefurbished, rescheduleBooking, respondSellOffer, saveServiceRating, sendBookingOtp, sendSellOffer, updateAdminService, updateBookingStatus, updateTechnicianJobStatus, uploadGalleryItem, verifyServiceRazorpayPayment, verifyBookingOtp, } from "../controllers/adminController.js";
+import multer from "multer";
+import { assignTechnician, bookService, cancelServiceBooking, cancelBooking, confirmManualPayment, createBooking, createServiceRazorpayOrder, createSellRequest, deleteGalleryItem, generateDocument, generateInvoiceByBooking, getAdminServiceOverview, getAllDiagnoses, getBookingReminders, getBookingSlots, getBookingTimeline, getGallery, getHistory, getGuestBooking, getMyBookingsByPath, getMyBookingsByQuery, getOpsAnalytics, getSellRequests, getStats, getStatsBasic, getTechnicianJobs, moveSellRequestToRefurbished, rescheduleBooking, respondSellOffer, saveServiceRating, sendBookingOtp, sendSellOffer, updateAdminService, updateBookingStatus, updateTechnicianJobStatus, uploadGalleryItem, uploadSellRequestImage, verifyServiceRazorpayPayment, verifyBookingOtp, getTechnicianNotifications, markNotificationAsRead, } from "../controllers/adminController.js";
 import { adminAuth, userAuth } from "../middlewares/authMiddleware.js";
 const adminRoutes = Router();
+const galleryUpload = multer({ dest: "tmp/", limits: { fileSize: 100 * 1024 * 1024 } });
 adminRoutes.get("/history/:userId", userAuth, getHistory);
 adminRoutes.get("/booking/slots", getBookingSlots);
 // Issue #6 Fix: createBooking was fully unauthenticated — any caller could pass
@@ -26,15 +28,19 @@ adminRoutes.get("/booking/:id/reminders", adminAuth, getBookingReminders);
 adminRoutes.get("/service/my-bookings/:userId", userAuth, getMyBookingsByPath);
 adminRoutes.get("/service/my-bookings", userAuth, getMyBookingsByQuery);
 adminRoutes.get("/service/guest-booking", getGuestBooking);
+adminRoutes.put("/admin/assign-technician/:id", adminAuth, assignTechnician);
 adminRoutes.patch("/admin/service/:id", adminAuth, updateAdminService);
 adminRoutes.post("/service/:id/rating", saveServiceRating);
-adminRoutes.post("/admin/gallery", adminAuth, uploadGalleryItem);
+adminRoutes.post("/admin/gallery", adminAuth, galleryUpload.single("media"), uploadGalleryItem);
 adminRoutes.get("/gallery", getGallery);
 adminRoutes.delete("/admin/gallery/:id", adminAuth, deleteGalleryItem);
 adminRoutes.get("/technician/jobs", adminAuth, getTechnicianJobs);
 adminRoutes.patch("/technician/jobs/:bookingId/status", adminAuth, updateTechnicianJobStatus);
-adminRoutes.post("/sell/request", createSellRequest);
-adminRoutes.get("/sell/requests", adminAuth, getSellRequests);
+adminRoutes.get("/technician/notifications", userAuth, getTechnicianNotifications);
+adminRoutes.put("/technician/notifications/:id/read", userAuth, markNotificationAsRead);
+adminRoutes.post("/sell/upload-image", userAuth, uploadSellRequestImage);
+adminRoutes.post("/sell/request", userAuth, createSellRequest);
+adminRoutes.get("/sell/requests", userAuth, getSellRequests);
 adminRoutes.post("/sell/requests/:id/offer", adminAuth, sendSellOffer);
 // R2 Fix: respondSellOffer had NO auth — anyone could accept/reject any offer anonymously.
 // This is customer-facing so userAuth is used (not adminAuth).
@@ -46,5 +52,5 @@ adminRoutes.get("/admin/all-diagnoses", adminAuth, getAllDiagnoses);
 adminRoutes.get("/admin/stats-basic", adminAuth, getStatsBasic);
 adminRoutes.get("/admin/stats", adminAuth, getStats);
 adminRoutes.post("/docs/:docType", adminAuth, generateDocument);
-adminRoutes.get("/docs/invoice/:bookingId", adminAuth, generateInvoiceByBooking);
+adminRoutes.get("/docs/invoice/:bookingId", userAuth, generateInvoiceByBooking);
 export default adminRoutes;

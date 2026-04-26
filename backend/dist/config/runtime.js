@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "./prisma.js";
 export const PORT = Number(process.env.PORT || 5001);
 export const JWT_SECRET = process.env.JWT_SECRET || "golden_ref_secret_123";
-export const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+export const COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
 export const SMTP_USER = process.env.SMTP_USER || "";
 export const SMTP_PASS = process.env.SMTP_PASS || "";
 const mailTransporter = nodemailer.createTransport({
@@ -136,6 +136,15 @@ export const ensurePhase2Schema = async () => {
     if (phase2SchemaEnsured)
         return;
     try {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "SellRequest" ADD COLUMN IF NOT EXISTS "contactName" TEXT`);
+        await prisma.$executeRawUnsafe(`ALTER TABLE "SellRequest" ADD COLUMN IF NOT EXISTS "address" TEXT`);
+        await prisma.$executeRawUnsafe(`
+      UPDATE "SellRequest" sr
+      SET "contactName" = u."name"
+      FROM "User" u
+      WHERE sr."userId" = u."id"
+        AND (sr."contactName" IS NULL OR BTRIM(sr."contactName") = '')
+    `);
         await prisma.technician.upsert({
             where: { id: "tech-1" },
             update: {
@@ -202,7 +211,7 @@ export const isEmailConfigured = () => Boolean(SMTP_USER && SMTP_PASS);
 export const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export const TECHNICIAN_PHONE = "9060877595";
 export const SHOP_UPI_ID = "9060877595-2@ybl";
-export const ORDER_STATUS_FLOW = ["ORDER_PLACED", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED"];
+export const ORDER_STATUS_FLOW = ["PLACED", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED"];
 export const detectInputLanguage = (text) => {
     if (/[\u0900-\u097F]/.test(text))
         return "HINDI";

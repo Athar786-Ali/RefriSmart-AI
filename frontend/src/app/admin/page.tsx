@@ -1,7 +1,9 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { getApiBase } from "@/lib/api";
+import { isFinalOrderStatus, normalizeOrderApiPayload } from "@/lib/order-status";
 import { toast } from "sonner";
 import {
   LayoutDashboard, Wrench, ShoppingBag, Package, Images, Bot,
@@ -16,7 +18,7 @@ import { DiagnosesSection } from "./_diagnoses";
 import { SellSection } from "./_sell";
 import { ProfileSection } from "./_profile";
 import type {
-  Stats, Booking, Order, GalleryItem, Analytics, SellReq,
+  Stats, Booking, Order, GalleryItem, Analytics, SellReq, TechnicianOption,
 } from "./_types";
 import type { DiagnosisItem } from "@/types";
 
@@ -33,14 +35,14 @@ const NAV: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: "profile",   label: "Profile",        icon: Users },
 ];
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "";
-
 export default function AdminDashboard() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
+  const API = getApiBase();
   const [sec, setSec] = useState<Section>("dashboard");
   const [sideOpen, setSideOpen] = useState(false);
   const [ready, setReady] = useState(false);
+  const unauthorizedHandledRef = useRef(false);
 
   /* ── data ── */
   const [stats,     setStats]     = useState<Stats | null>(null);
@@ -50,6 +52,15 @@ export default function AdminDashboard() {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [diagnoses, setDiagnoses] = useState<DiagnosisItem[]>([]);
   const [sells,     setSells]     = useState<SellReq[]>([]);
+  const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
+
+  const handleUnauthorized = useCallback(async () => {
+    if (unauthorizedHandledRef.current) return;
+    unauthorizedHandledRef.current = true;
+    toast.error("Admin session expired. Please sign in again.");
+    await logout();
+    router.replace("/login");
+  }, [logout, router]);
 
   /* ── auth guard — uses AuthContext (fixes refresh-logout bug) ── */
   useEffect(() => {
@@ -71,6 +82,12 @@ export default function AdminDashboard() {
         fetch(`${API}/sell/requests?t=${Date.now()}`,          opts),
       ]);
 
+      const protectedResponses = [sR, bR, aR, oR, dR, sellR];
+      if (protectedResponses.some((response) => response.status === 401 || response.status === 403)) {
+        await handleUnauthorized();
+        return;
+      }
+
       let sp = await sR.json().catch(() => null);
       if (!sR.ok || sp?.error) {
         const fb = await fetch(`${API}/admin/stats-basic?t=${Date.now()}`, opts);
@@ -80,6 +97,7 @@ export default function AdminDashboard() {
 
       const bp = await bR.json().catch(() => null);
       setBookings(Array.isArray(bp?.bookings) ? bp.bookings : []);
+      setTechnicians(Array.isArray(bp?.technicians) ? bp.technicians : []);
 
       const ap = await aR.json().catch(() => null);
       if (ap && typeof ap === "object") setAnalytics(ap);
@@ -88,7 +106,14 @@ export default function AdminDashboard() {
       setGallery(Array.isArray(gp) ? gp : []);
 
       const op = await oR.json().catch(() => null);
-      setOrders(Array.isArray(op) ? op : []);
+      const nextOrders = (Array.isArray(op) ? op : []).filter(Boolean).map((item) =>
+        normalizeOrderApiPayload(item as Order & { orderStatus?: string }),
+      );
+      const order = nextOrders?.[0];
+      console.log("Orders API:", nextOrders);
+      console.log("Order status:", order?.status);
+      nextOrders.forEach((item) => console.log("Admin order:", item?.status));
+      setOrders(nextOrders);
 
       const dp = await dR.json().catch(() => null);
       setDiagnoses(Array.isArray(dp) ? dp : []);
@@ -101,14 +126,14 @@ export default function AdminDashboard() {
     } finally {
       setReady(true);
     }
-  }, [user]);
+  }, [API, handleUnauthorized, user]);
 
   useEffect(() => { if (user?.role === "ADMIN") load(); }, [user, load]);
 
-  // Auto-refresh every 30 seconds
+  // Keep the admin board fresh enough for dispatch work without requiring manual refreshes.
   useEffect(() => {
     if (!user || user.role !== "ADMIN") return;
-    const interval = setInterval(() => { load(); }, 15_000);
+    const interval = setInterval(() => { load(); }, 5_000);
     return () => clearInterval(interval);
   }, [user, load]);
 
@@ -125,11 +150,11 @@ export default function AdminDashboard() {
 
   /* ── computed ── */
   const activeQ  = bookings.filter(b => !["COMPLETED","CANCELLED"].includes(b.status));
-  const liveO    = orders.filter(o => String(o.paymentStatus) !== "PAID" && o.orderStatus !== "DELIVERED");
+  const liveO    = orders.filter((order) => !isFinalOrderStatus(order.status));
 
   const sectionProps = {
     stats, setStats, bookings, setBookings, orders, setOrders,
-    gallery, setGallery, analytics, diagnoses, sells, setSells,
+    gallery, setGallery, analytics, diagnoses, sells, setSells, technicians,
     API,
   };
 
@@ -206,19 +231,20 @@ export default function AdminDashboard() {
       {/* ═══ MAIN ═══ */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
         {/* topbar */}
-        <header className="flex items-center gap-4 px-5 py-3.5 bg-slate-900/90 backdrop-blur-xl border-b border-slate-800 shrink-0">
-          <button className="lg:hidden text-slate-400 hover:text-white" onClick={() => setSideOpen(true)}>
+        <header className="flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-3.5 bg-slate-900/90 backdrop-blur-xl border-b border-slate-800 shrink-0">
+          <button className="lg:hidden text-slate-400 hover:text-white shrink-0" onClick={() => setSideOpen(true)}>
             <Menu className="w-6 h-6" />
           </button>
-          <div>
-            <h1 className="text-white font-black text-lg leading-none">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-white font-black text-base sm:text-lg leading-none truncate">
               {NAV.find(n => n.id === sec)?.label}
             </h1>
-            <p className="text-slate-500 text-xs mt-0.5">Golden Refrigeration · Bhagalpur</p>
+            <p className="text-slate-500 text-[10px] sm:text-xs mt-0.5 truncate">Golden Refrigeration · Bhagalpur</p>
           </div>
-          <div className="ml-auto flex items-center gap-2">
-            <button onClick={load} className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-cyan-400 bg-slate-800 border border-slate-700 px-3 py-2 rounded-lg transition-all">
-              <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={load} className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-cyan-400 bg-slate-800 border border-slate-700 px-2.5 sm:px-3 py-2 rounded-lg transition-all">
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Refresh</span>
             </button>
             <div className="hidden sm:flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
               <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
@@ -228,7 +254,7 @@ export default function AdminDashboard() {
         </header>
 
         {/* sections */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[radial-gradient(ellipse_at_top_right,_#0d1b2a_0%,_#020617_70%)]">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 pb-20 lg:pb-6 bg-[radial-gradient(ellipse_at_top_right,_#0d1b2a_0%,_#020617_70%)]">
           {sec === "dashboard"  && <DashboardSection {...sectionProps} />}
           {sec === "services"   && <ServicesSection  {...sectionProps} />}
           {sec === "orders"     && <OrdersSection    {...sectionProps} />}
@@ -238,6 +264,34 @@ export default function AdminDashboard() {
           {sec === "sell"       && <SellSection      {...sectionProps} />}
           {sec === "profile"    && <ProfileSection   user={user} logout={logout} router={router} />}
         </main>
+
+        {/* ── MOBILE BOTTOM NAV (lg and above: hidden) ── */}
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 flex items-stretch overflow-x-auto">
+          {NAV.map(({ id, label, icon: Icon }) => {
+            const active = sec === id;
+            const badge  = id === "services" ? activeQ.length : id === "orders" ? liveO.length : 0;
+            return (
+              <button
+                key={id}
+                onClick={() => { setSec(id); setSideOpen(false); }}
+                className={`relative flex-1 min-w-[60px] flex flex-col items-center justify-center gap-0.5 py-2 px-1 text-[9px] font-bold uppercase tracking-wide transition-all ${
+                  active ? "text-cyan-400" : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                <div className="relative">
+                  <Icon className={`w-5 h-5 ${active ? "text-cyan-400" : ""}`} />
+                  {badge > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center text-[8px] font-black rounded-full bg-cyan-500 text-slate-950">
+                      {badge > 9 ? "9+" : badge}
+                    </span>
+                  )}
+                </div>
+                <span className="truncate max-w-[52px] leading-none">{label}</span>
+                {active && <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-cyan-400 rounded-full" />}
+              </button>
+            );
+          })}
+        </nav>
       </div>
     </div>
   );

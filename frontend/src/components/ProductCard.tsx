@@ -7,6 +7,7 @@ import { toast } from "sonner";
 // simultaneously, causing duplicate containers and bloating the bundle.
 import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/razorpay";
 import { useAuth } from "@/context/AuthContext";
+import { getApiBase } from "@/lib/api";
 import type { NormalizedProduct, Product } from "@/types";
 
 export type ProductCardItem = Product;
@@ -15,7 +16,13 @@ type ProductCardProps = {
   product: NormalizedProduct;
 };
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+type CheckoutSessionUser = {
+  id: string;
+  name?: string;
+  email?: string;
+  role?: string;
+};
+
 const DEFAULT_CERTIFICATE_LINE = "Tested & Certified: Cooling system and compressor working properly.";
 
 const getImageUrl = (images: unknown): string | null => {
@@ -54,7 +61,8 @@ const getShopWarrantyLine = (product: ProductCardProps["product"]) => {
 
 export default function ProductCard({ product }: ProductCardProps) {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, setUser, logout } = useAuth();
+  const API = getApiBase();
   const imageUrl = transformCloudinaryImage(getImageUrl(product.images));
   const numericStock = typeof product.stockQty === "number" ? product.stockQty : null;
   const isOutOfStock = numericStock !== null && numericStock <= 0;
@@ -66,6 +74,9 @@ export default function ProductCard({ product }: ProductCardProps) {
   const [address, setAddress] = useState("");
   const [placingOrder, setPlacingOrder] = useState(false);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+  const [checkingSession, setCheckingSession] = useState(false);
+  const [verifiedCheckoutUser, setVerifiedCheckoutUser] = useState<CheckoutSessionUser | null>(null);
+  const [ownershipConfirmed, setOwnershipConfirmed] = useState(false);
 
   useEffect(() => {
     if (user?.name) {
@@ -75,7 +86,41 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   const checkoutAmount = Number(product.price || 0);
 
-  const openCheckout = () => {
+  const resolveActiveCheckoutUser = async (showMismatchToast = true) => {
+    if (!API) {
+      toast.error("API unavailable.");
+      return null;
+    }
+
+    try {
+      const res = await fetch(`${API}/auth/me`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok || !payload?.user?.id) {
+        setUser(null);
+        toast.error("Your session is not active. Please log in with the correct customer account.");
+        router.push("/login");
+        return null;
+      }
+
+      const activeUser = payload.user as CheckoutSessionUser;
+      if (user?.id && user.id !== activeUser.id && showMismatchToast) {
+        toast.info(`Checkout synced to the active signed-in account: ${activeUser.name || activeUser.email || "Customer"}.`);
+      }
+      setUser(activeUser);
+      setVerifiedCheckoutUser(activeUser);
+      return activeUser;
+    } catch {
+      toast.error("Unable to verify the active session right now. Please try again.");
+      return null;
+    }
+  };
+
+  const openCheckout = async () => {
     if (isOutOfStock) {
       toast.error("This product is currently out of stock.");
       return;
@@ -85,8 +130,17 @@ export default function ProductCard({ product }: ProductCardProps) {
       router.push("/login");
       return;
     }
-    setCheckoutStep(1);
-    setCheckoutOpen(true);
+    setCheckingSession(true);
+    try {
+      const activeUser = await resolveActiveCheckoutUser();
+      if (!activeUser) return;
+      setFullName((prev) => prev || activeUser.name || "");
+      setOwnershipConfirmed(false);
+      setCheckoutStep(1);
+      setCheckoutOpen(true);
+    } finally {
+      setCheckingSession(false);
+    }
   };
 
   const closeCheckout = () => {
@@ -96,6 +150,8 @@ export default function ProductCard({ product }: ProductCardProps) {
     setAddress("");
     setPhone("");
     setActiveOrderId(null);
+    setOwnershipConfirmed(false);
+    setVerifiedCheckoutUser(null);
   };
 
   const handleProceed = () => {
@@ -111,18 +167,27 @@ export default function ProductCard({ product }: ProductCardProps) {
       toast.error("Full name is required.");
       return;
     }
+    if (!verifiedCheckoutUser?.id) {
+      toast.error("We could not verify the active signed-in account. Please reopen checkout.");
+      return;
+    }
+    if (!ownershipConfirmed) {
+      toast.error("Please confirm which account should own this order before continuing.");
+      return;
+    }
     setCheckoutStep(2);
   };
 
   const createLocalOrder = async () => {
-    if (!user?.id || !API) return null;
+    if (!API) return null;
     if (activeOrderId) return activeOrderId;
+    const activeUser = await resolveActiveCheckoutUser(false);
+    if (!activeUser?.id) return null;
     const res = await fetch(`${API}/orders`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({
-        userId: user.id,
         productId: product.id,
         deliveryAddress: address.trim(),
         deliveryPhone: phone.replace(/\D/g, ""),
@@ -328,10 +393,11 @@ export default function ProductCard({ product }: ProductCardProps) {
             </span>
             <button
               type="button"
-              onClick={openCheckout}
+              onClick={() => { void openCheckout(); }}
+              disabled={checkingSession}
               className="min-h-[48px] whitespace-nowrap rounded-lg bg-blue-600 px-4 py-3 text-xs font-semibold text-white shadow-sm transition-transform hover:bg-blue-700 active:scale-95 md:text-sm"
             >
-              Buy Now
+              {checkingSession ? "Checking Session..." : "Buy Now"}
             </button>
           </div>
         </div>
@@ -358,6 +424,25 @@ export default function ProductCard({ product }: ProductCardProps) {
             <div className="p-6">
               {checkoutStep === 1 ? (
                 <div className="space-y-4">
+                  <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-slate-700">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Order Owner Account</p>
+                    <p className="mt-2 font-semibold text-slate-900">{verifiedCheckoutUser?.name || user?.name || "Customer"}</p>
+                    <p className="text-xs text-slate-600">{verifiedCheckoutUser?.email || user?.email || "No email on file"}</p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      This order will appear only inside this signed-in account. The full name below is just the delivery contact.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await logout();
+                        closeCheckout();
+                        router.push("/login");
+                      }}
+                      className="mt-3 text-xs font-semibold text-blue-700 underline underline-offset-4"
+                    >
+                      Wrong account? Switch customer login
+                    </button>
+                  </div>
                   <label className="block text-sm font-semibold text-slate-700">
                     Full Name
                     <input
@@ -385,6 +470,20 @@ export default function ProductCard({ product }: ProductCardProps) {
                       className="mt-2 min-h-[110px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="House no, street, locality, city"
                     />
+                  </label>
+                  <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={ownershipConfirmed}
+                      onChange={(e) => setOwnershipConfirmed(e.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>
+                      I confirm this product order belongs to
+                      {" "}
+                      <strong>{verifiedCheckoutUser?.name || user?.name || "this signed-in account"}</strong>
+                      {verifiedCheckoutUser?.email ? ` (${verifiedCheckoutUser.email})` : ""}.
+                    </span>
                   </label>
                   <button
                     onClick={handleProceed}

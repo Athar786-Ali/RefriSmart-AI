@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Image as ImageIcon } from "lucide-react";
+import { getApiBase } from "@/lib/api";
 
 type GalleryItem = {
   id: string;
@@ -18,11 +19,13 @@ export default function GalleryPage() {
   useEffect(() => {
     async function fetchGallery() {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api";
-        const res = await fetch(`${apiUrl}/gallery`);
+        const apiUrl = getApiBase();
+        const res = await fetch(`${apiUrl}/gallery`, { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
-          const imageOnlyData = data.filter((item: any) => item.mediaType !== "video" && !item.imageUrl.match(/\.(mp4|webm|mov|m3u8)$/i));
+          const imageOnlyData = Array.isArray(data)
+            ? data.filter((item: any) => item?.mediaType !== "video" && !String(item?.imageUrl || "").match(/\.(mp4|webm|mov|m3u8)$/i))
+            : [];
           setItems(imageOnlyData);
         }
       } catch (err) {

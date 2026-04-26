@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "TS_NODE_TRANSPILE_ONLY=1 node --loader ts-node/esm src/index.ts",
+    "dev": "node -e \"const {execSync}=require('child_process');try{execSync('lsof -ti:5001 | xargs kill -9',{stdio:'ignore'})}catch(e){}\" && sleep 0.5 && TS_NODE_TRANSPILE_ONLY=1 node --loader ts-node/esm src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   },
@@ -25,7 +25,7 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
-    "nodemailer": "^8.0.2",
+    "nodemailer": "^8.0.6",
     "pg": "^8.20.0",
     "razorpay": "^2.9.6"
   },

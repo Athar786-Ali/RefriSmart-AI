@@ -307,6 +307,7 @@ export type UserWhereInput = {
   products?: Prisma.ProductListRelationFilter
   bookings?: Prisma.ServiceBookingListRelationFilter
   orders?: Prisma.ProductOrderListRelationFilter
+  diagnosisLogs?: Prisma.DiagnosisLogListRelationFilter
   sellRequests?: Prisma.SellRequestListRelationFilter
 }
 
@@ -329,6 +330,7 @@ export type UserOrderByWithRelationInput = {
   products?: Prisma.ProductOrderByRelationAggregateInput
   bookings?: Prisma.ServiceBookingOrderByRelationAggregateInput
   orders?: Prisma.ProductOrderOrderByRelationAggregateInput
+  diagnosisLogs?: Prisma.DiagnosisLogOrderByRelationAggregateInput
   sellRequests?: Prisma.SellRequestOrderByRelationAggregateInput
 }
 
@@ -354,6 +356,7 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   products?: Prisma.ProductListRelationFilter
   bookings?: Prisma.ServiceBookingListRelationFilter
   orders?: Prisma.ProductOrderListRelationFilter
+  diagnosisLogs?: Prisma.DiagnosisLogListRelationFilter
   sellRequests?: Prisma.SellRequestListRelationFilter
 }, "id" | "email" | "phone">
 
@@ -420,6 +423,7 @@ export type UserCreateInput = {
   products?: Prisma.ProductCreateNestedManyWithoutSellerInput
   bookings?: Prisma.ServiceBookingCreateNestedManyWithoutCustomerInput
   orders?: Prisma.ProductOrderCreateNestedManyWithoutCustomerInput
+  diagnosisLogs?: Prisma.DiagnosisLogCreateNestedManyWithoutCustomerInput
   sellRequests?: Prisma.SellRequestCreateNestedManyWithoutUserInput
 }
 
@@ -442,6 +446,7 @@ export type UserUncheckedCreateInput = {
   products?: Prisma.ProductUncheckedCreateNestedManyWithoutSellerInput
   bookings?: Prisma.ServiceBookingUncheckedCreateNestedManyWithoutCustomerInput
   orders?: Prisma.ProductOrderUncheckedCreateNestedManyWithoutCustomerInput
+  diagnosisLogs?: Prisma.DiagnosisLogUncheckedCreateNestedManyWithoutCustomerInput
   sellRequests?: Prisma.SellRequestUncheckedCreateNestedManyWithoutUserInput
 }
 
@@ -464,6 +469,7 @@ export type UserUpdateInput = {
   products?: Prisma.ProductUpdateManyWithoutSellerNestedInput
   bookings?: Prisma.ServiceBookingUpdateManyWithoutCustomerNestedInput
   orders?: Prisma.ProductOrderUpdateManyWithoutCustomerNestedInput
+  diagnosisLogs?: Prisma.DiagnosisLogUpdateManyWithoutCustomerNestedInput
   sellRequests?: Prisma.SellRequestUpdateManyWithoutUserNestedInput
 }
 
@@ -486,6 +492,7 @@ export type UserUncheckedUpdateInput = {
   products?: Prisma.ProductUncheckedUpdateManyWithoutSellerNestedInput
   bookings?: Prisma.ServiceBookingUncheckedUpdateManyWithoutCustomerNestedInput
   orders?: Prisma.ProductOrderUncheckedUpdateManyWithoutCustomerNestedInput
+  diagnosisLogs?: Prisma.DiagnosisLogUncheckedUpdateManyWithoutCustomerNestedInput
   sellRequests?: Prisma.SellRequestUncheckedUpdateManyWithoutUserNestedInput
 }
 
@@ -677,6 +684,22 @@ export type UserUpdateOneWithoutBookingsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutBookingsInput, Prisma.UserUpdateWithoutBookingsInput>, Prisma.UserUncheckedUpdateWithoutBookingsInput>
 }
 
+export type UserCreateNestedOneWithoutDiagnosisLogsInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutDiagnosisLogsInput, Prisma.UserUncheckedCreateWithoutDiagnosisLogsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutDiagnosisLogsInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneWithoutDiagnosisLogsNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutDiagnosisLogsInput, Prisma.UserUncheckedCreateWithoutDiagnosisLogsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutDiagnosisLogsInput
+  upsert?: Prisma.UserUpsertWithoutDiagnosisLogsInput
+  disconnect?: Prisma.UserWhereInput | boolean
+  delete?: Prisma.UserWhereInput | boolean
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutDiagnosisLogsInput, Prisma.UserUpdateWithoutDiagnosisLogsInput>, Prisma.UserUncheckedUpdateWithoutDiagnosisLogsInput>
+}
+
 export type UserCreateNestedOneWithoutSellRequestsInput = {
   create?: Prisma.XOR<Prisma.UserCreateWithoutSellRequestsInput, Prisma.UserUncheckedCreateWithoutSellRequestsInput>
   connectOrCreate?: Prisma.UserCreateOrConnectWithoutSellRequestsInput
@@ -725,6 +748,7 @@ export type UserCreateWithoutProductsInput = {
   createdAt?: Date | string
   bookings?: Prisma.ServiceBookingCreateNestedManyWithoutCustomerInput
   orders?: Prisma.ProductOrderCreateNestedManyWithoutCustomerInput
+  diagnosisLogs?: Prisma.DiagnosisLogCreateNestedManyWithoutCustomerInput
   sellRequests?: Prisma.SellRequestCreateNestedManyWithoutUserInput
 }
 
@@ -746,6 +770,7 @@ export type UserUncheckedCreateWithoutProductsInput = {
   createdAt?: Date | string
   bookings?: Prisma.ServiceBookingUncheckedCreateNestedManyWithoutCustomerInput
   orders?: Prisma.ProductOrderUncheckedCreateNestedManyWithoutCustomerInput
+  diagnosisLogs?: Prisma.DiagnosisLogUncheckedCreateNestedManyWithoutCustomerInput
   sellRequests?: Prisma.SellRequestUncheckedCreateNestedManyWithoutUserInput
 }
 
@@ -783,6 +808,7 @@ export type UserUpdateWithoutProductsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   bookings?: Prisma.ServiceBookingUpdateManyWithoutCustomerNestedInput
   orders?: Prisma.ProductOrderUpdateManyWithoutCustomerNestedInput
+  diagnosisLogs?: Prisma.DiagnosisLogUpdateManyWithoutCustomerNestedInput
   sellRequests?: Prisma.SellRequestUpdateManyWithoutUserNestedInput
 }
 
@@ -804,6 +830,7 @@ export type UserUncheckedUpdateWithoutProductsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   bookings?: Prisma.ServiceBookingUncheckedUpdateManyWithoutCustomerNestedInput
   orders?: Prisma.ProductOrderUncheckedUpdateManyWithoutCustomerNestedInput
+  diagnosisLogs?: Prisma.DiagnosisLogUncheckedUpdateManyWithoutCustomerNestedInput
   sellRequests?: Prisma.SellRequestUncheckedUpdateManyWithoutUserNestedInput
 }
 
@@ -825,6 +852,7 @@ export type UserCreateWithoutBookingsInput = {
   createdAt?: Date | string
   products?: Prisma.ProductCreateNestedManyWithoutSellerInput
   orders?: Prisma.ProductOrderCreateNestedManyWithoutCustomerInput
+  diagnosisLogs?: Prisma.DiagnosisLogCreateNestedManyWithoutCustomerInput
   sellRequests?: Prisma.SellRequestCreateNestedManyWithoutUserInput
 }
 
@@ -846,6 +874,7 @@ export type UserUncheckedCreateWithoutBookingsInput = {
   createdAt?: Date | string
   products?: Prisma.ProductUncheckedCreateNestedManyWithoutSellerInput
   orders?: Prisma.ProductOrderUncheckedCreateNestedManyWithoutCustomerInput
+  diagnosisLogs?: Prisma.DiagnosisLogUncheckedCreateNestedManyWithoutCustomerInput
   sellRequests?: Prisma.SellRequestUncheckedCreateNestedManyWithoutUserInput
 }
 
@@ -883,6 +912,7 @@ export type UserUpdateWithoutBookingsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   products?: Prisma.ProductUpdateManyWithoutSellerNestedInput
   orders?: Prisma.ProductOrderUpdateManyWithoutCustomerNestedInput
+  diagnosisLogs?: Prisma.DiagnosisLogUpdateManyWithoutCustomerNestedInput
   sellRequests?: Prisma.SellRequestUpdateManyWithoutUserNestedInput
 }
 
@@ -903,6 +933,111 @@ export type UserUncheckedUpdateWithoutBookingsInput = {
   resetOtpExpiryAt?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   products?: Prisma.ProductUncheckedUpdateManyWithoutSellerNestedInput
+  orders?: Prisma.ProductOrderUncheckedUpdateManyWithoutCustomerNestedInput
+  diagnosisLogs?: Prisma.DiagnosisLogUncheckedUpdateManyWithoutCustomerNestedInput
+  sellRequests?: Prisma.SellRequestUncheckedUpdateManyWithoutUserNestedInput
+}
+
+export type UserCreateWithoutDiagnosisLogsInput = {
+  id?: string
+  name: string
+  email: string
+  phone?: string | null
+  password?: string | null
+  role?: $Enums.Role
+  verifyOtp?: string | null
+  verifyOtpExpiryAt?: number | null
+  isAccountVerified?: boolean
+  phoneVerifyOtp?: string | null
+  phoneVerifyOtpExpiryAt?: number | null
+  isPhoneVerified?: boolean
+  resetOtp?: string | null
+  resetOtpExpiryAt?: number | null
+  createdAt?: Date | string
+  products?: Prisma.ProductCreateNestedManyWithoutSellerInput
+  bookings?: Prisma.ServiceBookingCreateNestedManyWithoutCustomerInput
+  orders?: Prisma.ProductOrderCreateNestedManyWithoutCustomerInput
+  sellRequests?: Prisma.SellRequestCreateNestedManyWithoutUserInput
+}
+
+export type UserUncheckedCreateWithoutDiagnosisLogsInput = {
+  id?: string
+  name: string
+  email: string
+  phone?: string | null
+  password?: string | null
+  role?: $Enums.Role
+  verifyOtp?: string | null
+  verifyOtpExpiryAt?: number | null
+  isAccountVerified?: boolean
+  phoneVerifyOtp?: string | null
+  phoneVerifyOtpExpiryAt?: number | null
+  isPhoneVerified?: boolean
+  resetOtp?: string | null
+  resetOtpExpiryAt?: number | null
+  createdAt?: Date | string
+  products?: Prisma.ProductUncheckedCreateNestedManyWithoutSellerInput
+  bookings?: Prisma.ServiceBookingUncheckedCreateNestedManyWithoutCustomerInput
+  orders?: Prisma.ProductOrderUncheckedCreateNestedManyWithoutCustomerInput
+  sellRequests?: Prisma.SellRequestUncheckedCreateNestedManyWithoutUserInput
+}
+
+export type UserCreateOrConnectWithoutDiagnosisLogsInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutDiagnosisLogsInput, Prisma.UserUncheckedCreateWithoutDiagnosisLogsInput>
+}
+
+export type UserUpsertWithoutDiagnosisLogsInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutDiagnosisLogsInput, Prisma.UserUncheckedUpdateWithoutDiagnosisLogsInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutDiagnosisLogsInput, Prisma.UserUncheckedCreateWithoutDiagnosisLogsInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutDiagnosisLogsInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutDiagnosisLogsInput, Prisma.UserUncheckedUpdateWithoutDiagnosisLogsInput>
+}
+
+export type UserUpdateWithoutDiagnosisLogsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  password?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  role?: Prisma.EnumRoleFieldUpdateOperationsInput | $Enums.Role
+  verifyOtp?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  verifyOtpExpiryAt?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  isAccountVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  phoneVerifyOtp?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phoneVerifyOtpExpiryAt?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  isPhoneVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  resetOtp?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  resetOtpExpiryAt?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  products?: Prisma.ProductUpdateManyWithoutSellerNestedInput
+  bookings?: Prisma.ServiceBookingUpdateManyWithoutCustomerNestedInput
+  orders?: Prisma.ProductOrderUpdateManyWithoutCustomerNestedInput
+  sellRequests?: Prisma.SellRequestUpdateManyWithoutUserNestedInput
+}
+
+export type UserUncheckedUpdateWithoutDiagnosisLogsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  phone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  password?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  role?: Prisma.EnumRoleFieldUpdateOperationsInput | $Enums.Role
+  verifyOtp?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  verifyOtpExpiryAt?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  isAccountVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  phoneVerifyOtp?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  phoneVerifyOtpExpiryAt?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  isPhoneVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  resetOtp?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  resetOtpExpiryAt?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  products?: Prisma.ProductUncheckedUpdateManyWithoutSellerNestedInput
+  bookings?: Prisma.ServiceBookingUncheckedUpdateManyWithoutCustomerNestedInput
   orders?: Prisma.ProductOrderUncheckedUpdateManyWithoutCustomerNestedInput
   sellRequests?: Prisma.SellRequestUncheckedUpdateManyWithoutUserNestedInput
 }
@@ -926,6 +1061,7 @@ export type UserCreateWithoutSellRequestsInput = {
   products?: Prisma.ProductCreateNestedManyWithoutSellerInput
   bookings?: Prisma.ServiceBookingCreateNestedManyWithoutCustomerInput
   orders?: Prisma.ProductOrderCreateNestedManyWithoutCustomerInput
+  diagnosisLogs?: Prisma.DiagnosisLogCreateNestedManyWithoutCustomerInput
 }
 
 export type UserUncheckedCreateWithoutSellRequestsInput = {
@@ -947,6 +1083,7 @@ export type UserUncheckedCreateWithoutSellRequestsInput = {
   products?: Prisma.ProductUncheckedCreateNestedManyWithoutSellerInput
   bookings?: Prisma.ServiceBookingUncheckedCreateNestedManyWithoutCustomerInput
   orders?: Prisma.ProductOrderUncheckedCreateNestedManyWithoutCustomerInput
+  diagnosisLogs?: Prisma.DiagnosisLogUncheckedCreateNestedManyWithoutCustomerInput
 }
 
 export type UserCreateOrConnectWithoutSellRequestsInput = {
@@ -984,6 +1121,7 @@ export type UserUpdateWithoutSellRequestsInput = {
   products?: Prisma.ProductUpdateManyWithoutSellerNestedInput
   bookings?: Prisma.ServiceBookingUpdateManyWithoutCustomerNestedInput
   orders?: Prisma.ProductOrderUpdateManyWithoutCustomerNestedInput
+  diagnosisLogs?: Prisma.DiagnosisLogUpdateManyWithoutCustomerNestedInput
 }
 
 export type UserUncheckedUpdateWithoutSellRequestsInput = {
@@ -1005,6 +1143,7 @@ export type UserUncheckedUpdateWithoutSellRequestsInput = {
   products?: Prisma.ProductUncheckedUpdateManyWithoutSellerNestedInput
   bookings?: Prisma.ServiceBookingUncheckedUpdateManyWithoutCustomerNestedInput
   orders?: Prisma.ProductOrderUncheckedUpdateManyWithoutCustomerNestedInput
+  diagnosisLogs?: Prisma.DiagnosisLogUncheckedUpdateManyWithoutCustomerNestedInput
 }
 
 export type UserCreateWithoutOrdersInput = {
@@ -1025,6 +1164,7 @@ export type UserCreateWithoutOrdersInput = {
   createdAt?: Date | string
   products?: Prisma.ProductCreateNestedManyWithoutSellerInput
   bookings?: Prisma.ServiceBookingCreateNestedManyWithoutCustomerInput
+  diagnosisLogs?: Prisma.DiagnosisLogCreateNestedManyWithoutCustomerInput
   sellRequests?: Prisma.SellRequestCreateNestedManyWithoutUserInput
 }
 
@@ -1046,6 +1186,7 @@ export type UserUncheckedCreateWithoutOrdersInput = {
   createdAt?: Date | string
   products?: Prisma.ProductUncheckedCreateNestedManyWithoutSellerInput
   bookings?: Prisma.ServiceBookingUncheckedCreateNestedManyWithoutCustomerInput
+  diagnosisLogs?: Prisma.DiagnosisLogUncheckedCreateNestedManyWithoutCustomerInput
   sellRequests?: Prisma.SellRequestUncheckedCreateNestedManyWithoutUserInput
 }
 
@@ -1083,6 +1224,7 @@ export type UserUpdateWithoutOrdersInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   products?: Prisma.ProductUpdateManyWithoutSellerNestedInput
   bookings?: Prisma.ServiceBookingUpdateManyWithoutCustomerNestedInput
+  diagnosisLogs?: Prisma.DiagnosisLogUpdateManyWithoutCustomerNestedInput
   sellRequests?: Prisma.SellRequestUpdateManyWithoutUserNestedInput
 }
 
@@ -1104,6 +1246,7 @@ export type UserUncheckedUpdateWithoutOrdersInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   products?: Prisma.ProductUncheckedUpdateManyWithoutSellerNestedInput
   bookings?: Prisma.ServiceBookingUncheckedUpdateManyWithoutCustomerNestedInput
+  diagnosisLogs?: Prisma.DiagnosisLogUncheckedUpdateManyWithoutCustomerNestedInput
   sellRequests?: Prisma.SellRequestUncheckedUpdateManyWithoutUserNestedInput
 }
 
@@ -1116,6 +1259,7 @@ export type UserCountOutputType = {
   products: number
   bookings: number
   orders: number
+  diagnosisLogs: number
   sellRequests: number
 }
 
@@ -1123,6 +1267,7 @@ export type UserCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.I
   products?: boolean | UserCountOutputTypeCountProductsArgs
   bookings?: boolean | UserCountOutputTypeCountBookingsArgs
   orders?: boolean | UserCountOutputTypeCountOrdersArgs
+  diagnosisLogs?: boolean | UserCountOutputTypeCountDiagnosisLogsArgs
   sellRequests?: boolean | UserCountOutputTypeCountSellRequestsArgs
 }
 
@@ -1160,6 +1305,13 @@ export type UserCountOutputTypeCountOrdersArgs<ExtArgs extends runtime.Types.Ext
 /**
  * UserCountOutputType without action
  */
+export type UserCountOutputTypeCountDiagnosisLogsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.DiagnosisLogWhereInput
+}
+
+/**
+ * UserCountOutputType without action
+ */
 export type UserCountOutputTypeCountSellRequestsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   where?: Prisma.SellRequestWhereInput
 }
@@ -1184,6 +1336,7 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   products?: boolean | Prisma.User$productsArgs<ExtArgs>
   bookings?: boolean | Prisma.User$bookingsArgs<ExtArgs>
   orders?: boolean | Prisma.User$ordersArgs<ExtArgs>
+  diagnosisLogs?: boolean | Prisma.User$diagnosisLogsArgs<ExtArgs>
   sellRequests?: boolean | Prisma.User$sellRequestsArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
@@ -1247,6 +1400,7 @@ export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   products?: boolean | Prisma.User$productsArgs<ExtArgs>
   bookings?: boolean | Prisma.User$bookingsArgs<ExtArgs>
   orders?: boolean | Prisma.User$ordersArgs<ExtArgs>
+  diagnosisLogs?: boolean | Prisma.User$diagnosisLogsArgs<ExtArgs>
   sellRequests?: boolean | Prisma.User$sellRequestsArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
@@ -1259,6 +1413,7 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     products: Prisma.$ProductPayload<ExtArgs>[]
     bookings: Prisma.$ServiceBookingPayload<ExtArgs>[]
     orders: Prisma.$ProductOrderPayload<ExtArgs>[]
+    diagnosisLogs: Prisma.$DiagnosisLogPayload<ExtArgs>[]
     sellRequests: Prisma.$SellRequestPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
@@ -1674,6 +1829,7 @@ export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Typ
   products<T extends Prisma.User$productsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$productsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ProductPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   bookings<T extends Prisma.User$bookingsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$bookingsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ServiceBookingPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   orders<T extends Prisma.User$ordersArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$ordersArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ProductOrderPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  diagnosisLogs<T extends Prisma.User$diagnosisLogsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$diagnosisLogsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$DiagnosisLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   sellRequests<T extends Prisma.User$sellRequestsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$sellRequestsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$SellRequestPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
@@ -2176,6 +2332,30 @@ export type User$ordersArgs<ExtArgs extends runtime.Types.Extensions.InternalArg
   take?: number
   skip?: number
   distinct?: Prisma.ProductOrderScalarFieldEnum | Prisma.ProductOrderScalarFieldEnum[]
+}
+
+/**
+ * User.diagnosisLogs
+ */
+export type User$diagnosisLogsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the DiagnosisLog
+   */
+  select?: Prisma.DiagnosisLogSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the DiagnosisLog
+   */
+  omit?: Prisma.DiagnosisLogOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.DiagnosisLogInclude<ExtArgs> | null
+  where?: Prisma.DiagnosisLogWhereInput
+  orderBy?: Prisma.DiagnosisLogOrderByWithRelationInput | Prisma.DiagnosisLogOrderByWithRelationInput[]
+  cursor?: Prisma.DiagnosisLogWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.DiagnosisLogScalarFieldEnum | Prisma.DiagnosisLogScalarFieldEnum[]
 }
 
 /**

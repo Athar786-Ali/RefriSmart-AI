@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
+import { getApiBase } from "@/lib/api";
 
 export type AuthUser = {
   id: string;
@@ -31,21 +32,6 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// Fix: If the browser is on 127.0.0.1 but API_URL is localhost, cookies will be blocked by CORS due to origin mismatch.
-// Dynamically swap them so the request always perfectly matches the domain the user is viewing.
-const getApiBase = () => {
-  const rawApi = process.env.NEXT_PUBLIC_API_URL || "";
-  if (typeof window === "undefined") return rawApi;
-  
-  if (window.location.hostname === "127.0.0.1" && rawApi.includes("localhost")) {
-    return rawApi.replace("localhost", "127.0.0.1");
-  }
-  if (window.location.hostname === "localhost" && rawApi.includes("127.0.0.1")) {
-    return rawApi.replace("127.0.0.1", "localhost");
-  }
-  return rawApi;
-};
-
 const readCachedUser = () => {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem("user");
@@ -58,9 +44,7 @@ const readCachedUser = () => {
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Instantly hydrate user from localStorage on mount to prevent any "Logged Out" UI flash
-  // before the /auth/me network call completes.
-  const [user, setUserState] = useState<AuthUser | null>(() => readCachedUser());
+  const [user, setUserState] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   const setUser = useCallback((next: AuthUser | null) => {
@@ -90,16 +74,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         credentials: "include",
       });
 
-      // Only clear the cached session when the backend explicitly rejects the JWT
-      // AND there is no cached user in localStorage.
-      // A brief backend restart, cookie timing issue, or hostname mismatch (localhost vs 127.0.0.1)
-      // can cause false-401s — we must NOT log the user out in those cases.
       if (res.status === 401 || res.status === 403) {
-        if (!readCachedUser()) {
-          setUser(null);
-        }
-        // If there IS a cached user, keep them logged-in visually.
-        // The next real authenticated API call will surface the 401 and handle it.
+        // A 401/403 from /auth/me means the active cookie no longer maps to a valid
+        // authenticated session. Clear any cached identity immediately so we never
+        // keep showing one account while API calls run under another or no session.
+        setUser(null);
         setLoading(false);
         return;
       }
@@ -136,6 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [setUser]);
 
   useEffect(() => {
+    const cachedUser = readCachedUser();
+    if (cachedUser) {
+      setUserState(cachedUser);
+    }
     void refresh();
   }, [refresh]);
 

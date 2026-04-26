@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Trash2, Upload } from "lucide-react";
-import { toDataUrl, btn } from "./_types";
+import { btn } from "./_types";
 import type { SectionProps } from "./_types";
 
 const MAX = 100 * 1024 * 1024;
@@ -19,17 +19,32 @@ export function GallerySection({ gallery, setGallery, API }: SectionProps) {
     if (file.size > MAX) return toast.error("File too large (max 100 MB).");
     setUploading(true);
     try {
-      const fileData  = await toDataUrl(file);
-      const mediaType: "image"|"video" = file.type.startsWith("video/") ? "video" : "image";
+      const mediaType: "image" | "video" = file.type.startsWith("video/") ? "video" : "image";
+      const formData = new FormData();
+      formData.append("media", file);
+      if (caption.trim()) {
+        formData.append("caption", caption.trim());
+      }
+
       const r = await fetch(`${API}/admin/gallery`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-        body: JSON.stringify({ fileData, mediaType, caption: caption.trim() || null }),
+        method: "POST",
+        credentials: "include",
+        body: formData,
       });
       const p = await r.json().catch(() => null);
       if (!r.ok) return toast.error(p?.error || "Upload failed.");
       toast.success("Gallery updated!");
       if (p?.id && p?.imageUrl) {
-        setGallery(g => [{ id: String(p.id), imageUrl: String(p.imageUrl), mediaType: p.mediaType || mediaType, caption: p.caption || caption || null, createdAt: new Date().toISOString() }, ...g]);
+        setGallery((g) => [
+          {
+            id: String(p.id),
+            imageUrl: String(p.imageUrl),
+            mediaType: p.mediaType || mediaType,
+            caption: p.caption || caption || null,
+            createdAt: p.createdAt || new Date().toISOString(),
+          },
+          ...g,
+        ]);
       }
       setFile(null); setCaption("");
     } catch { toast.error("Upload failed."); }

@@ -388,6 +388,7 @@ export const ModelName = {
   Product: 'Product',
   ServiceBooking: 'ServiceBooking',
   Gallery: 'Gallery',
+  DiagnosisLog: 'DiagnosisLog',
   Technician: 'Technician',
   ServiceAssignment: 'ServiceAssignment',
   ServiceEvent: 'ServiceEvent',
@@ -395,7 +396,8 @@ export const ModelName = {
   SellRequest: 'SellRequest',
   SellOffer: 'SellOffer',
   DocumentLog: 'DocumentLog',
-  ProductOrder: 'ProductOrder'
+  ProductOrder: 'ProductOrder',
+  Notification: 'Notification'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -411,7 +413,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "product" | "serviceBooking" | "gallery" | "technician" | "serviceAssignment" | "serviceEvent" | "serviceOtp" | "sellRequest" | "sellOffer" | "documentLog" | "productOrder"
+    modelProps: "user" | "product" | "serviceBooking" | "gallery" | "diagnosisLog" | "technician" | "serviceAssignment" | "serviceEvent" | "serviceOtp" | "sellRequest" | "sellOffer" | "documentLog" | "productOrder" | "notification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -708,6 +710,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.GalleryCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.GalleryCountAggregateOutputType> | number
+        }
+      }
+    }
+    DiagnosisLog: {
+      payload: Prisma.$DiagnosisLogPayload<ExtArgs>
+      fields: Prisma.DiagnosisLogFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.DiagnosisLogFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$DiagnosisLogPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.DiagnosisLogFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$DiagnosisLogPayload>
+        }
+        findFirst: {
+          args: Prisma.DiagnosisLogFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$DiagnosisLogPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.DiagnosisLogFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$DiagnosisLogPayload>
+        }
+        findMany: {
+          args: Prisma.DiagnosisLogFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$DiagnosisLogPayload>[]
+        }
+        create: {
+          args: Prisma.DiagnosisLogCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$DiagnosisLogPayload>
+        }
+        createMany: {
+          args: Prisma.DiagnosisLogCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.DiagnosisLogCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$DiagnosisLogPayload>[]
+        }
+        delete: {
+          args: Prisma.DiagnosisLogDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$DiagnosisLogPayload>
+        }
+        update: {
+          args: Prisma.DiagnosisLogUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$DiagnosisLogPayload>
+        }
+        deleteMany: {
+          args: Prisma.DiagnosisLogDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.DiagnosisLogUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.DiagnosisLogUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$DiagnosisLogPayload>[]
+        }
+        upsert: {
+          args: Prisma.DiagnosisLogUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$DiagnosisLogPayload>
+        }
+        aggregate: {
+          args: Prisma.DiagnosisLogAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateDiagnosisLog>
+        }
+        groupBy: {
+          args: Prisma.DiagnosisLogGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.DiagnosisLogGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.DiagnosisLogCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.DiagnosisLogCountAggregateOutputType> | number
         }
       }
     }
@@ -1303,6 +1379,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    Notification: {
+      payload: Prisma.$NotificationPayload<ExtArgs>
+      fields: Prisma.NotificationFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.NotificationFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.NotificationFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>
+        }
+        findFirst: {
+          args: Prisma.NotificationFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.NotificationFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>
+        }
+        findMany: {
+          args: Prisma.NotificationFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>[]
+        }
+        create: {
+          args: Prisma.NotificationCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>
+        }
+        createMany: {
+          args: Prisma.NotificationCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.NotificationCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>[]
+        }
+        delete: {
+          args: Prisma.NotificationDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>
+        }
+        update: {
+          args: Prisma.NotificationUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>
+        }
+        deleteMany: {
+          args: Prisma.NotificationDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.NotificationUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.NotificationUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>[]
+        }
+        upsert: {
+          args: Prisma.NotificationUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$NotificationPayload>
+        }
+        aggregate: {
+          args: Prisma.NotificationAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateNotification>
+        }
+        groupBy: {
+          args: Prisma.NotificationGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.NotificationGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.NotificationCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.NotificationCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1422,10 +1572,28 @@ export const GalleryScalarFieldEnum = {
 export type GalleryScalarFieldEnum = (typeof GalleryScalarFieldEnum)[keyof typeof GalleryScalarFieldEnum]
 
 
+export const DiagnosisLogScalarFieldEnum = {
+  id: 'id',
+  customerId: 'customerId',
+  guestName: 'guestName',
+  guestPhone: 'guestPhone',
+  appliance: 'appliance',
+  issue: 'issue',
+  diagnosis: 'diagnosis',
+  estimatedCostRange: 'estimatedCostRange',
+  mediaUrl: 'mediaUrl',
+  mediaType: 'mediaType',
+  createdAt: 'createdAt'
+} as const
+
+export type DiagnosisLogScalarFieldEnum = (typeof DiagnosisLogScalarFieldEnum)[keyof typeof DiagnosisLogScalarFieldEnum]
+
+
 export const TechnicianScalarFieldEnum = {
   id: 'id',
   name: 'name',
   phone: 'phone',
+  email: 'email',
   role: 'role',
   pincode: 'pincode',
   active: 'active',
@@ -1474,6 +1642,8 @@ export const SellRequestScalarFieldEnum = {
   userId: 'userId',
   applianceType: 'applianceType',
   brandModel: 'brandModel',
+  contactName: 'contactName',
+  address: 'address',
   conditionNote: 'conditionNote',
   expectedPrice: 'expectedPrice',
   pincode: 'pincode',
@@ -1518,7 +1688,7 @@ export const ProductOrderScalarFieldEnum = {
   customerName: 'customerName',
   deliveryPhone: 'deliveryPhone',
   deliveryAddress: 'deliveryAddress',
-  orderStatus: 'orderStatus',
+  status: 'status',
   paymentStatus: 'paymentStatus',
   internalNote: 'internalNote',
   paymentQR: 'paymentQR',
@@ -1528,6 +1698,18 @@ export const ProductOrderScalarFieldEnum = {
 } as const
 
 export type ProductOrderScalarFieldEnum = (typeof ProductOrderScalarFieldEnum)[keyof typeof ProductOrderScalarFieldEnum]
+
+
+export const NotificationScalarFieldEnum = {
+  id: 'id',
+  userEmail: 'userEmail',
+  message: 'message',
+  bookingId: 'bookingId',
+  createdAt: 'createdAt',
+  read: 'read'
+} as const
+
+export type NotificationScalarFieldEnum = (typeof NotificationScalarFieldEnum)[keyof typeof NotificationScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -1847,6 +2029,7 @@ export type GlobalOmitConfig = {
   product?: Prisma.ProductOmit
   serviceBooking?: Prisma.ServiceBookingOmit
   gallery?: Prisma.GalleryOmit
+  diagnosisLog?: Prisma.DiagnosisLogOmit
   technician?: Prisma.TechnicianOmit
   serviceAssignment?: Prisma.ServiceAssignmentOmit
   serviceEvent?: Prisma.ServiceEventOmit
@@ -1855,6 +2038,7 @@ export type GlobalOmitConfig = {
   sellOffer?: Prisma.SellOfferOmit
   documentLog?: Prisma.DocumentLogOmit
   productOrder?: Prisma.ProductOrderOmit
+  notification?: Prisma.NotificationOmit
 }
 
 /* Types for Logging */

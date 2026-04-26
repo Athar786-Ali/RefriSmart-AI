@@ -1,9 +1,9 @@
 import type { Request, Response } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { cloudinary } from "../config/cloudinary.js";
 import { prisma } from "../config/prisma.js";
+import { transporter } from "../utils/email.js";
 import { razorpay, razorpayKeyId, razorpayKeySecret } from "../config/razorpay.js";
-import type { AuthenticatedRequest } from "../middlewares/authMiddleware.js";
+import { resolveUserIdFromRequest, type AuthenticatedRequest } from "../middlewares/authMiddleware.js";
 import {
   SHOP_UPI_ID,
   TECHNICIAN_PHONE,
@@ -15,39 +15,396 @@ import {
   inferMediaTypeFromUrl,
   makeSimplePdfBuffer,
 } from "../config/runtime.js";
+import { listDiagnosisLogs } from "../services/diagnosisService.js";
+import { removeStoredMedia, storeMediaFromDataUrl, storeMediaFromTempFile, toAbsoluteMediaUrl } from "../services/mediaStorageService.js";
+import {
+  getDisplayServiceStatusLabel,
+  isAwaitingServicePayment,
+  isClosedServiceStatus,
+  toDisplayServiceStatus,
+  toRawServiceStatus,
+} from "../utils/serviceStatus.js";
 
 const getBookingsWithAssignment = async (customerId: string) => {
   const bookings = await prisma.serviceBooking.findMany({
     where: { customerId },
     orderBy: { scheduledAt: "desc" },
   });
-  const bookingIds = bookings.map((b) => b.id);
-  if (!bookingIds.length) return [];
+  if (!bookings.length) return [];
 
-  // Fix #10: Filter assignments in the DB with a WHERE clause instead of loading all
-  // rows and filtering in JavaScript — prevents O(N) memory usage at scale.
-  const assignmentRows = await prisma.$queryRaw<Array<{ bookingId: string; technicianId: string; pincode: string; routeNote: string }>>`
-      SELECT "bookingId", "technicianId", COALESCE("pincode",'') AS "pincode", COALESCE("routeNote",'') AS "routeNote"
-      FROM "ServiceAssignment"
-      WHERE "bookingId" = ANY(${bookingIds}::uuid[])
-    `;
-  const assignments = assignmentRows;
-  const technicians = await prisma.$queryRaw<Array<{ id: string; name: string; phone: string }>>`
-      SELECT "id", "name", "phone" FROM "Technician"
-    `;
-  const assignMap = new Map(assignments.map((a) => [a.bookingId, a]));
-  const techMap = new Map(technicians.map((t) => [t.id, t]));
+  // Keep this path deliberately defensive. The customer tracker should never crash
+  // because one assignment row or technician relation is missing/corrupt.
+  return Promise.all(
+    bookings.map(async (booking) => {
+      try {
+        const assignment = await getAssignmentSnapshot(booking.id);
+        return applyAssignmentSnapshot(booking, assignment);
+      } catch (error) {
+        console.error("MY BOOKINGS ASSIGNMENT SNAPSHOT ERROR:", {
+          bookingId: booking.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return applyAssignmentSnapshot(booking, null);
+      }
+    }),
+  );
+};
 
-  return bookings.map((b) => {
-    const assign = assignMap.get(b.id);
-    const tech = assign ? techMap.get(assign.technicianId) : null;
-    return {
-      ...b,
-      technician: tech || null,
-      pincode: assign?.pincode || null,
-      routeNote: assign?.routeNote || null,
-    };
+const serializeBookingWithAssignment = (
+  booking: {
+    id: string;
+    appliance: string;
+    issue: string;
+    status: unknown;
+    scheduledAt: Date;
+    address?: string | null;
+    finalCost?: number | null;
+    paymentQR?: string | null;
+    invoiceUrl?: string | null;
+    rating?: number | null;
+    aiDiagnosis?: string | null;
+    guestName?: string | null;
+    guestPhone?: string | null;
+    contactName?: string | null;
+    contactPhone?: string | null;
+    customerId?: string | null;
+    locationLat?: number | null;
+    locationLng?: number | null;
+    assignment?: {
+      pincode?: string | null;
+      routeNote?: string | null;
+      technician?: {
+        id: string;
+        name: string;
+        phone: string;
+      } | null;
+    } | null;
+  },
+  customer?: { name?: string | null; email?: string | null } | null,
+) => {
+  const { assignment, ...bookingWithoutAssignment } = booking;
+  const technician = booking.assignment?.technician
+    ? {
+        id: booking.assignment.technician.id,
+        name: booking.assignment.technician.name,
+        phone: booking.assignment.technician.phone,
+      }
+    : null;
+
+  return {
+    ...bookingWithoutAssignment,
+    customer: customer
+      ? {
+          name: customer.name || "",
+          email: customer.email || "",
+        }
+      : undefined,
+    technician,
+    technicianId: technician?.id || null,
+    technicianName: technician?.name || null,
+    pincode: assignment?.pincode || null,
+    routeNote: assignment?.routeNote || null,
+    displayStatus: toDisplayServiceStatus(String(booking.status)),
+    statusLabel: getDisplayServiceStatusLabel(String(booking.status)),
+  };
+};
+
+type AssignmentSnapshot = {
+  bookingId: string;
+  technicianId: string | null;
+  pincode: string;
+  routeNote: string;
+  technicianName: string | null;
+  technicianPhone: string | null;
+};
+
+const getAssignmentSnapshot = async (bookingId: string): Promise<AssignmentSnapshot | null> => {
+  const rows = await prisma.$queryRaw<Array<AssignmentSnapshot>>`
+    SELECT
+      sa."bookingId",
+      sa."technicianId",
+      COALESCE(sa."pincode",'') AS "pincode",
+      COALESCE(sa."routeNote",'') AS "routeNote",
+      t."name" AS "technicianName",
+      t."phone" AS "technicianPhone"
+    FROM "ServiceAssignment" sa
+    LEFT JOIN "Technician" t ON t."id" = sa."technicianId"
+    WHERE sa."bookingId" = ${bookingId}
+    LIMIT 1
+  `;
+  return rows[0] || null;
+};
+
+const applyAssignmentSnapshot = <
+  T extends {
+    id: string;
+    appliance: string;
+    issue: string;
+    status: unknown;
+    scheduledAt: Date;
+    address?: string | null;
+    finalCost?: number | null;
+    paymentQR?: string | null;
+    invoiceUrl?: string | null;
+    rating?: number | null;
+    aiDiagnosis?: string | null;
+    guestName?: string | null;
+    guestPhone?: string | null;
+    contactName?: string | null;
+    contactPhone?: string | null;
+    customerId?: string | null;
+    locationLat?: number | null;
+    locationLng?: number | null;
+  },
+>(
+  booking: T,
+  assignment: AssignmentSnapshot | null,
+  customer?: { name?: string | null; email?: string | null } | null,
+) =>
+  serializeBookingWithAssignment(
+    {
+      ...booking,
+      assignment: assignment
+        ? {
+            pincode: assignment.pincode || null,
+            routeNote: assignment.routeNote || null,
+            technician:
+              assignment.technicianId && assignment.technicianName
+                ? {
+                    id: assignment.technicianId,
+                    name: assignment.technicianName,
+                    phone: assignment.technicianPhone || "",
+                  }
+                : null,
+          }
+        : null,
+    },
+    customer,
+  );
+
+type BookingRequestPayload = {
+  userId?: string;
+  appliance?: string;
+  issue?: string;
+  aiDiagnosis?: string;
+  slot?: string;
+  pincode?: string;
+  fullName?: string;
+  phoneNumber?: string;
+  guestName?: string;
+  guestPhone?: string;
+  address?: string;
+  lat?: number | string;
+  lng?: number | string;
+};
+
+const resolveBookingRequesterId = (req: Request, requestedUserId?: string) => {
+  const tokenUserId = (req as AuthenticatedRequest).userId || resolveUserIdFromRequest(req);
+  const normalizedRequestedUserId = String(requestedUserId || "").trim();
+
+  if (normalizedRequestedUserId && !tokenUserId) {
+    throw new Error("LOGIN_REQUIRED");
+  }
+  if (normalizedRequestedUserId && tokenUserId && normalizedRequestedUserId !== tokenUserId) {
+    throw new Error("FORBIDDEN");
+  }
+
+  return tokenUserId || null;
+};
+
+const createServiceBookingRecord = async (req: Request) => {
+  await ensurePhase2Schema().catch(() => {});
+
+  const {
+    userId,
+    appliance,
+    issue,
+    aiDiagnosis,
+    slot,
+    pincode,
+    fullName,
+    phoneNumber,
+    guestName,
+    guestPhone,
+    address,
+    lat,
+    lng,
+  } = req.body as BookingRequestPayload;
+
+  const resolvedUserId = resolveBookingRequesterId(req, userId);
+  const trimmedAppliance = String(appliance || "").trim();
+  const trimmedIssue = String(issue || "").trim();
+  const trimmedFullName = String(fullName || "").trim();
+  const trimmedAddress = String(address || "").trim();
+  const trimmedPincode = String(pincode || "").trim();
+  const trimmedDiagnosis = String(aiDiagnosis || "").trim();
+
+  if (!trimmedAppliance || !trimmedIssue) {
+    throw new Error("VALIDATION:appliance and issue are required.");
+  }
+  if (!trimmedFullName) {
+    throw new Error("VALIDATION:Full name is required.");
+  }
+
+  const cleanedPhone = String(phoneNumber || "").replace(/\D/g, "");
+  if (!cleanedPhone || cleanedPhone.length !== 10) {
+    throw new Error("VALIDATION:A valid 10-digit phone number is required.");
+  }
+  if (!trimmedAddress) {
+    throw new Error("VALIDATION:Full address is required.");
+  }
+  if (!/^\d{6}$/.test(trimmedPincode)) {
+    throw new Error("VALIDATION:Pincode must be a 6-digit number.");
+  }
+
+  const SERVICE_PIN_PREFIXES = ["812", "813", "853"];
+  if (!SERVICE_PIN_PREFIXES.some((prefix) => trimmedPincode.startsWith(prefix))) {
+    throw new Error("VALIDATION:Sorry, your location is outside our current service area.");
+  }
+
+  const scheduledAt = slot ? new Date(slot) : new Date(Date.now() + 2 * 60 * 60 * 1000);
+  if (Number.isNaN(scheduledAt.getTime())) {
+    throw new Error("VALIDATION:Invalid slot selected.");
+  }
+
+  const techRows = await prisma.$queryRaw<Array<{ id: string; name: string; phone: string; pincode: string }>>`
+    SELECT "id", "name", "phone", "pincode"
+    FROM "Technician"
+    WHERE "active" = TRUE
+    ORDER BY "id" ASC
+  `;
+  if (!techRows.length) {
+    throw new Error("NO_TECHNICIAN");
+  }
+
+  let matchingTechs = techRows.filter(
+    (tech) => trimmedPincode && (tech.pincode === trimmedPincode || tech.pincode.slice(0, 3) === trimmedPincode.slice(0, 3)),
+  );
+  if (!matchingTechs.length) {
+    matchingTechs = techRows;
+  }
+  const selectedTech = matchingTechs[0];
+
+  let resolvedCustomerId: string | null = null;
+  let resolvedName = trimmedFullName;
+  let resolvedPhone = cleanedPhone;
+  let resolvedGuestName = String(guestName || "").trim();
+  let resolvedGuestPhone = String(guestPhone || "").replace(/\D/g, "");
+
+  if (resolvedUserId) {
+    const existingUser = await prisma.user.findUnique({ where: { id: resolvedUserId } });
+    if (!existingUser) {
+      throw new Error("USER_NOT_FOUND");
+    }
+    resolvedCustomerId = existingUser.id;
+    resolvedName = trimmedFullName || existingUser.name || "Customer";
+    resolvedPhone = cleanedPhone || String(existingUser.phone || "").replace(/\D/g, "") || "Not provided";
+  } else {
+    resolvedGuestName = resolvedGuestName || resolvedName;
+    resolvedGuestPhone = resolvedGuestPhone || resolvedPhone;
+    if (!resolvedGuestName || !resolvedGuestPhone) {
+      throw new Error("VALIDATION:guestName and guestPhone are required.");
+    }
+    resolvedName = resolvedGuestName;
+    resolvedPhone = resolvedGuestPhone;
+  }
+
+  const bookingId = createUuid();
+  const inserted = await prisma.$queryRaw<Array<any>>`
+    INSERT INTO "ServiceBooking"
+    (
+      "id",
+      "customerId",
+      "guestName",
+      "guestPhone",
+      "appliance",
+      "issue",
+      "aiDiagnosis",
+      "status",
+      "scheduledAt",
+      "address",
+      "contactName",
+      "contactPhone",
+      "locationLat",
+      "locationLng"
+    )
+    VALUES
+    (
+      ${bookingId},
+      ${resolvedCustomerId},
+      ${resolvedCustomerId ? null : resolvedName},
+      ${resolvedCustomerId ? null : resolvedPhone},
+      ${trimmedAppliance},
+      ${trimmedIssue},
+      ${trimmedDiagnosis || null},
+      ${"PENDING"}::"Status",
+      ${scheduledAt},
+      ${trimmedAddress || null},
+      ${resolvedName},
+      ${resolvedPhone},
+      ${lat !== undefined && lat !== null && String(lat) !== "" ? Number(lat) : null},
+      ${lng !== undefined && lng !== null && String(lng) !== "" ? Number(lng) : null}
+    )
+    RETURNING *
+  `;
+  const booking = inserted[0];
+
+  await prisma.$executeRaw`
+    INSERT INTO "ServiceAssignment" ("bookingId", "technicianId", "pincode", "routeNote")
+    VALUES (${booking.id}, ${selectedTech.id}, ${trimmedPincode || selectedTech.pincode}, ${"Auto allocated by pincode and availability"})
+    ON CONFLICT ("bookingId") DO UPDATE
+    SET "technicianId" = EXCLUDED."technicianId",
+        "pincode" = EXCLUDED."pincode",
+        "routeNote" = EXCLUDED."routeNote"
+  `;
+  await prisma.$executeRaw`
+    INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
+    VALUES (${createUuid()}, ${booking.id}, ${"REQUEST_RECEIVED"}, ${"Request received from customer"})
+  `;
+  await prisma.$executeRaw`
+    INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
+    VALUES (${createUuid()}, ${booking.id}, ${"ASSIGNED"}, ${`Assigned to ${selectedTech.name}`})
+  `;
+
+  const responseBooking = serializeBookingWithAssignment({
+    ...booking,
+    assignment: {
+      pincode: trimmedPincode || selectedTech.pincode,
+      routeNote: "Auto allocated by pincode and availability",
+      technician: selectedTech,
+    },
   });
+
+  return {
+    booking: responseBooking,
+    assignedTechnician: selectedTech,
+    contact: {
+      phone: selectedTech.phone || TECHNICIAN_PHONE,
+      call: `tel:${selectedTech.phone || TECHNICIAN_PHONE}`,
+      whatsapp: `https://wa.me/91${selectedTech.phone || TECHNICIAN_PHONE}`,
+      sms: `sms:+91${selectedTech.phone || TECHNICIAN_PHONE}`,
+    },
+  };
+};
+
+const handleCreateBookingError = (res: Response, error: unknown, fallbackMessage: string) => {
+  const message = error instanceof Error ? error.message : "Unknown error";
+  if (message === "LOGIN_REQUIRED") {
+    return res.status(401).json({ error: "Session expired. Please log in again before booking." });
+  }
+  if (message === "FORBIDDEN") {
+    return res.status(403).json({ error: "Forbidden." });
+  }
+  if (message === "USER_NOT_FOUND") {
+    return res.status(404).json({ error: "User not found." });
+  }
+  if (message === "NO_TECHNICIAN") {
+    return res.status(503).json({ error: "No technicians are available right now. Please try again later." });
+  }
+  if (message.startsWith("VALIDATION:")) {
+    return res.status(400).json({ error: message.replace("VALIDATION:", "") });
+  }
+  return res.status(500).json({ error: fallbackMessage, details: message });
 };
 
 export const getHistory = async (req: AuthenticatedRequest, res: Response) => {
@@ -105,303 +462,22 @@ export const getBookingSlots = async (req: Request, res: Response) => {
 
 export const createBooking = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    await ensurePhase2Schema().catch(() => {});
-    const { appliance, issue, aiDiagnosis, slot, pincode, fullName, phoneNumber, guestName, guestPhone, address, lat, lng } = req.body as {
-      appliance?: string;
-      issue?: string;
-      aiDiagnosis?: string;
-      slot?: string;
-      pincode?: string;
-      fullName?: string;
-      phoneNumber?: string;
-      guestName?: string;
-      guestPhone?: string;
-      address?: string;
-      lat?: number | string;
-      lng?: number | string;
-    };
-
-    // Issue #6 Fix: userId MUST come from the verified JWT for authenticated users.
-    // Accepting it from the request body allows any caller to impersonate any account.
-    // Guests (no JWT) continue to work via guestName/guestPhone as before.
-    const userId = req.userId ?? null;
-
-    const trimmedAppliance = String(appliance || "").trim();
-    const trimmedIssue = String(issue || "").trim();
-    const trimmedFullName = String(fullName || "").trim();
-    const trimmedAddress = String(address || "").trim();
-    const trimmedPincode = String(pincode || "").trim();
-
-    if (!trimmedAppliance || !trimmedIssue) {
-      return res.status(400).json({ error: "appliance and issue are required." });
-    }
-    if (!trimmedFullName) {
-      return res.status(400).json({ error: "Full name is required." });
-    }
-    const cleanedPhone = String(phoneNumber || "").replace(/\D/g, "");
-    if (!cleanedPhone || cleanedPhone.length !== 10) {
-      return res.status(400).json({ error: "A valid 10-digit phone number is required." });
-    }
-    if (!trimmedAddress) {
-      return res.status(400).json({ error: "Full address is required." });
-    }
-    if (!/^\d{6}$/.test(trimmedPincode)) {
-      return res.status(400).json({ error: "Pincode must be a 6-digit number." });
-    }
-    const SERVICE_PIN_PREFIXES = ["812", "813", "853"];
-    if (!SERVICE_PIN_PREFIXES.some((prefix) => trimmedPincode.startsWith(prefix))) {
-      return res.status(400).json({ error: "Sorry, your location is outside our current service area." });
-    }
-
-    const scheduledAt = slot ? new Date(slot) : new Date(Date.now() + 2 * 60 * 60 * 1000);
-    if (Number.isNaN(scheduledAt.getTime())) {
-      return res.status(400).json({ error: "Invalid slot selected." });
-    }
-
-    const techRows = await prisma.$queryRaw<Array<{ id: string; name: string; phone: string; pincode: string }>>`
-      SELECT "id", "name", "phone", "pincode"
-      FROM "Technician"
-      WHERE "active" = TRUE
-      ORDER BY "id" ASC
-    `;
-    if (!techRows.length) {
-      return res.status(503).json({ error: "No technicians are available right now. Please try again later." });
-    }
-    let matchingTechs = techRows.filter(
-      (t) => trimmedPincode && (t.pincode === trimmedPincode || t.pincode.slice(0, 3) === trimmedPincode.slice(0, 3)),
-    );
-    if (!matchingTechs.length) {
-      // Fallback for broad district coverage — assign ANY active technician 
-      // if the user's pincode was already verified as part of the service area prefixes.
-      matchingTechs = techRows;
-    }
-    const selectedTech = matchingTechs[0];
-
-    let resolvedCustomerId: string | null = null;
-    let resolvedName = trimmedFullName;
-    let resolvedPhone = cleanedPhone;
-    let resolvedGuestName = String(guestName || "").trim();
-    let resolvedGuestPhone = String(guestPhone || "").replace(/\D/g, "");
-
-    if (userId) {
-      const existingUser = await prisma.user.findUnique({ where: { id: userId } });
-      if (!existingUser) return res.status(404).json({ error: "User not found." });
-      resolvedCustomerId = userId;
-      resolvedName = resolvedName || existingUser.name || "Customer";
-      resolvedPhone = resolvedPhone || "Not provided";
-    } else {
-      resolvedGuestName = resolvedGuestName || resolvedName;
-      resolvedGuestPhone = resolvedGuestPhone || resolvedPhone;
-      if (!resolvedGuestName || !resolvedGuestPhone) {
-        return res.status(400).json({ error: "guestName and guestPhone are required." });
-      }
-      resolvedName = resolvedGuestName;
-      resolvedPhone = resolvedGuestPhone;
-    }
-
-    const booking = await prisma.serviceBooking.create({
-      data: {
-        customerId: resolvedCustomerId,
-        guestName: resolvedCustomerId ? null : resolvedName,
-        guestPhone: resolvedCustomerId ? null : resolvedPhone,
-        appliance: trimmedAppliance,
-        issue: trimmedIssue,
-        aiDiagnosis: aiDiagnosis || null,
-        status: "PENDING",
-        scheduledAt,
-        contactName: resolvedName,
-        contactPhone: resolvedPhone,
-      },
-    });
-
-    await prisma.$executeRaw`
-      INSERT INTO "ServiceAssignment" ("bookingId", "technicianId", "pincode", "routeNote")
-      VALUES (${booking.id}, ${selectedTech.id}, ${trimmedPincode || selectedTech.pincode}, ${"Auto allocated by pincode and availability"})
-      ON CONFLICT ("bookingId") DO UPDATE
-      SET "technicianId" = EXCLUDED."technicianId",
-          "pincode" = EXCLUDED."pincode",
-          "routeNote" = EXCLUDED."routeNote"
-    `;
-    await prisma.$executeRaw`
-      INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
-      VALUES (${createUuid()}, ${booking.id}, ${"REQUEST_RECEIVED"}, ${"Request received from customer"})
-    `;
-    await prisma.$executeRaw`
-      INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
-      VALUES (${createUuid()}, ${booking.id}, ${"ASSIGNED"}, ${`Assigned to ${selectedTech.name}`})
-    `;
-
+    const result = await createServiceBookingRecord(req);
     res.status(201).json({
-      booking,
+      ...result,
       message: "Technician booking created.",
-      assignedTechnician: selectedTech,
-      contact: {
-        phone: selectedTech.phone || TECHNICIAN_PHONE,
-        call: `tel:${selectedTech.phone || TECHNICIAN_PHONE}`,
-        whatsapp: `https://wa.me/91${selectedTech.phone || TECHNICIAN_PHONE}`,
-        sms: `sms:+91${selectedTech.phone || TECHNICIAN_PHONE}`,
-      },
     });
   } catch (error: any) {
-    res.status(500).json({ error: "Failed to create booking.", details: error?.message || "Unknown error" });
+    handleCreateBookingError(res, error, "Failed to create booking.");
   }
 };
 
-// Fix #19: bookService was an exact duplicate of createBooking (one used raw SQL, one used Prisma ORM;
-// both produced identical outcomes). The legacy /service/book route now delegates to createBooking.
 export const bookService = async (req: Request, res: Response) => {
   try {
-    await ensurePhase2Schema().catch(() => {});
-    const { userId, appliance, issue, address, lat, lng, slot, pincode, fullName, phoneNumber, guestName, guestPhone } = req.body as {
-      userId?: string;
-      appliance?: string;
-      issue?: string;
-      address?: string;
-      lat?: number | string;
-      lng?: number | string;
-      slot?: string;
-      pincode?: string;
-      fullName?: string;
-      phoneNumber?: string;
-      guestName?: string;
-      guestPhone?: string;
-    };
-    const trimmedAppliance = String(appliance || "").trim();
-    const trimmedIssue = String(issue || "").trim();
-    const trimmedFullName = String(fullName || "").trim();
-    const trimmedAddress = String(address || "").trim();
-    const trimmedPincode = String(pincode || "").trim();
-
-    if (!trimmedAppliance || !trimmedIssue) {
-      return res.status(400).json({ error: "appliance and issue are required." });
-    }
-    if (!trimmedFullName) {
-      return res.status(400).json({ error: "Full name is required." });
-    }
-    const cleanedPhone = String(phoneNumber || "").replace(/\D/g, "");
-    if (!cleanedPhone || cleanedPhone.length !== 10) {
-      return res.status(400).json({ error: "A valid 10-digit phone number is required." });
-    }
-    if (!trimmedAddress) {
-      return res.status(400).json({ error: "Full address is required." });
-    }
-    if (!/^\d{6}$/.test(trimmedPincode)) {
-      return res.status(400).json({ error: "Pincode must be a 6-digit number." });
-    }
-    const SERVICE_PIN_PREFIXES = ["812", "813", "853"];
-    if (!SERVICE_PIN_PREFIXES.some((prefix) => trimmedPincode.startsWith(prefix))) {
-      return res.status(400).json({ error: "Sorry, your location is outside our current service area." });
-    }
-
-    const scheduledAt = slot ? new Date(slot) : new Date(Date.now() + 2 * 60 * 60 * 1000);
-    if (Number.isNaN(scheduledAt.getTime())) {
-      return res.status(400).json({ error: "Invalid slot selected." });
-    }
-
-    const techRows = await prisma.$queryRaw<Array<{ id: string; name: string; phone: string; pincode: string }>>`
-      SELECT "id", "name", "phone", "pincode"
-      FROM "Technician"
-      WHERE "active" = TRUE
-      ORDER BY "id" ASC
-    `;
-    if (!techRows.length) {
-      return res.status(503).json({ error: "No technicians are available right now. Please try again later." });
-    }
-    let matchingTechs = techRows.filter(
-      (t) => trimmedPincode && (t.pincode === trimmedPincode || t.pincode.slice(0, 3) === trimmedPincode.slice(0, 3)),
-    );
-    if (!matchingTechs.length) {
-      // Fallback for broad district coverage — assign ANY active technician 
-      // if the user's pincode was already verified as part of the service area prefixes.
-      matchingTechs = techRows;
-    }
-    const selectedTech = matchingTechs[0];
-
-    let resolvedCustomerId: string | null = null;
-    let resolvedName = trimmedFullName;
-    let resolvedPhone = cleanedPhone;
-    let resolvedGuestName = String(guestName || "").trim();
-    let resolvedGuestPhone = String(guestPhone || "").replace(/\D/g, "");
-
-    if (userId) {
-      const existingUser = await prisma.user.findUnique({ where: { id: userId } });
-      if (!existingUser) return res.status(404).json({ error: "User not found." });
-      resolvedCustomerId = userId;
-      resolvedName = resolvedName || existingUser.name || "Customer";
-      resolvedPhone = resolvedPhone || "Not provided";
-    } else {
-      resolvedGuestName = resolvedGuestName || resolvedName;
-      resolvedGuestPhone = resolvedGuestPhone || resolvedPhone;
-      if (!resolvedGuestName || !resolvedGuestPhone) {
-        return res.status(400).json({ error: "guestName and guestPhone are required." });
-      }
-      resolvedName = resolvedGuestName;
-      resolvedPhone = resolvedGuestPhone;
-    }
-
-    const bookingId = createUuid();
-    const inserted = await prisma.$queryRaw<Array<any>>`
-      INSERT INTO "ServiceBooking"
-      (
-        "id",
-        "customerId",
-        "guestName",
-        "guestPhone",
-        "appliance",
-        "issue",
-        "status",
-        "scheduledAt",
-        "address",
-        "contactName",
-        "contactPhone",
-        "locationLat",
-        "locationLng"
-      )
-      VALUES
-      (
-        ${bookingId},
-        ${resolvedCustomerId},
-        ${resolvedCustomerId ? null : resolvedName},
-        ${resolvedCustomerId ? null : resolvedPhone},
-        ${trimmedAppliance},
-        ${trimmedIssue},
-        ${"PENDING"}::"Status",
-        ${scheduledAt},
-        ${trimmedAddress || null},
-        ${resolvedName},
-        ${resolvedPhone},
-        ${lat !== undefined && lat !== null && String(lat) !== "" ? Number(lat) : null},
-        ${lng !== undefined && lng !== null && String(lng) !== "" ? Number(lng) : null}
-      )
-      RETURNING *
-    `;
-    const booking = inserted[0];
-
-    await prisma.$executeRaw`
-      INSERT INTO "ServiceAssignment" ("bookingId", "technicianId", "pincode", "routeNote")
-      VALUES (${booking.id}, ${selectedTech.id}, ${trimmedPincode || selectedTech.pincode}, ${"Auto allocated by pincode and availability"})
-      ON CONFLICT ("bookingId") DO UPDATE
-      SET "technicianId" = EXCLUDED."technicianId",
-          "pincode" = EXCLUDED."pincode",
-          "routeNote" = EXCLUDED."routeNote"
-    `;
-    await prisma.$executeRaw`
-      INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
-      VALUES (${createUuid()}, ${booking.id}, ${"PENDING"}, ${"Request received from customer"})
-    `;
-
-    res.status(201).json({
-      booking,
-      assignedTechnician: selectedTech,
-      contact: {
-        phone: selectedTech.phone || TECHNICIAN_PHONE,
-        call: `tel:${selectedTech.phone || TECHNICIAN_PHONE}`,
-        whatsapp: `https://wa.me/91${selectedTech.phone || TECHNICIAN_PHONE}`,
-        sms: `sms:+91${selectedTech.phone || TECHNICIAN_PHONE}`,
-      },
-    });
+    const result = await createServiceBookingRecord(req);
+    res.status(201).json(result);
   } catch (error: any) {
-    res.status(500).json({ error: "Failed to book service.", details: error?.message || "Unknown error" });
+    handleCreateBookingError(res, error, "Failed to book service.");
   }
 };
 
@@ -409,38 +485,35 @@ export const updateBookingStatus = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
     const id = String(req.params.id || "");
-    const { status } = req.body as {
-      status?:
-        | "PENDING"
-        | "ASSIGNED"
-        | "ESTIMATE_APPROVED"
-        | "OUT_FOR_REPAIR"
-        | "REPAIRING"
-        | "PAYMENT_PENDING"
-        | "FIXED"
-        | "COMPLETED"
-        | "CANCELLED";
-    };
-    if (
-      !status ||
-      !["PENDING", "ASSIGNED", "ESTIMATE_APPROVED", "OUT_FOR_REPAIR", "REPAIRING", "PAYMENT_PENDING", "FIXED", "COMPLETED", "CANCELLED"].includes(status)
-    ) {
+    const normalizedStatus = toRawServiceStatus(String(req.body?.status || ""));
+    if (!normalizedStatus) {
       return res.status(400).json({ error: "Valid status is required." });
     }
 
     const existing = await prisma.serviceBooking.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "Booking not found." });
-    if (["FIXED", "PAYMENT_PENDING", "COMPLETED"].includes(status) && (!existing.finalCost || existing.finalCost <= 0)) {
-      return res.status(400).json({ error: "Final cost must be set before requesting payment or completing the booking." });
+    const currentDisplayStatus = toDisplayServiceStatus(String(existing.status));
+    const requestedDisplayStatus = toDisplayServiceStatus(normalizedStatus);
+    if (requestedDisplayStatus === "COMPLETED") {
+      return res.status(400).json({ error: "Bookings move to completed only after payment is confirmed." });
     }
+    if (requestedDisplayStatus === "PAYMENT_PENDING") {
+      if (!existing.finalCost || existing.finalCost <= 0) {
+        return res.status(400).json({ error: "Final cost must be set before requesting payment." });
+      }
+      if (!["REPAIRING", "PAYMENT_PENDING"].includes(currentDisplayStatus)) {
+        return res.status(400).json({ error: "Payment can be requested only after the repair is finished." });
+      }
+    }
+    const effectiveStatus = requestedDisplayStatus === "PAYMENT_PENDING" ? "PAYMENT_PENDING" : normalizedStatus;
 
     const updated = await prisma.serviceBooking.update({
       where: { id },
-      data: { status: status as any },
+      data: { status: effectiveStatus as any },
     });
     await prisma.$executeRaw`
       INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
-      VALUES (${createUuid()}, ${id}, ${status}, ${`Status updated to ${status}`})
+      VALUES (${createUuid()}, ${id}, ${effectiveStatus}, ${`Status updated to ${effectiveStatus}`})
     `;
     res.json({ booking: updated });
   } catch (error: any) {
@@ -612,13 +685,13 @@ export const verifyBookingOtp = async (req: Request, res: Response) => {
     await prisma.$executeRaw`UPDATE "ServiceOtp" SET "verified" = TRUE WHERE "id" = ${latest.id}`;
     const updatedBooking = await prisma.serviceBooking.update({
       where: { id },
-      data: { status: "COMPLETED" },
+      data: { status: "PAYMENT_PENDING" },
     });
     await prisma.$executeRaw`
       INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
-      VALUES (${createUuid()}, ${id}, ${"COMPLETED"}, ${"OTP verified and service completed"})
+      VALUES (${createUuid()}, ${id}, ${"PAYMENT_PENDING"}, ${"OTP verified. Payment pending."})
     `;
-    res.json({ message: "OTP verified. Service marked completed.", booking: updatedBooking });
+    res.json({ message: "OTP verified. Payment is now pending.", booking: updatedBooking });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to verify OTP.", details: error?.message || "Unknown error" });
   }
@@ -627,21 +700,28 @@ export const verifyBookingOtp = async (req: Request, res: Response) => {
 export const getMyBookingsByPath = async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     const userId = String(req.params.userId || "");
     const requesterId = req.userId;
-    if (requesterId) {
-      const requester = await prisma.user.findUnique({ where: { id: requesterId } });
-      if (!requester) return res.status(403).json({ error: "Forbidden." });
-      if (requester.role !== "ADMIN" && requesterId !== userId) {
-        return res.status(403).json({ error: "Forbidden." });
-      }
+    if (!requesterId) return res.status(401).json({ error: "Unauthorized." });
+    const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+    if (!requester) return res.status(403).json({ error: "Forbidden." });
+    if (requester.role !== "ADMIN" && requesterId !== userId) {
+      return res.status(403).json({ error: "Forbidden." });
     }
+
     const bookings = await getBookingsWithAssignment(userId);
-    const activeBookings = bookings.filter(
-      (booking) => !["COMPLETED", "CANCELLED"].includes(String(booking.status)),
-    );
-    res.json(activeBookings);
+    const activeBookings = bookings.filter((booking) => !isClosedServiceStatus(String(booking.status)));
+    const previousBookings = bookings.filter((booking) => isClosedServiceStatus(String(booking.status)));
+    console.log("Bookings API response:", {
+      userId,
+      total: bookings.length,
+      active: activeBookings.length,
+      previous: previousBookings.length,
+    });
+    res.json({ bookings, activeBookings, previousBookings });
   } catch (error: any) {
+    console.error("MY BOOKINGS ERROR:", error);
     res.status(500).json({ error: "Failed to fetch bookings.", details: error?.message || "Unknown error" });
   }
 };
@@ -649,22 +729,30 @@ export const getMyBookingsByPath = async (req: AuthenticatedRequest, res: Respon
 export const getMyBookingsByQuery = async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const userId = String(req.query.userId || "").trim();
-    if (!userId) return res.status(400).json({ error: "userId is required." });
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     const requesterId = req.userId;
-    if (requesterId) {
-      const requester = await prisma.user.findUnique({ where: { id: requesterId } });
-      if (!requester) return res.status(403).json({ error: "Forbidden." });
-      if (requester.role !== "ADMIN" && requesterId !== userId) {
-        return res.status(403).json({ error: "Forbidden." });
-      }
+    if (!requesterId) return res.status(401).json({ error: "Unauthorized." });
+    const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+    if (!requester) return res.status(403).json({ error: "Forbidden." });
+
+    const requestedUserId = String(req.query.userId || "").trim();
+    const userId = requester.role === "ADMIN" && requestedUserId ? requestedUserId : requesterId;
+    if (requester.role !== "ADMIN" && requestedUserId && requestedUserId !== requesterId) {
+      return res.status(403).json({ error: "Forbidden." });
     }
+
     const bookings = await getBookingsWithAssignment(userId);
-    const activeBookings = bookings.filter(
-      (booking) => !["COMPLETED", "CANCELLED"].includes(String(booking.status)),
-    );
-    res.json(activeBookings);
+    const activeBookings = bookings.filter((booking) => !isClosedServiceStatus(String(booking.status)));
+    const previousBookings = bookings.filter((booking) => isClosedServiceStatus(String(booking.status)));
+    console.log("Bookings API response:", {
+      userId,
+      total: bookings.length,
+      active: activeBookings.length,
+      previous: previousBookings.length,
+    });
+    res.json({ bookings, activeBookings, previousBookings });
   } catch (error: any) {
+    console.error("MY BOOKINGS ERROR:", error);
     res.status(500).json({ error: "Failed to fetch bookings.", details: error?.message || "Unknown error" });
   }
 };
@@ -672,65 +760,178 @@ export const getMyBookingsByQuery = async (req: AuthenticatedRequest, res: Respo
 export const getGuestBooking = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     const bookingId = String(req.query.bookingId || "").trim();
     const phone = String(req.query.phone || "").replace(/\D/g, "");
     if (!bookingId || phone.length !== 10) {
       return res.status(400).json({ error: "bookingId and valid 10-digit phone are required." });
     }
 
-    const booking = await prisma.serviceBooking.findUnique({ where: { id: bookingId } });
+    const booking = await prisma.serviceBooking.findUnique({
+      where: { id: bookingId },
+    });
     if (!booking || !booking.guestPhone) return res.status(404).json({ error: "Booking not found." });
     if (booking.guestPhone.replace(/\D/g, "") !== phone) {
       return res.status(403).json({ error: "Forbidden." });
     }
 
-    const assignmentRows = await prisma.$queryRaw<Array<{ bookingId: string; technicianId: string; pincode: string; routeNote: string }>>`
-      SELECT "bookingId", "technicianId", COALESCE("pincode",'') AS "pincode", COALESCE("routeNote",'') AS "routeNote"
-      FROM "ServiceAssignment"
-      WHERE "bookingId" = ${bookingId}
-      LIMIT 1
-    `;
-    const assignment = assignmentRows[0];
-    let technician: { id: string; name: string; phone?: string } | null = null;
-    if (assignment?.technicianId) {
-      const techRows = await prisma.$queryRaw<Array<{ id: string; name: string; phone: string }>>`
-        SELECT "id", "name", "phone"
-        FROM "Technician"
-        WHERE "id" = ${assignment.technicianId}
-        LIMIT 1
-      `;
-      technician = techRows[0] || null;
-    }
+    const assignment = await getAssignmentSnapshot(bookingId);
 
     res.json({
-      booking: {
-        ...booking,
-        technician,
-        pincode: assignment?.pincode || null,
-        routeNote: assignment?.routeNote || null,
-      },
+      booking: applyAssignmentSnapshot(booking, assignment),
     });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to fetch booking.", details: error?.message || "Unknown error" });
   }
 };
 
+export const assignTechnician = async (req: Request, res: Response) => {
+  try {
+    await ensurePhase2Schema().catch(() => {});
+    const bookingId = String(req.params.id || "").trim();
+    const { technicianId, technicianName } = req.body as {
+      technicianId?: string;
+      technicianName?: string;
+    };
+
+    if (!bookingId) {
+      return res.status(400).json({ error: "Booking id is required." });
+    }
+    if (!technicianId && !technicianName) {
+      return res.status(400).json({ error: "technicianId or technicianName is required." });
+    }
+
+    const booking = await prisma.serviceBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        customer: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+        assignment: true,
+      },
+    });
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found." });
+    }
+
+    const technician = technicianId
+      ? await prisma.technician.findFirst({
+          where: { id: technicianId, active: true },
+          select: { id: true, name: true, phone: true, email: true },
+        })
+      : await prisma.technician.findFirst({
+          where: { name: technicianName?.trim(), active: true },
+          select: { id: true, name: true, phone: true, email: true },
+        });
+
+    if (!technician) {
+      return res.status(404).json({ error: "Technician not found." });
+    }
+
+    const updatedBooking = await prisma.$transaction(async (tx) => {
+      await tx.serviceAssignment.upsert({
+        where: { bookingId },
+        create: {
+          bookingId,
+          technicianId: technician.id,
+          pincode: booking.assignment?.pincode || null,
+          routeNote: `Assigned by admin to ${technician.name}`,
+        },
+        update: {
+          technicianId: technician.id,
+          routeNote: `Assigned by admin to ${technician.name}`,
+        },
+      });
+
+      const nextBooking = await tx.serviceBooking.update({
+        where: { id: bookingId },
+        data: { status: "ASSIGNED" },
+        include: {
+          customer: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      await tx.serviceEvent.create({
+        data: {
+          id: createUuid(),
+          bookingId,
+          status: "ASSIGNED",
+          note: `Assigned technician ${technician.name}`,
+        },
+      });
+
+      return nextBooking;
+    });
+
+    const assignment = await getAssignmentSnapshot(bookingId);
+
+    if (technician.email) {
+      try {
+        await prisma.notification.create({
+          data: {
+            userEmail: technician.email,
+            message: "You have been assigned a new service request",
+            bookingId: booking.id
+          }
+        });
+        
+        await transporter.sendMail({
+          to: technician.email,
+          subject: "New Service Assignment",
+          text: `
+Hello ${technician.name},
+
+You have been assigned a new service request.
+
+Issue: ${booking.issue}
+Address: ${booking.address || "No address provided"}
+
+Please login to your dashboard.
+
+- RefriSmart AI
+          `
+        });
+        console.log(`Notification and email sent to ${technician.email}`);
+      } catch (err) {
+        console.error("Failed to send notification/email to technician", err);
+      }
+    }
+
+    console.log("Assigned technician:", technician.name);
+    console.log("Updated booking:", {
+      bookingId: updatedBooking.id,
+      status: updatedBooking.status,
+      technicianId: technician.id,
+    });
+
+    res.json({
+      booking: applyAssignmentSnapshot(updatedBooking, assignment, updatedBooking.customer),
+      technician,
+      message: "Technician assigned successfully.",
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to assign technician.", details: error?.message || "Unknown error" });
+  }
+};
+
 export const updateAdminService = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-  const id = String(req.params.id || "");
-  const { status, finalCost } = req.body as {
-      status?: "PENDING" | "ASSIGNED" | "ESTIMATE_APPROVED" | "OUT_FOR_REPAIR" | "REPAIRING" | "PAYMENT_PENDING" | "FIXED" | "COMPLETED" | "CANCELLED";
+    const id = String(req.params.id || "");
+    const normalizedStatus = toRawServiceStatus(String(req.body?.status || ""));
+    const { finalCost } = req.body as {
       finalCost?: number | string;
-  };
-    if (
-      !status ||
-      !["PENDING", "ASSIGNED", "ESTIMATE_APPROVED", "OUT_FOR_REPAIR", "REPAIRING", "PAYMENT_PENDING", "FIXED", "COMPLETED", "CANCELLED"].includes(status)
-    ) {
+    };
+    if (!normalizedStatus) {
       return res.status(400).json({ error: "Valid status is required." });
-    }
-    if (status === "COMPLETED") {
-      return res.status(400).json({ error: "Complete the booking only after payment verification." });
     }
 
     const parsedCost = finalCost === undefined || finalCost === null || String(finalCost).trim() === "" ? null : Number(finalCost);
@@ -744,38 +945,40 @@ export const updateAdminService = async (req: Request, res: Response) => {
     if (String(booking.status) === "COMPLETED") {
       return res.status(400).json({ error: "Booking is already completed and cannot be modified." });
     }
-    if (String(booking.status) === "CANCELLED" && status !== "CANCELLED") {
+    if (String(booking.status) === "CANCELLED" && normalizedStatus !== "CANCELLED") {
       return res.status(400).json({ error: "Cancelled bookings cannot be reopened." });
     }
 
-    const hasFinalCost = parsedCost !== null && Number(parsedCost) > 0;
-    // Fix #4: Previously ANY status update that included a finalCost was unconditionally
-    // overridden to PAYMENT_PENDING, skipping REPAIRING, FIXED, and the OTP step.
-    // Now we only auto-advance to PAYMENT_PENDING when the admin is explicitly
-    // locking in the final estimate (i.e., targeting FIXED or PAYMENT_PENDING).
-    const isLockingPayment = ["FIXED", "PAYMENT_PENDING"].includes(status);
-    const effectiveStatus =
-      status !== "CANCELLED" && hasFinalCost && isLockingPayment && String(booking.status) !== "COMPLETED"
-        ? "PAYMENT_PENDING"
-        : status;
+    const currentDisplayStatus = toDisplayServiceStatus(String(booking.status));
+    const requestedDisplayStatus = toDisplayServiceStatus(normalizedStatus);
+    if (requestedDisplayStatus === "COMPLETED") {
+      return res.status(400).json({ error: "Use payment confirmation to complete the booking." });
+    }
+
+    const isRequestingPayment = requestedDisplayStatus === "PAYMENT_PENDING";
+    const effectiveStatus = isRequestingPayment ? "PAYMENT_PENDING" : normalizedStatus;
     const isPaymentStatus = effectiveStatus === "PAYMENT_PENDING";
     const isCancelled = effectiveStatus === "CANCELLED";
     const amountToUse = isPaymentStatus ? Number(parsedCost ?? booking.finalCost ?? 0) : Number(booking.finalCost ?? 0);
     if (isPaymentStatus && (!amountToUse || amountToUse <= 0)) {
       return res.status(400).json({ error: "Final cost must be set before requesting payment." });
     }
+    if (isPaymentStatus && !["REPAIRING", "PAYMENT_PENDING"].includes(currentDisplayStatus)) {
+      return res.status(400).json({ error: "Payment can be requested only after the repair is finished." });
+    }
+    const shouldClearPaymentArtifacts = !isPaymentStatus && currentDisplayStatus === "PAYMENT_PENDING";
     const paymentQR = isPaymentStatus && amountToUse > 0
       ? `upi://pay?pa=${SHOP_UPI_ID}&pn=MD%20ATHAR%20ALI&am=${amountToUse}&cu=INR`
-      : isCancelled
+      : isCancelled || shouldClearPaymentArtifacts
         ? null
         : booking.paymentQR;
     const invoiceUrl = isPaymentStatus
       ? `${req.protocol}://${req.get("host")}/api/docs/invoice/${id}`
-      : isCancelled
+      : isCancelled || shouldClearPaymentArtifacts
         ? null
         : booking.invoiceUrl;
 
-    const updated = await prisma.$queryRaw<Array<any>>`
+    const updatedRows = await prisma.$queryRaw<Array<any>>`
       UPDATE "ServiceBooking"
       SET
         "status" = ${effectiveStatus}::"Status",
@@ -799,8 +1002,28 @@ export const updateAdminService = async (req: Request, res: Response) => {
       )
     `;
 
+    const updatedBooking = await prisma.serviceBooking.findUnique({
+      where: { id },
+      include: {
+        customer: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+    const assignment = await getAssignmentSnapshot(id);
+
+    console.log("Updated booking:", {
+      bookingId: id,
+      requestedStatus: normalizedStatus,
+      effectiveStatus,
+      finalCost: isCancelled ? null : isPaymentStatus ? amountToUse : parsedCost ?? booking.finalCost,
+    });
+
     res.json({
-      booking: updated[0] || null,
+      booking: updatedBooking ? applyAssignmentSnapshot(updatedBooking, assignment, updatedBooking.customer) : updatedRows[0] || null,
       paymentQR: paymentQR || null,
       invoiceUrl: invoiceUrl || null,
     });
@@ -834,6 +1057,9 @@ export const createServiceRazorpayOrder = async (req: AuthenticatedRequest, res:
     const finalCost = Number(booking.finalCost || 0);
     if (!Number.isFinite(finalCost) || finalCost <= 0) {
       return res.status(400).json({ error: "Final cost must be set before payment." });
+    }
+    if (!isAwaitingServicePayment(String(booking.status))) {
+      return res.status(400).json({ error: "Payment is not yet available for this booking." });
     }
 
     const amount = Math.round(finalCost * 100);
@@ -899,7 +1125,7 @@ export const verifyServiceRazorpayPayment = async (req: AuthenticatedRequest, re
       if (String(booking.status) === "CANCELLED") {
         throw new Error("Booking is already closed.");
       }
-      if (!["FIXED", "PAYMENT_PENDING", "COMPLETED"].includes(String(booking.status))) {
+      if (!isAwaitingServicePayment(String(booking.status)) && String(booking.status) !== "COMPLETED") {
         throw new Error("Payment is not yet available for this booking.");
       }
       if (String(booking.status) === "COMPLETED") {
@@ -961,6 +1187,9 @@ export const confirmManualPayment = async (req: AuthenticatedRequest, res: Respo
       if (!booking.finalCost || booking.finalCost <= 0) {
         throw new Error("Final cost must be set before confirming payment.");
       }
+      if (!isAwaitingServicePayment(String(booking.status)) && String(booking.status) !== "COMPLETED") {
+        throw new Error("Payment is not yet available for this booking.");
+      }
       if (String(booking.status) === "COMPLETED") {
         return booking;
       }
@@ -985,6 +1214,9 @@ export const confirmManualPayment = async (req: AuthenticatedRequest, res: Respo
       return res.status(403).json({ error: "Forbidden." });
     }
     if (error?.message?.includes("Final cost")) {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error?.message?.includes("Payment is not yet available")) {
       return res.status(400).json({ error: error.message });
     }
     if (error?.message?.includes("cancelled")) {
@@ -1092,35 +1324,44 @@ export const uploadGalleryItem = async (req: Request, res: Response) => {
       fileData?: string;
       mediaType?: "image" | "video";
     };
+    const uploadedFile = (req as Request & { file?: Express.Multer.File }).file;
 
     let finalUrl = (imageUrl || "").trim();
     let resolvedMediaType: "image" | "video" =
       mediaType === "video" ? "video" : mediaType === "image" ? "image" : inferMediaTypeFromUrl(finalUrl);
 
-    if (fileData?.startsWith("data:video/")) resolvedMediaType = "video";
-    if (fileData?.startsWith("data:image/")) resolvedMediaType = "image";
+    if (uploadedFile) {
+      resolvedMediaType = uploadedFile.mimetype.startsWith("video/") ? "video" : "image";
+      const stored = await storeMediaFromTempFile({
+        filePath: uploadedFile.path,
+        mimeType: uploadedFile.mimetype,
+        originalName: uploadedFile.originalname,
+        folder: "gallery",
+        resourceType: resolvedMediaType,
+      });
+      finalUrl = stored.url;
+      resolvedMediaType = stored.resourceType;
+    } else if (fileData?.startsWith("data:video/")) {
+      resolvedMediaType = "video";
+    } else if (fileData?.startsWith("data:image/")) {
+      resolvedMediaType = "image";
+    }
+
     if (fileData && !fileData.startsWith("data:image/") && !fileData.startsWith("data:video/")) {
       return res.status(400).json({ error: "Invalid media payload." });
     }
-    if (fileData) {
-      const base64 = fileData.split(",")[1] || "";
-      const padding = (base64.match(/=+$/) || [""])[0].length;
-      const bytes = Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
-      const MAX_BYTES = 100 * 1024 * 1024;
-      if (bytes > MAX_BYTES) {
-        return res.status(413).json({ error: "File too large. Max size is 100MB." });
-      }
-    }
 
-    if (!finalUrl && fileData && (fileData.startsWith("data:image/") || fileData.startsWith("data:video/"))) {
-      const uploaded = await cloudinary.uploader.upload(fileData, {
-        folder: "refri-smart/gallery",
-        resource_type: resolvedMediaType,
+    if (!finalUrl && fileData) {
+      const stored = await storeMediaFromDataUrl({
+        dataUrl: fileData,
+        folder: "gallery",
+        resourceType: resolvedMediaType,
       });
-      finalUrl = resolvedMediaType === "image" ? cloudinaryOptimizeUrl(uploaded.secure_url) : uploaded.secure_url;
+      finalUrl = stored.url;
+      resolvedMediaType = stored.resourceType;
     }
 
-    if (!finalUrl) return res.status(400).json({ error: "imageUrl or media fileData is required." });
+    if (!finalUrl) return res.status(400).json({ error: "imageUrl, fileData, or multipart media is required." });
 
     const id = createUuid();
     const storedUrl = resolvedMediaType === "image" ? cloudinaryOptimizeUrl(finalUrl) : finalUrl;
@@ -1128,13 +1369,20 @@ export const uploadGalleryItem = async (req: Request, res: Response) => {
       INSERT INTO "Gallery" ("id", "imageUrl", "mediaType", "caption")
       VALUES (${id}, ${storedUrl}, ${resolvedMediaType}, ${caption || null})
     `;
-    res.status(201).json({ id, imageUrl: storedUrl, mediaType: resolvedMediaType, caption: caption || null });
+
+    res.status(201).json({
+      id,
+      imageUrl: toAbsoluteMediaUrl(req, storedUrl),
+      mediaType: resolvedMediaType,
+      caption: caption || null,
+      createdAt: new Date().toISOString(),
+    });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to upload gallery item.", details: error?.message || "Unknown error" });
   }
 };
 
-export const getGallery = async (_req: Request, res: Response) => {
+export const getGallery = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
     const rows = await prisma.$queryRaw<Array<{ id: string; imageUrl: string; mediaType: string | null; caption: string | null; createdAt: Date }>>`
@@ -1146,7 +1394,10 @@ export const getGallery = async (_req: Request, res: Response) => {
       rows.map((row) => ({
         ...row,
         mediaType: row.mediaType === "video" ? "video" : "image",
-        imageUrl: row.mediaType === "video" ? row.imageUrl : cloudinaryOptimizeUrl(row.imageUrl),
+        imageUrl: toAbsoluteMediaUrl(
+          req,
+          row.mediaType === "video" ? row.imageUrl : cloudinaryOptimizeUrl(row.imageUrl),
+        ),
       })),
     );
   } catch (error: any) {
@@ -1166,33 +1417,12 @@ export const deleteGalleryItem = async (req: Request, res: Response) => {
     `;
     if (!rows.length) return res.status(404).json({ error: "Image not found." });
     const imageUrl = rows[0].imageUrl || "";
-    const mediaType = rows[0].mediaType === "video" ? "video" : "image";
 
     await prisma.$executeRaw`
       DELETE FROM "Gallery"
       WHERE "id" = ${id}
     `;
-
-    if (imageUrl.includes("res.cloudinary.com") && imageUrl.includes("/upload/")) {
-      try {
-        const cleanUrl = imageUrl.split("?")[0];
-        const uploadIndex = cleanUrl.indexOf("/upload/");
-        const rawPath = cleanUrl.slice(uploadIndex + "/upload/".length);
-        const segments = rawPath.split("/").filter(Boolean);
-        if (segments[0] && (segments[0].includes(",") || segments[0].includes(":") || segments[0].startsWith("f_") || segments[0].startsWith("q_"))) {
-          segments.shift();
-        }
-        if (segments[0] && /^v\d+$/.test(segments[0])) {
-          segments.shift();
-        }
-        const publicId = segments.join("/").replace(/\.[^/.]+$/, "");
-        if (publicId) {
-          await cloudinary.uploader.destroy(publicId, { resource_type: mediaType });
-        }
-      } catch (cloudinaryError) {
-        console.warn("Gallery image deleted from DB but Cloudinary cleanup failed.", cloudinaryError);
-      }
-    }
+    await removeStoredMedia(imageUrl);
 
     res.json({ success: true, id });
   } catch (error: any) {
@@ -1240,37 +1470,49 @@ export const updateTechnicianJobStatus = async (req: Request, res: Response) => 
     await ensurePhase2Schema().catch(() => {});
     const bookingId = String(req.params.bookingId || "");
     const { status, note } = req.body as {
-      status?: "PENDING" | "ASSIGNED" | "OUT_FOR_REPAIR" | "REPAIRING" | "FIXED" | "COMPLETED" | "IN_PROGRESS" | "CANCELLED";
+      status?: "PENDING" | "ASSIGNED" | "OUT_FOR_REPAIR" | "ON_THE_WAY" | "REPAIRING" | "FIXED" | "PAYMENT_PENDING" | "COMPLETED" | "IN_PROGRESS" | "CANCELLED";
       note?: string;
     };
     if (!status) return res.status(400).json({ error: "status is required." });
     if (status === "CANCELLED") {
       return res.status(400).json({ error: "Cancelled bookings must be handled by admin approval." });
     }
-    const normalizedStatus = status === "IN_PROGRESS" ? "REPAIRING" : status;
-    if (!["PENDING", "ASSIGNED", "OUT_FOR_REPAIR", "REPAIRING", "FIXED", "COMPLETED"].includes(normalizedStatus)) {
+    const normalizedStatus = status === "IN_PROGRESS" ? "REPAIRING" : toRawServiceStatus(status);
+    if (!normalizedStatus) {
+      return res.status(400).json({ error: "Invalid status update." });
+    }
+    const requestedDisplayStatus = toDisplayServiceStatus(normalizedStatus);
+    if (!["PENDING", "ASSIGNED", "ON_THE_WAY", "REPAIRING", "PAYMENT_PENDING", "COMPLETED"].includes(requestedDisplayStatus)) {
       return res.status(400).json({ error: "Invalid status update." });
     }
 
     const existing = await prisma.serviceBooking.findUnique({ where: { id: bookingId } });
     if (!existing) return res.status(404).json({ error: "Booking not found." });
+    const currentDisplayStatus = toDisplayServiceStatus(String(existing.status));
 
-    // R3 Fix: Technicians must NOT be able to directly force COMPLETED status.
-    // The COMPLETED state is reached only after the customer OTP is verified via
-    // POST /booking/:id/verify-otp (adminController.verifyBookingOtp).
-    // Allowing technicians to bypass this skips payment verification entirely.
-    if (normalizedStatus === "COMPLETED") {
+    // Technicians can move work into the payment stage, but completion only happens
+    // after payment is confirmed by the customer/admin payment flow.
+    if (requestedDisplayStatus === "COMPLETED") {
       return res.status(400).json({
-        error: "Bookings must be completed through the customer OTP verification flow, not directly by the technician.",
+        error: "Bookings are completed only after payment is confirmed, not directly by the technician.",
       });
     }
+    if (requestedDisplayStatus === "PAYMENT_PENDING") {
+      if (!existing.finalCost || existing.finalCost <= 0) {
+        return res.status(400).json({ error: "Final cost must be set before moving a booking to payment." });
+      }
+      if (!["REPAIRING", "PAYMENT_PENDING"].includes(currentDisplayStatus)) {
+        return res.status(400).json({ error: "Payment can be requested only after the repair is finished." });
+      }
+    }
+    const effectiveStatus = requestedDisplayStatus === "PAYMENT_PENDING" ? "PAYMENT_PENDING" : normalizedStatus;
     const booking = await prisma.serviceBooking.update({
       where: { id: bookingId },
-      data: { status: normalizedStatus as any },
+      data: { status: effectiveStatus as any },
     });
     await prisma.$executeRaw`
       INSERT INTO "ServiceEvent" ("id", "bookingId", "status", "note")
-      VALUES (${createUuid()}, ${bookingId}, ${normalizedStatus}, ${note || `Updated by technician to ${normalizedStatus}`})
+      VALUES (${createUuid()}, ${bookingId}, ${effectiveStatus}, ${note || `Updated by technician to ${effectiveStatus}`})
     `;
     res.json({ booking });
   } catch (error: any) {
@@ -1278,46 +1520,231 @@ export const updateTechnicianJobStatus = async (req: Request, res: Response) => 
   }
 };
 
-export const createSellRequest = async (req: Request, res: Response) => {
+const SELL_REQUEST_INCLUDE = {
+  user: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+    },
+  },
+  offers: {
+    orderBy: { createdAt: "desc" },
+  },
+} as const;
+
+const serializeSellOffer = (offer: {
+  id: string;
+  offerPrice: number;
+  pickupSlot?: Date | null;
+  status: string;
+  createdAt: Date;
+}) => ({
+  id: offer.id,
+  offerPrice: Number(offer.offerPrice || 0),
+  pickupSlot: offer.pickupSlot ? offer.pickupSlot.toISOString() : null,
+  status: String(offer.status || "PENDING"),
+  createdAt: offer.createdAt,
+});
+
+const serializeSellRequest = (
+  req: Request,
+  sellRequest: {
+    id: string;
+    userId: string;
+    applianceType: string;
+    brandModel: string;
+    contactName?: string | null;
+    address?: string | null;
+    conditionNote: string;
+    expectedPrice?: number | null;
+    pincode?: string | null;
+    imageUrl?: string | null;
+    status: string;
+    createdAt: Date;
+    user?: {
+      id: string;
+      name: string;
+      email: string;
+      phone?: string | null;
+    } | null;
+    offers?: Array<{
+      id: string;
+      offerPrice: number;
+      pickupSlot?: Date | null;
+      status: string;
+      createdAt: Date;
+    }>;
+  },
+) => {
+  const offers = Array.isArray(sellRequest.offers) ? sellRequest.offers.map(serializeSellOffer) : [];
+  return {
+    id: sellRequest.id,
+    userId: sellRequest.userId,
+    applianceType: sellRequest.applianceType,
+    brandModel: sellRequest.brandModel,
+    contactName: sellRequest.contactName || sellRequest.user?.name || null,
+    address: sellRequest.address || null,
+    conditionNote: sellRequest.conditionNote,
+    expectedPrice: sellRequest.expectedPrice !== null && sellRequest.expectedPrice !== undefined ? Number(sellRequest.expectedPrice) : null,
+    pincode: sellRequest.pincode || null,
+    imageUrl: sellRequest.imageUrl ? toAbsoluteMediaUrl(req, cloudinaryOptimizeUrl(sellRequest.imageUrl)) : null,
+    status: String(sellRequest.status || "REQUESTED"),
+    createdAt: sellRequest.createdAt,
+    customer: sellRequest.user
+      ? {
+          id: sellRequest.user.id,
+          name: sellRequest.user.name || "",
+          email: sellRequest.user.email || "",
+          phone: sellRequest.user.phone || null,
+        }
+      : null,
+    offers,
+    latestOffer: offers[0] || null,
+    pendingOffer: offers.find((offer) => offer.status === "PENDING") || null,
+  };
+};
+
+const resolveSellRequestActor = async (req: AuthenticatedRequest) => {
+  const actorId = req.userId;
+  if (!actorId) return null;
+  return prisma.user.findUnique({
+    where: { id: actorId },
+    select: { id: true, role: true, name: true, email: true, phone: true },
+  });
+};
+
+export const uploadSellRequestImage = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized." });
+
+    const { fileData, fileName } = req.body as { fileData?: string; fileName?: string };
+    if (!fileData || typeof fileData !== "string" || !fileData.startsWith("data:image/")) {
+      return res.status(400).json({ error: "Invalid image payload." });
+    }
+
+    const base64 = fileData.split(",")[1] || "";
+    const padding = (base64.match(/=+$/) || [""])[0].length;
+    const bytes = Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+    const MAX_BYTES = 10 * 1024 * 1024;
+    if (bytes > MAX_BYTES) {
+      return res.status(413).json({ error: "File too large. Max size is 10MB." });
+    }
+
+    const stored = await storeMediaFromDataUrl({
+      dataUrl: fileData,
+      originalName: fileName || "sell-request-image",
+      folder: "sell",
+      resourceType: "image",
+    });
+
+    res.status(201).json({
+      imageUrl: toAbsoluteMediaUrl(req, cloudinaryOptimizeUrl(stored.url)),
+      originalUrl: stored.url,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to upload sell request image.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const createSellRequest = async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const { userId, applianceType, brandModel, conditionNote, expectedPrice, pincode, imageUrl } = req.body as {
-      userId?: string;
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized." });
+
+    const { applianceType, brandModel, contactName, address, conditionNote, expectedPrice, pincode, imageUrl, imageData } = req.body as {
       applianceType?: string;
       brandModel?: string;
+      contactName?: string;
+      address?: string;
       conditionNote?: string;
       expectedPrice?: number | string;
       pincode?: string;
       imageUrl?: string;
+      imageData?: string;
     };
-    if (!userId || !applianceType || !brandModel || !conditionNote) {
-      return res.status(400).json({ error: "userId, applianceType, brandModel, conditionNote are required." });
+    if (!applianceType || !brandModel || !conditionNote) {
+      return res.status(400).json({ error: "applianceType, brandModel, and conditionNote are required." });
     }
 
-    // R4 Fix: Validate that the user exists before attempting the INSERT.
-    // Without this, a bad userId causes a FK constraint 500 error instead of a clean 404.
-    const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true } });
     if (!userExists) return res.status(404).json({ error: "User not found." });
 
-    const id = createUuid();
-    await prisma.$executeRaw`
-      INSERT INTO "SellRequest" ("id", "userId", "applianceType", "brandModel", "conditionNote", "expectedPrice", "pincode", "imageUrl", "status")
-      VALUES (${id}, ${userId}, ${applianceType}, ${brandModel}, ${conditionNote}, ${expectedPrice ? Number(expectedPrice) : null}, ${pincode || null}, ${imageUrl || null}, ${"REQUESTED"})
-    `;
-    res.status(201).json({ id, message: "Sell request submitted." });
+    const resolvedContactName = String(contactName || userExists.name || "").trim() || null;
+    const resolvedAddress = String(address || "").trim() || null;
+
+    const rawImageUrl = String(imageUrl || "").trim();
+    const inlineImageData = [String(imageData || "").trim(), rawImageUrl].find((value) => value.startsWith("data:image/")) || "";
+    let resolvedImageUrl = rawImageUrl || null;
+    if (inlineImageData) {
+      try {
+        const stored = await storeMediaFromDataUrl({
+          dataUrl: inlineImageData,
+          originalName: "sell-request-image",
+          folder: "sell",
+          resourceType: "image",
+        });
+        resolvedImageUrl = stored.url;
+      } catch {
+        resolvedImageUrl = inlineImageData;
+      }
+    }
+
+    const created = await prisma.sellRequest.create({
+      data: {
+        id: createUuid(),
+        userId,
+        applianceType: String(applianceType).trim(),
+        brandModel: String(brandModel).trim(),
+        contactName: resolvedContactName,
+        address: resolvedAddress,
+        conditionNote: String(conditionNote).trim(),
+        expectedPrice: expectedPrice !== undefined && expectedPrice !== null && String(expectedPrice).trim() !== ""
+          ? Number(expectedPrice)
+          : null,
+        pincode: String(pincode || "").trim() || null,
+        imageUrl: resolvedImageUrl,
+        status: "REQUESTED",
+      },
+      include: SELL_REQUEST_INCLUDE,
+    });
+
+    res.status(201).json({
+      id: created.id,
+      message: "Sell request submitted.",
+      request: serializeSellRequest(req, created),
+    });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to submit sell request.", details: error?.message || "Unknown error" });
   }
 };
 
-export const getSellRequests = async (req: Request, res: Response) => {
+export const getSellRequests = async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const userId = String(req.query.userId || "");
-    const rows = userId
-      ? await prisma.$queryRaw<Array<any>>`SELECT * FROM "SellRequest" WHERE "userId" = ${userId} ORDER BY "createdAt" DESC`
-      : await prisma.$queryRaw<Array<any>>`SELECT * FROM "SellRequest" ORDER BY "createdAt" DESC`;
-    res.json(rows);
+    const actor = await resolveSellRequestActor(req);
+    if (!actor) return res.status(401).json({ error: "Unauthorized." });
+
+    const scope = String(req.query.scope || "").trim().toLowerCase();
+    const requestedUserId = String(req.query.userId || "").trim();
+    const where =
+      scope === "mine"
+        ? { userId: actor.id }
+        : actor.role === "ADMIN"
+        ? requestedUserId
+          ? { userId: requestedUserId }
+          : undefined
+        : { userId: actor.id };
+
+    const rows = await prisma.sellRequest.findMany({
+      where,
+      include: SELL_REQUEST_INCLUDE,
+      orderBy: { createdAt: "desc" },
+    });
+    res.json(rows.map((row) => serializeSellRequest(req, row)));
   } catch (error: any) {
     res.status(500).json({ error: "Failed to fetch sell requests.", details: error?.message || "Unknown error" });
   }
@@ -1326,67 +1753,134 @@ export const getSellRequests = async (req: Request, res: Response) => {
 export const sendSellOffer = async (req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const { id } = req.params;
+    const { id } = req.params as { id?: string };
+    if (!id) return res.status(400).json({ error: "Sell request id is required." });
     const { offerPrice, pickupSlot } = req.body as { offerPrice?: number | string; pickupSlot?: string };
-    if (!offerPrice) return res.status(400).json({ error: "offerPrice is required." });
-
-    // R5 Fix: Validate that the sell request exists before inserting an offer.
-    // Previously, a bad requestId would cause a FK constraint 500 instead of a clean 404.
-    const sellRequest = await prisma.$queryRaw<Array<{ id: string; status: string }>>`
-      SELECT "id", "status" FROM "SellRequest" WHERE "id" = ${id} LIMIT 1
-    `;
-    if (!sellRequest.length) return res.status(404).json({ error: "Sell request not found." });
-    if (!["REQUESTED", "OFFER_SENT"].includes(sellRequest[0].status)) {
-      return res.status(400).json({ error: `Cannot send an offer for a sell request with status '${sellRequest[0].status}'.` });
+    const parsedOfferPrice = Number(offerPrice);
+    if (!Number.isFinite(parsedOfferPrice) || parsedOfferPrice <= 0) {
+      return res.status(400).json({ error: "offerPrice must be a valid positive number." });
     }
-    await prisma.$executeRaw`
-      UPDATE "SellOffer" SET "status" = ${'REJECTED'}
-      WHERE "requestId" = ${id} AND "status" = 'PENDING'
-    `;
+    const parsedPickupSlot = pickupSlot ? new Date(pickupSlot) : null;
+    if (parsedPickupSlot && Number.isNaN(parsedPickupSlot.getTime())) {
+      return res.status(400).json({ error: "pickupSlot must be a valid date." });
+    }
 
-    const offerId = createUuid();
-    await prisma.$executeRaw`
-      INSERT INTO "SellOffer" ("id", "requestId", "offerPrice", "pickupSlot", "status")
-      VALUES (${offerId}, ${id}, ${Number(offerPrice)}, ${pickupSlot ? new Date(pickupSlot) : null}, ${"PENDING"})
-    `;
-    await prisma.$executeRaw`UPDATE "SellRequest" SET "status" = ${"OFFER_SENT"} WHERE "id" = ${id}`;
-    res.json({ offerId, message: "Offer sent to customer." });
+    const sellRequest = await prisma.sellRequest.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    });
+    if (!sellRequest) return res.status(404).json({ error: "Sell request not found." });
+    if (!["REQUESTED", "OFFER_SENT", "REJECTED", "ACCEPTED"].includes(sellRequest.status)) {
+      return res.status(400).json({ error: `Cannot send an offer for a sell request with status '${sellRequest.status}'.` });
+    }
+
+    const updatedRequest = await prisma.$transaction(async (tx) => {
+      await tx.sellOffer.updateMany({
+        where: { requestId: id, status: "PENDING" },
+        data: { status: "REJECTED" },
+      });
+
+      await tx.sellOffer.create({
+        data: {
+          id: createUuid(),
+          requestId: id,
+          offerPrice: parsedOfferPrice,
+          pickupSlot: parsedPickupSlot,
+          status: "PENDING",
+        },
+      });
+
+      await tx.sellRequest.update({
+        where: { id },
+        data: { status: "OFFER_SENT" },
+      });
+
+      return tx.sellRequest.findUnique({
+        where: { id },
+        include: SELL_REQUEST_INCLUDE,
+      });
+    });
+
+    if (!updatedRequest) return res.status(404).json({ error: "Sell request not found." });
+
+    res.json({
+      message: "Offer sent to customer.",
+      request: serializeSellRequest(req, updatedRequest),
+    });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to send offer.", details: error?.message || "Unknown error" });
   }
 };
 
-export const respondSellOffer = async (req: Request, res: Response) => {
+export const respondSellOffer = async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
-    const { id } = req.params;
+    const actor = await resolveSellRequestActor(req);
+    if (!actor) return res.status(401).json({ error: "Unauthorized." });
+
+    const { id } = req.params as { id?: string };
+    if (!id) return res.status(400).json({ error: "Offer id is required." });
     const { action } = req.body as { action?: "ACCEPT" | "REJECT" };
     if (!action || !["ACCEPT", "REJECT"].includes(action)) return res.status(400).json({ error: "action must be ACCEPT or REJECT." });
 
-    // Fix #5: SellOffer uses SellOfferStatus (PENDING/ACCEPTED/REJECTED).
-    // SellRequest uses SellRequestStatus (REQUESTED/OFFER_SENT/ACCEPTED/REJECTED/REFURBISHED_LISTED).
-    // These are separate enums with different domain meanings.
-    // When a customer REJECTS an offer, the SellRequest stays as OFFER_SENT so the admin
-    // can renegotiate with a new offer, rather than being permanently REJECTED.
-    const offerStatus = action === "ACCEPT" ? "ACCEPTED" : "REJECTED";
-    const requestStatus = action === "ACCEPT" ? "ACCEPTED" : "OFFER_SENT";
-
-    await prisma.$executeRaw`UPDATE "SellOffer" SET "status" = ${offerStatus} WHERE "id" = ${id}`;
-    const rel = await prisma.$queryRaw<Array<{ requestId: string }>>`SELECT "requestId" FROM "SellOffer" WHERE "id" = ${id} LIMIT 1`;
-    if (rel[0]?.requestId) {
-      await prisma.$executeRaw`UPDATE "SellRequest" SET "status" = ${requestStatus} WHERE "id" = ${rel[0].requestId}`;
+    const offer = await prisma.sellOffer.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        requestId: true,
+        status: true,
+      },
+    });
+    if (!offer) return res.status(404).json({ error: "Offer not found." });
+    const requestOwner = await prisma.sellRequest.findUnique({
+      where: { id: offer.requestId },
+      select: { id: true, userId: true },
+    });
+    if (!requestOwner) return res.status(404).json({ error: "Sell request not found." });
+    if (requestOwner.userId !== actor.id) {
+      return res.status(403).json({ error: "Forbidden." });
     }
-    res.json({ message: `Offer ${offerStatus.toLowerCase()}.` });
+    if (offer.status !== "PENDING") {
+      return res.status(400).json({ error: "This offer has already been responded to." });
+    }
+
+    const offerStatus = action === "ACCEPT" ? "ACCEPTED" : "REJECTED";
+    const requestStatus = action === "ACCEPT" ? "ACCEPTED" : "REJECTED";
+
+    const updatedRequest = await prisma.$transaction(async (tx) => {
+      await tx.sellOffer.update({
+        where: { id },
+        data: { status: offerStatus },
+      });
+
+      await tx.sellRequest.update({
+        where: { id: requestOwner.id },
+        data: { status: requestStatus },
+      });
+
+      return tx.sellRequest.findUnique({
+        where: { id: requestOwner.id },
+        include: SELL_REQUEST_INCLUDE,
+      });
+    });
+
+    if (!updatedRequest) return res.status(404).json({ error: "Sell request not found." });
+
+    res.json({
+      message: `Offer ${offerStatus.toLowerCase()}.`,
+      request: serializeSellRequest(req, updatedRequest),
+    });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to respond offer.", details: error?.message || "Unknown error" });
   }
 };
 
-export const moveSellRequestToRefurbished = async (req: Request, res: Response) => {
+export const moveSellRequestToRefurbished = async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensurePhase1ProductSchema().catch(() => {});
     await ensurePhase2Schema().catch(() => {});
-    const { id } = req.params;
+    const { id } = req.params as { id?: string };
+    if (!id) return res.status(400).json({ error: "Sell request id is required." });
     const { sellerId, title, description, price, imageUrl } = req.body as {
       sellerId?: string;
       title?: string;
@@ -1394,40 +1888,84 @@ export const moveSellRequestToRefurbished = async (req: Request, res: Response) 
       price?: number | string;
       imageUrl?: string;
     };
-    if (!sellerId || !title || !price) {
-      return res.status(400).json({ error: "sellerId, title, and price are required." });
+
+    const requestRow = await prisma.sellRequest.findUnique({
+      where: { id },
+      include: SELL_REQUEST_INCLUDE,
+    });
+    if (!requestRow) return res.status(404).json({ error: "Sell request not found." });
+    if (requestRow.status !== "ACCEPTED") {
+      return res.status(400).json({
+        error: `Sell request must be ACCEPTED before listing as refurbished. Current status: ${requestRow.status}`,
+      });
     }
 
-    // Fix #14: Validate that the SellRequest has been accepted before listing as refurbished.
-    // Without this check, an admin could accidentally list a REQUESTED or REJECTED appliance.
-    const requestRows = await prisma.$queryRaw<Array<{ status: string }>>`
-      SELECT "status" FROM "SellRequest" WHERE "id" = ${id} LIMIT 1
-    `;
-    if (!requestRows.length) return res.status(404).json({ error: "Sell request not found." });
-    if (requestRows[0].status !== "ACCEPTED") {
-      return res.status(400).json({
-        error: `Sell request must be ACCEPTED before listing as refurbished. Current status: ${requestRows[0].status}`,
+    const offers = Array.isArray((requestRow as any).offers) ? (requestRow as any).offers : [];
+
+    // Use adminAuth userId as seller, fallback to the customer who submitted the request
+    const derivedSellerId = String(sellerId || req.userId || requestRow.userId || "").trim();
+    const derivedTitle = String(title || `${requestRow.applianceType} - ${requestRow.brandModel}` || requestRow.brandModel || requestRow.applianceType || "").trim();
+    const derivedDescription = String(
+      description ||
+        `Refurbished appliance procured from customer.\nAppliance: ${requestRow.applianceType}\nBrand/Model: ${requestRow.brandModel}${
+          requestRow.contactName ? `\nCustomer: ${requestRow.contactName}` : ""
+        }${
+          requestRow.address ? `\nPickup Address: ${requestRow.address}` : ""
+        }\nCondition: ${requestRow.conditionNote}${requestRow.pincode ? `\nPincode: ${requestRow.pincode}` : ""}`,
+    ).trim();
+
+    // Find accepted offer price first, then any offer, then expected price
+    const acceptedOffer = offers.find((o: any) => String(o.status) === "ACCEPTED");
+    const anyOffer = offers[0] || null;
+    const offerSourcePrice = acceptedOffer?.offerPrice ?? anyOffer?.offerPrice ?? null;
+    const derivedPrice =
+      price !== undefined && price !== null && String(price).trim() !== ""
+        ? Number(price)
+        : offerSourcePrice !== null && offerSourcePrice !== undefined
+        ? Number(offerSourcePrice)
+        : Number(requestRow.expectedPrice || 0);
+
+    // Resolve image URL — strip Cloudinary transforms if present, store raw URL
+    const rawImageUrl = String(imageUrl || requestRow.imageUrl || "").trim();
+    // For products, store the plain URL without optimization transforms
+    const productImageUrl = rawImageUrl ? rawImageUrl : "";
+
+    if (!derivedSellerId) {
+      return res.status(400).json({ error: "No seller found. Admin must be logged in." });
+    }
+    if (!derivedTitle) {
+      return res.status(400).json({ error: "Unable to derive product title from appliance data." });
+    }
+    if (!Number.isFinite(derivedPrice) || derivedPrice <= 0) {
+      return res.status(400).json({ 
+        error: `Price could not be determined (got: ${derivedPrice}). Ensure the customer accepted an offer with a valid price, or provide a price.`,
+        debug: { acceptedOffer, anyOffer, expectedPrice: requestRow.expectedPrice }
       });
     }
 
     const product = await prisma.product.create({
       data: {
-        title,
-        description: description || "",
-        price: Number(price),
-        sellerId,
+        title: derivedTitle,
+        description: derivedDescription,
+        price: derivedPrice,
+        sellerId: derivedSellerId,
         isUsed: true,
         productType: "REFURBISHED",
         conditionScore: 8,
         ageMonths: 24,
         warrantyType: "SHOP",
-        images: imageUrl ? [cloudinaryOptimizeUrl(imageUrl)] : [],
+        images: productImageUrl ? [productImageUrl] : [],
         status: "AVAILABLE",
       },
     });
-    await prisma.$executeRaw`UPDATE "SellRequest" SET "status" = ${"REFURBISHED_LISTED"} WHERE "id" = ${id}`;
-    res.json({ message: "Moved to refurbished inventory.", product });
+    const request = await prisma.sellRequest.update({
+      where: { id },
+      data: { status: "REFURBISHED_LISTED" },
+      include: SELL_REQUEST_INCLUDE,
+    });
+    res.json({ message: "Moved to refurbished inventory.", product, request: serializeSellRequest(req, request) });
   } catch (error: any) {
+    console.error("moveSellRequestToRefurbished error:", error?.message, error);
     res.status(500).json({ error: "Failed to move to inventory.", details: error?.message || "Unknown error" });
   }
 };
@@ -1477,6 +2015,7 @@ export const getOpsAnalytics = async (_req: Request, res: Response) => {
 export const getAdminServiceOverview = async (_req: Request, res: Response) => {
   try {
     await ensurePhase2Schema().catch(() => {});
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
 
     // Issue #11 Fix: Fetch full system counts separately from the recent bookings list.
     // Previously, pipeline counts were inaccurate because they only counted the 20 results in the UI.
@@ -1504,6 +2043,7 @@ export const getAdminServiceOverview = async (_req: Request, res: Response) => {
           guestPhone: string | null;
           customerName: string | null;
           customerEmail: string | null;
+          latestEventAt: Date | null;
         }>
       >`
         SELECT
@@ -1521,11 +2061,17 @@ export const getAdminServiceOverview = async (_req: Request, res: Response) => {
           sb."guestName",
           sb."guestPhone",
           u."name" AS "customerName",
-          u."email" AS "customerEmail"
+          u."email" AS "customerEmail",
+          latest_event."latestEventAt" AS "latestEventAt"
         FROM "ServiceBooking" sb
         LEFT JOIN "User" u ON u."id" = sb."customerId"
-        ORDER BY sb."scheduledAt" DESC
-        LIMIT 50
+        LEFT JOIN (
+          SELECT "bookingId", MAX("createdAt") AS "latestEventAt"
+          FROM "ServiceEvent"
+          GROUP BY "bookingId"
+        ) latest_event ON latest_event."bookingId" = sb."id"
+        ORDER BY COALESCE(latest_event."latestEventAt", sb."scheduledAt") DESC, sb."scheduledAt" DESC
+        LIMIT 200
       `,
       prisma.$queryRaw<Array<{ bookingId: string; technicianId: string; pincode: string; routeNote: string }>>`
         SELECT "bookingId", "technicianId", COALESCE("pincode",'') AS "pincode", COALESCE("routeNote",'') AS "routeNote"
@@ -1558,12 +2104,22 @@ export const getAdminServiceOverview = async (_req: Request, res: Response) => {
           contactName: resolvedName,
           contactPhone: resolvedPhone,
           address: b.address || null,
+          latestEventAt: b.latestEventAt || b.scheduledAt,
           technician: tech || null,
+          technicianId: tech?.id || null,
+          technicianName: tech?.name || null,
           pincode: assignment?.pincode || null,
           routeNote: assignment?.routeNote || null,
+          displayStatus: toDisplayServiceStatus(b.status),
+          statusLabel: getDisplayServiceStatusLabel(b.status),
         };
       }),
       pipelineCounts,
+      technicians: technicians.map((technician) => ({
+        id: technician.id,
+        name: technician.name,
+        phone: technician.phone,
+      })),
     });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to fetch admin service overview.", details: error?.message || "Unknown error" });
@@ -1613,11 +2169,20 @@ export const generateDocument = async (req: Request, res: Response) => {
   }
 };
 
-export const generateInvoiceByBooking = async (req: Request, res: Response) => {
+export const generateInvoiceByBooking = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const bookingId = String(req.params.bookingId || "");
+    const requesterId = req.userId;
+    if (!requesterId) return res.status(401).json({ error: "Unauthorized." });
+
+    const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+    if (!requester) return res.status(403).json({ error: "Forbidden." });
+
     const booking = (await prisma.serviceBooking.findUnique({ where: { id: bookingId } })) as any;
     if (!booking) return res.status(404).json({ error: "Booking not found." });
+    if (requester.role !== "ADMIN" && booking.customerId !== requesterId) {
+      return res.status(403).json({ error: "Forbidden." });
+    }
 
     const amount = Number(booking.finalCost || 0);
     const lines = [
@@ -1637,17 +2202,78 @@ export const generateInvoiceByBooking = async (req: Request, res: Response) => {
   }
 };
 
-export const getAllDiagnoses = async (_req: Request, res: Response) => {
+export const getAllDiagnoses = async (req: Request, res: Response) => {
   try {
-    const allData = await prisma.serviceBooking.findMany({
-      include: {
-        customer: { select: { name: true, email: true } },
-      },
-      orderBy: { scheduledAt: "desc" },
+    const allData = await listDiagnosisLogs();
+    res.json(
+      allData.map((item) => ({
+        id: item.id,
+        appliance: item.appliance,
+        issue: item.issue,
+        aiDiagnosis: item.diagnosis,
+        estimatedCostRange: item.estimatedCostRange,
+        mediaUrl: item.mediaUrl ? toAbsoluteMediaUrl(req, item.mediaUrl) : null,
+        mediaType: item.mediaType === "video" ? "video" : "image",
+        createdAt: item.createdAt,
+        customer: item.customerId
+          ? {
+              id: item.customerId,
+              name: item.customerName || "Customer",
+              email: item.customerEmail || "",
+            }
+          : null,
+        guestName: item.guestName,
+        guestPhone: item.guestPhone,
+      })),
+    );
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to load dashboard data.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const getTechnicianNotifications = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized." });
+    
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.email) return res.status(404).json({ error: "User not found or no email." });
+
+    const notifications = await prisma.notification.findMany({
+      where: { userEmail: user.email },
+      orderBy: { createdAt: "desc" }
     });
-    res.json(allData);
-  } catch {
-    res.status(500).json({ error: "Failed to fetch diagnosis data." });
+
+    res.json({ notifications });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to fetch notifications.", details: error?.message || "Unknown error" });
+  }
+};
+
+export const markNotificationAsRead = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const id = String(req.params.id || "");
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized." });
+    
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.email) return res.status(404).json({ error: "User not found or no email." });
+
+    const notification = await prisma.notification.findUnique({ where: { id } });
+    if (!notification) return res.status(404).json({ error: "Notification not found." });
+    
+    if (notification.userEmail !== user.email) {
+      return res.status(403).json({ error: "Forbidden." });
+    }
+
+    const updated = await prisma.notification.update({
+      where: { id },
+      data: { read: true }
+    });
+
+    res.json({ notification: updated });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to mark notification as read.", details: error?.message || "Unknown error" });
   }
 };
 

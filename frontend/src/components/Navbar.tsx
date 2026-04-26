@@ -58,7 +58,7 @@ export default function Navbar() {
         } transition-all duration-300`}
       >
         <div className={`mx-auto flex w-full items-center justify-between gap-3 ${isAdminRoute ? "px-4 sm:px-6 lg:px-8 max-w-7xl py-4" : "px-3 py-2.5 pr-4"}`}>
-          <Link href="/" className="whitespace-nowrap pl-2">
+          <Link href="/" className="whitespace-nowrap pl-2 shrink-0 max-w-[200px] sm:max-w-none">
             <BrandLogo compact theme={isAdminRoute ? "light" : "dark"} />
           </Link>
 
@@ -116,7 +116,7 @@ export default function Navbar() {
           <button
             type="button"
             onClick={() => setMobileOpen((prev) => !prev)}
-            className={`inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl border md:hidden ${isAdminRoute ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`}
+            className={`inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl border md:hidden shrink-0 ${isAdminRoute ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`}
             aria-label="Open navigation menu"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}

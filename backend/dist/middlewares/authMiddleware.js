@@ -1,15 +1,28 @@
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/runtime.js";
 import { prisma } from "../config/prisma.js";
+const extractUserIdFromRequest = (req) => {
+    const cookieToken = req.cookies?.token;
+    const authHeader = req.headers.authorization;
+    const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+    const token = cookieToken || bearerToken;
+    if (!token)
+        return null;
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        return decoded?.userId || null;
+    }
+    catch {
+        return null;
+    }
+};
+export const resolveUserIdFromRequest = (req) => extractUserIdFromRequest(req);
 export const userAuth = async (req, res, next) => {
     try {
-        const token = req.cookies?.token;
-        if (!token)
+        const userId = extractUserIdFromRequest(req);
+        if (!userId)
             return res.status(401).json({ error: "Unauthorized. Login required." });
-        const decoded = jwt.verify(token, JWT_SECRET);
-        if (!decoded?.userId)
-            return res.status(401).json({ error: "Invalid token." });
-        req.userId = decoded.userId;
+        req.userId = userId;
         next();
     }
     catch {

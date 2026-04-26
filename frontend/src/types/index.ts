@@ -24,8 +24,15 @@ export type DiagnosisItem = {
   appliance: string;
   issue: string;
   aiDiagnosis: string;
+  estimatedCostRange?: string | null;
+  mediaUrl?: string | null;
+  mediaType?: "image" | "video" | null;
+  createdAt?: string;
   customer?: {
+    id?: string;
     name?: string;
     email?: string;
-  };
+  } | null;
+  guestName?: string | null;
+  guestPhone?: string | null;
 };
