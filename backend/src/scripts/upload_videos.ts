@@ -26,10 +26,8 @@
 //     console.error(e);
 //     process.exit(1);
 //   });
-import { PrismaClient } from "../generated/client/client.js";
+import { prisma } from "../config/prisma.js";
 import { randomUUID } from "node:crypto";
-
-const prisma = new PrismaClient();
 
 const videos = [
   "https://assets.mixkit.co/videos/preview/mixkit-technician-repairing-an-air-conditioner-4251-large.mp4",
