@@ -86,7 +86,7 @@ export default function Home() {
           </div>
           
           <div className="mt-8 flex items-center gap-6 text-sm font-bold text-slate-300">
-            <span className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-400" /> Visiting charge ₹299/-</span>
+            <span className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-400" /> Visiting charge ₹349/-</span>
             <span className="hidden md:flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-400" /> 100% Satisfaction Guarantee</span>
           </div>
         </div>

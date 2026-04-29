@@ -31,7 +31,7 @@ export default function Footer() {
               </div>
               <div className="flex items-center gap-3 text-slate-300">
                 <Phone className="w-5 h-5 text-blue-400 shrink-0" />
-                <span className="font-medium">+91 9060877595</span>
+                <span className="font-medium">+91 7070494254 </span>
               </div>
             </div>
             <p className="text-slate-600 text-xs mt-4 font-mono font-bold tracking-widest uppercase">GSTIN : 10EFRPM9155N1ZQ</p>

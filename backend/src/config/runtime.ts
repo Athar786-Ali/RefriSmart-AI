@@ -445,3 +445,4 @@ export const generateFallbackDiagnosis = (appliance: string, issue: string, lang
 };
 
 export const createUuid = () => randomUUID();
+
