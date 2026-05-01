@@ -169,7 +169,7 @@ export const ensurePhase2Schema = async () => {
       where: { id: "tech-1" },
       update: {
         name: "Ravi Kumar",
-        phone: "9060877595",
+        phone: "7070494254",
         role: "TECHNICIAN",
         pincode: "813210",
         active: true,
@@ -177,7 +177,7 @@ export const ensurePhase2Schema = async () => {
       create: {
         id: "tech-1",
         name: "Ravi Kumar",
-        phone: "9060877595",
+        phone: "7070494254",
         role: "TECHNICIAN",
         pincode: "813210",
         active: true,
@@ -235,8 +235,8 @@ export const isEmailConfigured = () => Boolean(SMTP_USER && SMTP_PASS);
 // WhatsApp fallback uses a "click to chat" deep link and does not require server-side credentials.
 
 export const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-export const TECHNICIAN_PHONE = "9060877595";
-export const SHOP_UPI_ID = "9060877595-2@ybl";
+export const TECHNICIAN_PHONE = "7070494254";
+export const SHOP_UPI_ID = "7070494254-2@ybl";
 export const ORDER_STATUS_FLOW = ["PLACED", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED"] as const;
 
 export type StructuredDiagnosis = {

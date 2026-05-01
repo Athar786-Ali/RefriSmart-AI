@@ -85,7 +85,7 @@ export default function Footer() {
           <div>
             <h3 className="font-bold text-slate-200 mb-4 text-sm uppercase tracking-wide">Support</h3>
             <ul className="text-slate-400 space-y-2 text-sm">
-              <li><Link href="tel:+919060877595" className="hover:text-cyan-400 transition-colors inline-flex items-center gap-2 text-base"><Phone className="w-4 h-4"/> Contact Us</Link></li>
+              <li><Link href="tel:+917070494254" className="hover:text-cyan-400 transition-colors inline-flex items-center gap-2 text-base"><Phone className="w-4 h-4"/> Contact Us</Link></li>
               <li><Link href="/" className="hover:text-cyan-400 hover:translate-x-1 inline-block transition-all text-base">Terms of Service</Link></li>
               <li><Link href="/" className="hover:text-cyan-400 hover:translate-x-1 inline-block transition-all text-base">Privacy Policy</Link></li>
             </ul>

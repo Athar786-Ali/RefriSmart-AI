@@ -41,10 +41,10 @@ export default function AIDiagnosis() {
   const [result, setResult] = useState("");
   const [estimatedCostRange, setEstimatedCostRange] = useState("");
   const [contact, setContact] = useState<ContactInfo>({
-    phone: "9060877595",
-    call: "tel:9060877595",
-    whatsapp: "https://wa.me/919060877595",
-    sms: "sms:+919060877595",
+    phone: "7070494254",
+    call: "tel:7070494254",
+    whatsapp: "https://wa.me/917070494254",
+    sms: "sms:+917070494254",
   });
   const [isListening, setIsListening] = useState(false);
   const [loading, setLoading] = useState(false);

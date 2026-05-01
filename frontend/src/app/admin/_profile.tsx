@@ -88,7 +88,7 @@ export function ProfileSection({ user, logout, router }: ProfileProps) {
           {[
             ["Business",  "Golden Refrigeration"],
             ["Owner",     "Md Athar Ali"],
-            ["Contact",   "9060877595"],
+            ["Contact",   "7070494254"],
             ["Location",  "Sabour, Bhagalpur, Bihar"],
             ["Services",  "AC, Refrigerator, Washing Machine, Electronics"],
           ].map(([k, v]) => (

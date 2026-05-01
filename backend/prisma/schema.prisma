@@ -7,7 +7,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // URL yahan se hata di gayi hai, ye prisma.config.ts mein jayegi
+ 
 }
 
 model User {
@@ -53,8 +53,7 @@ model Product {
   sellerId       String
   seller         User          @relation(fields: [sellerId], references: [id])
   orders         ProductOrder[]
-  createdAt      DateTime      @default(now()) // 🔥 Add this line
-}
+  createdAt      DateTime      @default(now()) 
 
 
 model ServiceBooking {
