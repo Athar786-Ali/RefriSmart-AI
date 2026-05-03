@@ -81,10 +81,6 @@ export const metadata: Metadata = {
   alternates: {
     canonical: SITE_URL,
   },
-  icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
-  },
   verification: {
     // Add your Google Search Console verification code here when available
     // google: "YOUR_GOOGLE_VERIFICATION_CODE",
