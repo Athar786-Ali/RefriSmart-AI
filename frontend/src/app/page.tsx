@@ -4,9 +4,39 @@ import Link from "next/link";
 import { 
   Star, Snowflake, Wind, Zap, Navigation, MapPin, 
   Clock, Phone, Sparkles, ArrowRight, MonitorSmartphone,
-  ShieldCheck, Wrench, CalendarCheck, CheckCircle2, Quote
+  ShieldCheck, Wrench, CalendarCheck, CheckCircle2, Quote, ChevronDown
 } from "lucide-react";
 import GalleryShowcase from "@/components/GalleryShowcase";
+
+const FAQS = [
+  { q: "How much does AC repair cost in Bhagalpur?", a: "AC repair in Bhagalpur starts with a visiting charge of ₹349. The total repair cost depends on the issue (gas refill, PCB, compressor etc.). Golden Refrigeration provides a transparent cost estimate before starting any work." },
+  { q: "Do you offer same-day AC repair in Bhagalpur?", a: "Yes! We offer same-day doorstep AC repair service in Bhagalpur and nearby areas including Sabour, Nathnagar, Barari, and Adampur. Book online or call +91 7070494254." },
+  { q: "My fridge is not cooling — can you fix it?", a: "Absolutely! Our certified technicians diagnose and fix refrigerators not cooling due to gas leaks, compressor failures, PCB faults, thermostat issues, and more. We serve all brands including LG, Samsung, Haier, Whirlpool, and Godrej." },
+  { q: "Which areas in Bhagalpur do you cover?", a: "We cover all major areas of Bhagalpur including Sabour, Nathnagar, Barari, Adampur, Khalifabagh, Tatarpur, and all localities with PIN codes 812xxx, 813xxx, and 853xxx." },
+  { q: "Do you repair all brands of AC and refrigerators?", a: "Yes! We repair all major brands — LG, Samsung, Voltas, Daikin, Haier, Whirlpool, Godrej, Blue Star, Carrier, and more. Our technicians are experienced with both split and window ACs." },
+  { q: "How do I book a technician for washing machine repair in Bhagalpur?", a: "You can book online by visiting the Service page on our website and filling out the form, or call us directly at +91 7070494254. We dispatch a technician the same day in most cases." },
+];
+
+function FaqItem({ question, answer }: { question: string; answer: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-2xl border border-slate-700/60 bg-slate-800/50 backdrop-blur-sm overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between gap-4 px-6 py-5 text-left group"
+        aria-expanded={open}
+      >
+        <span className="font-bold text-white text-base md:text-lg leading-snug group-hover:text-cyan-300 transition-colors">{question}</span>
+        <ChevronDown className={`w-5 h-5 text-slate-400 shrink-0 transition-transform duration-300 ${open ? "rotate-180 text-cyan-400" : ""}`} />
+      </button>
+      {open && (
+        <div className="px-6 pb-6 text-slate-300 text-sm md:text-base leading-relaxed border-t border-slate-700/50 pt-4">
+          {answer}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Home() {
   const services = [
@@ -284,6 +314,49 @@ export default function Home() {
               <MonitorSmartphone className="w-5 h-5 text-blue-400" /> Browse Inventory
             </Link>
           </div>
+        </div>
+      </section>
+
+      {/* 7. FAQ SECTION – triggers Google FAQ Rich Snippets */}
+      <section className="py-20 md:py-28 bg-slate-900" aria-label="Frequently Asked Questions">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+          <div className="text-center mb-14">
+            <p className="text-sm uppercase tracking-[0.25em] text-cyan-400 font-bold mb-3">Got Questions?</p>
+            <h2 className="text-4xl md:text-5xl font-black text-white">Frequently Asked Questions</h2>
+            <p className="text-slate-400 mt-4 text-lg">Everything you need to know about our appliance repair services in Bhagalpur.</p>
+          </div>
+          <div className="flex flex-col gap-4">
+            {FAQS.map((faq, idx) => (
+              <FaqItem key={idx} question={faq.q} answer={faq.a} />
+            ))}
+          </div>
+          <div className="mt-12 text-center">
+            <a
+              href="tel:+917070494254"
+              className="inline-flex items-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-white font-black text-lg px-8 py-4 rounded-full shadow-xl transition-all transform hover:scale-105"
+            >
+              <Phone className="w-5 h-5" /> Still have questions? Call us directly
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* 8. SERVICE AREAS – local SEO signal for Google */}
+      <section className="py-14 bg-slate-950 border-t border-slate-800" aria-label="Service Areas in Bhagalpur">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full text-center">
+          <p className="text-sm uppercase tracking-[0.25em] text-cyan-400 font-bold mb-3">Doorstep Service in Bhagalpur</p>
+          <h2 className="text-2xl md:text-3xl font-black text-white mb-6">Areas We Serve in Bhagalpur, Bihar</h2>
+          <div className="flex flex-wrap justify-center gap-3 max-w-3xl mx-auto">
+            {["Sabour","Nathnagar","Barari","Adampur","Khalifabagh","Tatarpur","Bhagalpur City","Tinpahar","Kahalgaon","Sultanganj","Bihpur","Naugachhia"].map((area) => (
+              <span
+                key={area}
+                className="inline-flex items-center gap-1.5 bg-slate-800 border border-slate-700 text-slate-300 text-sm font-semibold px-4 py-2 rounded-full hover:border-cyan-500/50 hover:text-cyan-300 transition-colors"
+              >
+                <MapPin className="w-3.5 h-3.5 text-blue-400" />{area}
+              </span>
+            ))}
+          </div>
+          <p className="text-slate-500 text-sm mt-6">Serving PIN codes: 812xxx · 813xxx · 853xxx — Bhagalpur &amp; surrounding Bihar districts</p>
         </div>
       </section>
 
