@@ -1,10 +1,21 @@
 // frontend/src/app/layout.tsx
 import "./globals.css";
+import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Toaster } from "sonner";
 import { Toaster as HotToaster } from "react-hot-toast";
 import { AuthProvider } from "@/context/AuthContext";
+
+export const metadata: Metadata = {
+  title: "Golden Refrigeration – Bhagalpur's #1 Appliance Repair",
+  description:
+    "Expert AC, refrigerator, and washing machine repairs with same-day doorstep service in Bhagalpur. Book a certified technician online or call +91 7070494254.",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
+};
 
 export default function RootLayout({
   children,

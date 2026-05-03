@@ -49,6 +49,7 @@ export default function Home() {
   ];
 
   return (
+    <>
     <main className="min-h-screen pb-12 flex flex-col font-sans overflow-x-hidden bg-slate-950">
       
       {/* 1. PREMIUM HERO SECTION (SERVICE FOCUSED) */}
@@ -83,6 +84,13 @@ export default function Home() {
             >
               <Wrench className="w-6 h-6" /> Book a Technician Now
             </Link>
+            <a
+              href="tel:+917070494254"
+              id="hero-call-technician-btn"
+              className="w-full sm:w-auto px-10 py-5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white font-black text-lg md:text-xl shadow-xl shadow-emerald-900/40 transition-all transform hover:scale-105 active:scale-95 flex items-center justify-center gap-3 border border-emerald-400/30"
+            >
+              <Phone className="w-6 h-6" /> Call Technician
+            </a>
           </div>
           
           <div className="mt-8 flex items-center gap-6 text-sm font-bold text-slate-300">
@@ -280,5 +288,17 @@ export default function Home() {
       </section>
 
     </main>
+
+      {/* STICKY FLOATING CALL BUTTON */}
+      <a
+        href="tel:+917070494254"
+        id="floating-call-technician-btn"
+        aria-label="Call Technician"
+        className="fixed bottom-6 right-6 z-[200] flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-black px-5 py-4 rounded-full shadow-[0_8px_30px_rgba(16,185,129,0.5)] transition-all transform hover:scale-110 active:scale-95 border border-emerald-300/40"
+      >
+        <Phone className="w-5 h-5 animate-bounce" />
+        <span className="hidden sm:inline text-sm">Call Technician</span>
+      </a>
+    </>
   );
 }

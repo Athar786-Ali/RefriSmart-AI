@@ -39,6 +39,14 @@ export default function Footer() {
 
           <div className="shrink-0 flex flex-col gap-4 w-full sm:w-auto">
             <a 
+              href="tel:+917070494254"
+              id="footer-call-technician-btn"
+              className="bg-emerald-500 hover:bg-emerald-400 transition-colors text-white font-extrabold text-lg px-8 py-5 rounded-2xl shadow-xl flex items-center justify-center gap-3"
+            >
+              <Phone className="w-6 h-6" />
+              Call Technician Now
+            </a>
+            <a 
               href="https://www.justdial.com/Bhagalpur/Golden-Refrigeration--Sabour-High-School-Sabour/9999PX641-X641-190522080859-E5V9_BZDET" 
               target="_blank" 
               rel="noopener noreferrer"
