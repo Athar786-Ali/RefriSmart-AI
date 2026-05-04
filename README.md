@@ -1,4 +1,4 @@
-# 🤖 RefriSmart-AI
+# 🤖 Golden Refrigeration - RefriSmart-AI
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)
@@ -6,7 +6,7 @@
 ![Node.js](https://img.shields.io/badge/Node.js-v20+-green.svg?logo=node.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg?logo=typescript)
 
-**RefriSmart-AI** is an advanced, full-stack web application designed to revolutionize refrigerator maintenance, servicing, and appliance selling. Leveraging the power of artificial intelligence via Google GenAI, it provides smart diagnostics, seamless service booking, and a platform for users to sell their appliances.
+**RefriSmart-AI** is an advanced, full-stack web application built for **Golden Refrigeration** (based in Bhagalpur). Designed to revolutionize appliance maintenance, servicing, and selling, it leverages the power of artificial intelligence via Google GenAI to provide smart diagnostics, seamless service booking, and a platform for users to sell their appliances.
 
 ---
 
@@ -180,6 +180,14 @@ Contributions are what make the open source community such an amazing place to l
 ## 📄 License
 
 Distributed under the MIT License. See `LICENSE` for more information.
+
+---
+
+## 📞 Contact
+
+**Golden Refrigeration**
+- **Location:** Bhagalpur
+- **Phone:** 7070494254
 
 ---
 *Built with ❤️ by the RefriSmart-AI Team.*
