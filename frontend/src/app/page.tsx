@@ -83,7 +83,7 @@ export default function Home() {
     <main className="min-h-screen pb-12 flex flex-col font-sans overflow-x-hidden bg-slate-950">
       
       {/* 1. PREMIUM HERO SECTION (SERVICE FOCUSED) */}
-      <section className="relative flex min-h-[90vh] w-full flex-col items-center justify-center overflow-hidden bg-slate-950 pt-24 pb-10">
+      <section className="relative flex min-h-[90vh] w-full flex-col items-center justify-center overflow-hidden bg-slate-950 pt-24 pb-28 sm:pb-20">
         <div className="absolute inset-0 z-0">
           <div
             className="absolute inset-0 bg-[url('/images/hero-bg.png')] bg-cover bg-center opacity-100"
@@ -123,9 +123,9 @@ export default function Home() {
             </a>
           </div>
           
-          <div className="mt-8 flex items-center gap-6 text-sm font-bold text-slate-300">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm font-bold text-slate-300">
             <span className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-400" /> Visiting charge ₹349/-</span>
-            <span className="hidden md:flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-400" /> 100% Satisfaction Guarantee</span>
+            <span className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-400" /> 100% Satisfaction Guarantee</span>
           </div>
         </div>
         
