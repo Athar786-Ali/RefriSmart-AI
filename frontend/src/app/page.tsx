@@ -123,9 +123,15 @@ export default function Home() {
             </a>
           </div>
           
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm font-bold text-slate-300">
-            <span className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-400" /> Visiting charge ₹349/-</span>
-            <span className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-400" /> 100% Satisfaction Guarantee</span>
+          <div className="mt-6 mb-4 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+            <span className="flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md border border-emerald-400/40 px-4 py-2 sm:px-5 sm:py-2.5 text-sm sm:text-base font-bold text-white shadow-lg shadow-black/20">
+              <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
+              Visiting charge <span className="text-emerald-300">₹349/-</span>
+            </span>
+            <span className="flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md border border-emerald-400/40 px-4 py-2 sm:px-5 sm:py-2.5 text-sm sm:text-base font-bold text-white shadow-lg shadow-black/20">
+              <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
+              100% Satisfaction Guarantee
+            </span>
           </div>
         </div>
         
