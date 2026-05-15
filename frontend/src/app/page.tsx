@@ -12,7 +12,7 @@ const FAQS = [
   { q: "How much does AC repair cost in Bhagalpur?", a: "AC repair in Bhagalpur starts with a visiting charge of ₹349. The total repair cost depends on the issue (gas refill, PCB, compressor etc.). Golden Refrigeration provides a transparent cost estimate before starting any work." },
   { q: "Do you offer same-day AC repair in Bhagalpur?", a: "Yes! We offer same-day doorstep AC repair service in Bhagalpur and nearby areas including Sabour, Nathnagar, Barari, and Adampur. Book online or call +91 7070494254." },
   { q: "My fridge is not cooling — can you fix it?", a: "Absolutely! Our certified technicians diagnose and fix refrigerators not cooling due to gas leaks, compressor failures, PCB faults, thermostat issues, and more. We serve all brands including LG, Samsung, Haier, Whirlpool, and Godrej." },
-  { q: "Which areas in Bhagalpur do you cover?", a: "We cover all major areas of Bhagalpur including Sabour, Nathnagar, Barari, Adampur, Khalifabagh, Tatarpur, and all localities with PIN codes 812xxx, 813xxx, and 853xxx." },
+  { q: "Which areas in Bhagalpur do you cover?", a: "We cover all major areas of Bhagalpur including Sabour (813210), Nathnagar (812002), Barari, Adampur (812001), Khalifabagh, Tatarpur, Bhagalpur City (812002), Jagdishpur (812005), Akbarnagar (813223), Sultanganj (813222), Sahkund/Amba (813108), and surrounding localities with PIN codes 812001, 812002, 812005, 813108, 813210, 813222, 813223." },
   { q: "Do you repair all brands of AC and refrigerators?", a: "Yes! We repair all major brands — LG, Samsung, Voltas, Daikin, Haier, Whirlpool, Godrej, Blue Star, Carrier, and more. Our technicians are experienced with both split and window ACs." },
   { q: "How do I book a technician for washing machine repair in Bhagalpur?", a: "You can book online by visiting the Service page on our website and filling out the form, or call us directly at +91 7070494254. We dispatch a technician the same day in most cases." },
 ];
@@ -362,7 +362,7 @@ export default function Home() {
               </span>
             ))}
           </div>
-          <p className="text-slate-500 text-sm mt-6">Serving PIN codes: 812xxx · 813xxx · 853xxx — Bhagalpur &amp; surrounding Bihar districts</p>
+          <p className="text-slate-500 text-sm mt-6">Serving PIN codes: 812001 · 812002 · 812005 · 813108 · 813210 · 813222 · 813223 — Bhagalpur &amp; surrounding Bihar districts</p>
         </div>
       </section>
 
