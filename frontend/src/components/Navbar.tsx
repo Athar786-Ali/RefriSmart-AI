@@ -116,7 +116,7 @@ export default function Navbar() {
           <button
             type="button"
             onClick={() => setMobileOpen((prev) => !prev)}
-            className={`inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl border md:hidden shrink-0 ${isAdminRoute ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`}
+            className={`inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl border md:hidden shrink-0 ${isAdminRoute ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-700 bg-slate-800 text-slate-200"}`}
             aria-label="Open navigation menu"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -125,14 +125,14 @@ export default function Navbar() {
       </nav>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm md:hidden">
-          <div className={`absolute right-0 top-0 h-full w-full max-w-sm border-l p-5 ${isAdminRoute ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-900"}`}>
+        <div className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm md:hidden">
+          <div className={`absolute right-0 top-0 h-full w-full max-w-sm border-l p-5 ${isAdminRoute ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-700 bg-slate-950 text-slate-100"}`}>
             <div className="mb-5 flex items-center justify-between">
-              <p className="text-sm font-semibold uppercase tracking-[0.16em]">Navigation</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-300">Navigation</p>
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}
-                className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg ${isAdminRoute ? "bg-slate-900" : "bg-slate-100"}`}
+                className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg ${isAdminRoute ? "bg-slate-900" : "bg-slate-800 text-slate-200 hover:bg-slate-700"}`}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -143,21 +143,21 @@ export default function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex min-h-[48px] items-center rounded-xl px-4 text-sm font-semibold ${pathname === item.href ? (isAdminRoute ? "bg-cyan-500/20 text-cyan-300" : "bg-blue-50 text-blue-700") : (isAdminRoute ? "text-slate-200 hover:bg-slate-900" : "text-slate-700 hover:bg-slate-100")}`}
+                  className={`flex min-h-[48px] items-center rounded-xl px-4 text-sm font-semibold transition-colors ${pathname === item.href ? (isAdminRoute ? "bg-cyan-500/20 text-cyan-300" : "bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-md border border-cyan-400/30") : (isAdminRoute ? "text-slate-200 hover:bg-slate-900" : "text-slate-300 hover:bg-slate-800/80")}`}
                 >
                   {item.label}
                 </Link>
               ))}
             </div>
 
-            <div className="mt-6 border-t pt-4">
+            <div className="mt-6 border-t border-slate-700/60 pt-4">
               {loading ? (
-                <p className={`px-1 text-xs ${isAdminRoute ? "text-slate-400" : "text-slate-500"}`}>
+                <p className={`px-1 text-xs ${isAdminRoute ? "text-slate-400" : "text-slate-400"}`}>
                   Checking session...
                 </p>
               ) : user ? (
                 <div className="space-y-2">
-                  <p className={`px-1 text-xs ${isAdminRoute ? "text-slate-400" : "text-slate-500"}`}>
+                  <p className={`px-1 text-xs ${isAdminRoute ? "text-slate-400" : "text-slate-400"}`}>
                     Logged in as {user.name || "User"}
                   </p>
                   {user.role === "ADMIN" && (
@@ -170,14 +170,14 @@ export default function Navbar() {
                   )}
                   <button
                     onClick={handleLogout}
-                    className="w-full min-h-[48px] rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 active:scale-95"
+                    className="w-full min-h-[48px] rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-400 active:scale-95 hover:bg-red-500/20 transition-colors"
                   >
                     Logout
                   </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-2">
-                  <Link href="/login" className="flex min-h-[48px] items-center justify-center rounded-xl bg-blue-600 text-sm font-semibold text-white">
+                  <Link href="/login" className="flex min-h-[48px] items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-sm font-semibold text-white shadow-lg shadow-blue-900/40 hover:from-blue-700 hover:to-cyan-600 transition-all active:scale-95">
                     Login / Sign Up
                   </Link>
                 </div>
