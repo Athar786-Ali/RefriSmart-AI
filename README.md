@@ -45,6 +45,16 @@
 - [SEO & Local Search Strategy](#-seo--local-search-strategy)
 - [Deployment](#-deployment)
 - [Contact](#-contact)
+- [Screenshots & UI Preview](#%EF%B8%8F-screenshots--ui-preview)
+- [Security Architecture](#-security-architecture)
+- [AI Resilience — Multi-Model Fallback](#-ai-resilience--multi-model-fallback-strategy)
+- [Performance Optimizations](#-performance-optimizations)
+- [Supported Brands](#%EF%B8%8F-supported-brands)
+- [Bilingual AI Support](#-bilingual-ai-support)
+- [Roadmap](#%EF%B8%8F-roadmap)
+- [Contributing](#-contributing)
+- [License](#-license)
+- [Acknowledgements](#-acknowledgements)
 
 ---
 
@@ -505,10 +515,292 @@ Live at production URL within ~60 seconds
 
 ---
 
+## 🖼️ Screenshots & UI Preview
+
+<details>
+<summary><b>🏠 Homepage — Hero & Services</b></summary>
+<br/>
+
+The homepage features a **premium dark-mode hero section** with a full-bleed background image, glassmorphism badges, and animated CTAs. Below, a responsive 4-column card grid showcases core services (AC, Refrigerator, Washing Machine, Electronics) with **parallax hover effects** and gradient overlays on real service photos.
+
+**Key UI elements:**
+- Sticky floating "Call Technician" button with pulse animation
+- Curved SVG section dividers for seamless visual flow
+- Service area badges with map pins for local SEO
+- JustDial-verified review card with star ratings
+
+</details>
+
+<details>
+<summary><b>🤖 AI Diagnosis — Upload & Report</b></summary>
+<br/>
+
+Users upload an image or video of a broken appliance directly in-browser. The system displays a **structured diagnostic card** with:
+- 🔍 Identified fault (e.g., "Low refrigerant R-22, dirty condenser coil")
+- ⚠️ Safety warnings specific to the repair
+- 🛠️ Step-by-step repair plan the technician will follow
+- 💰 Estimated cost breakdown (visit + labour + parts)
+- 📞 One-tap call/WhatsApp buttons to book immediately
+
+Media playback for video uploads is handled via **React Player** with responsive aspect ratios.
+
+</details>
+
+<details>
+<summary><b>👨‍💼 Admin Dashboard — Tabbed Operations</b></summary>
+<br/>
+
+A fully tabbed admin panel with role-gated access provides:
+- **Dashboard tab**: Live stats cards (total bookings, revenue, pending services, user count)
+- **Services tab**: Filterable list of all service requests with status toggles (Pending → Assigned → Completed)
+- **Orders tab**: Product and sell-request order management
+- **Diagnoses tab**: Full AI diagnosis history across all users with media preview
+- **Profile tab**: Admin profile settings and password management
+
+</details>
+
+<details>
+<summary><b>🛒 Product Catalog & Sell Flow</b></summary>
+<br/>
+
+- **Products page**: Grid of refrigeration parts and appliances with pricing, stock indicators, and one-click ordering
+- **Sell page**: Form-based appliance pickup request — users describe condition, upload photos, and submit for valuation
+- **Orders page**: User-facing order history with status tracking and Razorpay payment references
+
+</details>
+
+---
+
+## 🔒 Security Architecture
+
+RefriSmart-AI implements **defense-in-depth** security across every layer:
+
+| Layer | Implementation | Details |
+|---|---|---|
+| **Authentication** | JWT + HTTP-Only Cookies | Tokens stored in `httpOnly`, `secure`, `sameSite` cookies — immune to XSS token theft |
+| **Password Storage** | bcryptjs (salted hashes) | Passwords never stored in plaintext; salted with per-user unique salts |
+| **Email Verification** | Time-limited OTP | 6-digit OTPs expire after a configured window; prevents unverified account abuse |
+| **CORS Policy** | Strict origin allowlist | Production mode restricts API access to explicitly whitelisted frontend domains only |
+| **Role-Based Access** | Middleware-enforced | Admin routes protected by `roleGuard` middleware — checked on every request |
+| **Input Validation** | Controller-level checks | All user inputs validated/sanitized before processing or database insertion |
+| **File Uploads** | Multer + Cloudinary | Files processed in memory with size/type limits; stored on CDN, not on the API server |
+| **Error Handling** | Centralized error middleware | Stack traces never exposed to clients in production; generic error messages returned |
+| **Graceful Shutdown** | Process handlers | `uncaughtException` and `unhandledRejection` handlers prevent silent crashes |
+
+---
+
+## 🧠 AI Resilience — Multi-Model Fallback Strategy
+
+The AI diagnostic engine is designed to **never fail silently**. If one model is unavailable or rate-limited, the system cascades through alternatives:
+
+```
+Request arrives at /api/ai/diagnose
+         │
+         ▼
+   ┌─────────────────────────────────────────────┐
+   │  Model 1: gemini-flash-lite-latest (Free)   │──✅──→ Return diagnosis
+   │  Fastest, lowest latency, free tier          │
+   └─────────────────────────┬───────────────────┘
+                             │ ❌ Failed / Rate-limited
+                             ▼
+   ┌─────────────────────────────────────────────┐
+   │  Model 2: gemini-flash-latest (Free)        │──✅──→ Return diagnosis
+   │  Higher quality, still within free quota     │
+   └─────────────────────────┬───────────────────┘
+                             │ ❌ Failed / Rate-limited
+                             ▼
+   ┌─────────────────────────────────────────────┐
+   │  Model 3: gemini-pro-latest (Paid)          │──✅──→ Return diagnosis
+   │  Highest quality, used as final AI attempt   │
+   └─────────────────────────┬───────────────────┘
+                             │ ❌ All AI models failed
+                             ▼
+   ┌─────────────────────────────────────────────┐
+   │  Smart Fallback Engine (Rule-Based)          │──✅──→ Return diagnosis
+   │  Appliance + issue keyword matching          │
+   │  15+ pre-built diagnostic rules              │
+   │  Bilingual support (English + Hinglish)      │
+   └─────────────────────────────────────────────┘
+```
+
+**Key design decisions:**
+- No hardcoded timeouts — AI models are given unlimited time to respond (avoids premature fallback)
+- Uploaded media files are cleaned up from temp storage after processing (Gemini File API + local disk)
+- Every diagnosis is persisted to PostgreSQL regardless of which model (or fallback) generated it
+- Response includes a `fallbackUsed` flag so the frontend can optionally indicate when rule-based diagnosis was used
+
+---
+
+## ⚡ Performance Optimizations
+
+| Optimization | Impact |
+|---|---|
+| **Next.js App Router (SSR/SSG)** | Pages pre-rendered at build time where possible; dynamic routes use streaming SSR for instant TTFB |
+| **Cloudinary CDN** | All media served from global edge locations — zero load on the API server for images/videos |
+| **Vercel Edge Network** | Frontend assets cached at 100+ global PoPs; automatic Brotli compression |
+| **Serverless Backend** | Express runs as Vercel Serverless Functions — scales to zero, no idle server costs |
+| **Prisma Connection Pooling** | Uses Neon's serverless connection pooler to avoid cold-start DB connection overhead |
+| **Preconnect Hints** | `<link rel="preconnect">` for Google Fonts and image CDNs — eliminates DNS lookup latency |
+| **Image Optimization** | Unsplash images loaded with quality and size parameters (`q=80&w=1200`) to reduce payload |
+| **Cookie-based Auth** | No `Authorization` header round-trips; cookies sent automatically, reducing JS overhead |
+| **Concurrent Rendering** | React 19 concurrent features for non-blocking UI updates during AI diagnosis loading |
+
+---
+
+## 🏷️ Supported Brands
+
+RefriSmart-AI's diagnostic engine and technician expertise cover all major Indian appliance brands:
+
+<div align="center">
+
+| ACs & Coolers | Refrigerators | Washing Machines |
+|:---:|:---:|:---:|
+| LG | Samsung | Whirlpool |
+| Samsung | LG | LG |
+| Voltas | Haier | Samsung |
+| Daikin | Whirlpool | IFB |
+| Blue Star | Godrej | Bosch |
+| Carrier | Kelvinator | Godrej |
+| Hitachi | Videocon | Voltas Beko |
+| Lloyd | Blue Star | Haier |
+| Panasonic | Panasonic | Panasonic |
+
+</div>
+
+> 💡 **Not listed?** We repair **all brands** — the above are the most commonly serviced in the Bhagalpur region. Contact us for any unlisted brand.
+
+---
+
+## 🌍 Bilingual AI Support
+
+The diagnostic engine automatically **detects the user's input language** and responds accordingly:
+
+| Input Language | Detection Method | Response Language |
+|---|---|---|
+| English | Default / Latin script | Clear, professional English |
+| Hindi / Hinglish | Unicode Devanagari detection + Hindi keyword matching | Friendly Hinglish (Roman script) |
+
+This ensures that both English-speaking and Hindi-speaking customers in Bhagalpur receive diagnoses in a language they're comfortable with — no manual language selection required.
+
+---
+
+## 🗺️ Roadmap
+
+<table>
+<tr>
+<td width="50%">
+
+### ✅ Shipped
+- [x] AI-powered fault diagnosis (Gemini Vision)
+- [x] Multi-model fallback with rule-based safety net
+- [x] Razorpay payment integration (visiting charge)
+- [x] Email OTP verification flow
+- [x] Admin dashboard with live stats
+- [x] Product catalog & ordering
+- [x] Appliance sell/pickup request system
+- [x] Bilingual AI responses (EN + Hinglish)
+- [x] JSON-LD structured data + XML sitemap
+- [x] Fully responsive mobile-first UI
+- [x] Cloudinary media storage
+- [x] Technician job portal
+
+</td>
+<td width="50%">
+
+### 🚧 Planned
+- [ ] Push notifications for service status updates
+- [ ] Technician live location tracking
+- [ ] Customer review & rating system
+- [ ] WhatsApp Business API integration
+- [ ] Recurring maintenance subscription plans
+- [ ] Multi-language UI (Hindi + English toggle)
+- [ ] Invoice PDF auto-generation
+- [ ] Inventory management for spare parts
+- [ ] Analytics dashboard with revenue charts
+- [ ] PWA support for offline access
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! If you'd like to improve RefriSmart-AI, here's how:
+
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
+3. **Commit** your changes: `git commit -m 'feat: add amazing feature'`
+4. **Push** to the branch: `git push origin feature/amazing-feature`
+5. **Open** a Pull Request
+
+### Contribution Guidelines
+
+- Follow existing code style and TypeScript conventions
+- Write descriptive commit messages using [Conventional Commits](https://www.conventionalcommits.org/)
+- Test your changes locally before submitting a PR
+- Update the README if your change adds new features or modifies the setup process
+
+---
+
+## 📄 License
+
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+
+```
+MIT License
+
+Copyright (c) 2025 Athar Ali — Golden Refrigeration
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+```
+
+---
+
+## 🙏 Acknowledgements
+
+| | |
+|---|---|
+| **[Google Gemini](https://ai.google.dev/)** | Powering the AI diagnostic engine with multimodal vision capabilities |
+| **[Vercel](https://vercel.com/)** | Hosting both frontend and backend with seamless CI/CD and global edge network |
+| **[Neon](https://neon.tech/)** | Serverless PostgreSQL with connection pooling — perfect for Vercel Functions |
+| **[Cloudinary](https://cloudinary.com/)** | Global media CDN for diagnostic images and videos |
+| **[Razorpay](https://razorpay.com/)** | India's leading payment gateway powering our booking transactions |
+| **[Prisma](https://www.prisma.io/)** | Type-safe ORM that makes database queries a joy to write |
+| **[Next.js](https://nextjs.org/)** | The React framework that powers our SSR/SSG frontend |
+| **[Tailwind CSS](https://tailwindcss.com/)** | Utility-first CSS framework for rapid, responsive UI development |
+
+---
+
 <div align="center">
 
 **Built end-to-end with ❤️ — from schema design to production deployment.**
 
 *Full-Stack · AI Integration · Payment Gateway · Local SEO · Admin Dashboard · Serverless Deployment*
+
+<br/>
+
+<p>
+  <img src="https://img.shields.io/github/stars/Athar786-Ali/RefriSmart-AI?style=social" alt="GitHub Stars" />
+  <img src="https://img.shields.io/github/forks/Athar786-Ali/RefriSmart-AI?style=social" alt="GitHub Forks" />
+  <img src="https://img.shields.io/github/watchers/Athar786-Ali/RefriSmart-AI?style=social" alt="GitHub Watchers" />
+</p>
+
+<p>
+  <a href="https://refrismart-ai.vercel.app">🌐 Live Demo</a> •
+  <a href="https://github.com/Athar786-Ali/RefriSmart-AI/issues">🐛 Report Bug</a> •
+  <a href="https://github.com/Athar786-Ali/RefriSmart-AI/issues">✨ Request Feature</a>
+</p>
+
+**If you found this project useful, consider giving it a ⭐ on GitHub!**
 
 </div>
