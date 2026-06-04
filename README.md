@@ -55,6 +55,12 @@
 - [Contributing](#-contributing)
 - [License](#-license)
 - [Acknowledgements](#-acknowledgements)
+- [Developer Profile](#-developer-profile)
+- [Environment Variables Reference](#-environment-variables-reference)
+- [Troubleshooting](#-troubleshooting)
+- [Testing](#-testing)
+- [Key Design Patterns](#-key-design-patterns)
+- [FAQ](#-faq)
 
 ---
 
@@ -778,6 +784,243 @@ copies or substantial portions of the Software.
 | **[Prisma](https://www.prisma.io/)** | Type-safe ORM that makes database queries a joy to write |
 | **[Next.js](https://nextjs.org/)** | The React framework that powers our SSR/SSG frontend |
 | **[Tailwind CSS](https://tailwindcss.com/)** | Utility-first CSS framework for rapid, responsive UI development |
+
+---
+
+---
+
+## 👨‍💻 Developer Profile
+
+<div align="center">
+
+| | |
+|:---:|:---:|
+| **Name** | Athar Ali |
+| **Role** | Full-Stack Developer (Solo) |
+| **Project Type** | Production SaaS — Real Business Client |
+| **GitHub** | [@Athar786-Ali](https://github.com/Athar786-Ali) |
+| **Built In** | 2025–2026 |
+
+</div>
+
+This entire platform — from **PostgreSQL schema design**, **RESTful API architecture**, **AI integration**, **payment gateway**, **admin dashboard**, **frontend UI/UX**, to **Vercel deployment** and **local SEO** — was designed, developed, and deployed **solo**. It serves as a real-world production system for a local appliance repair business in Bhagalpur, Bihar.
+
+**Key solo-developer accomplishments:**
+- Architected a full-stack monorepo with separate frontend (Next.js) and backend (Express) — both deployed on Vercel
+- Integrated Google Gemini Vision AI with a custom 4-tier fallback strategy (3 AI models + rule-based engine)
+- Implemented end-to-end payment flow with Razorpay including webhook-safe order verification
+- Built a comprehensive admin operations dashboard with live stats and role-based access control
+- Engineered local SEO strategy with JSON-LD structured data, XML sitemap, and geo-targeting
+
+---
+
+## 🔑 Environment Variables Reference
+
+A complete reference for all required environment variables across both services.
+
+### Backend (`backend/.env`)
+
+| Variable | Required | Example Value | Description |
+|---|:---:|---|---|
+| `DATABASE_URL` | ✅ | `postgresql://user:pass@host:5432/db` | PostgreSQL connection string (supports Neon/Supabase pooler URLs) |
+| `JWT_SECRET` | ✅ | `a-very-long-random-string` | Secret key for signing and verifying JWTs — use at least 32 chars |
+| `CLOUDINARY_CLOUD_NAME` | ✅ | `your_cloud_name` | Your Cloudinary account cloud name |
+| `CLOUDINARY_API_KEY` | ✅ | `123456789012345` | Cloudinary API key from dashboard |
+| `CLOUDINARY_API_SECRET` | ✅ | `your_api_secret` | Cloudinary API secret (keep private) |
+| `GEMINI_API_KEY` | ✅ | `AIzaSy...` | Google Gemini API key from [AI Studio](https://aistudio.google.com/) |
+| `RAZORPAY_KEY_ID` | ✅ | `rzp_live_...` | Razorpay Key ID (use `rzp_test_...` for dev) |
+| `RAZORPAY_KEY_SECRET` | ✅ | `your_key_secret` | Razorpay Key Secret (keep private) |
+| `SMTP_HOST` | ✅ | `smtp.gmail.com` | SMTP server hostname for OTP emails |
+| `SMTP_PORT` | ✅ | `587` | SMTP port (587 for TLS, 465 for SSL) |
+| `SMTP_USER` | ✅ | `your@gmail.com` | Gmail address used to send OTP emails |
+| `SMTP_PASS` | ✅ | `xxxx xxxx xxxx xxxx` | Gmail App Password (not your account password) |
+| `NODE_ENV` | ⚠️ Optional | `production` | Set to `production` in deployment; affects CORS and cookie security |
+| `PORT` | ⚠️ Optional | `5001` | API server port (defaults to 5001 locally) |
+
+### Frontend (`frontend/.env.local`)
+
+| Variable | Required | Example Value | Description |
+|---|:---:|---|---|
+| `NEXT_PUBLIC_API_URL` | ✅ | `http://localhost:5001/api` | Backend API base URL (use full production URL in deployment) |
+| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | ✅ | `rzp_live_...` | Public Razorpay Key ID (safe to expose — used to initialise Razorpay checkout) |
+
+> ⚠️ **Never commit `.env` or `.env.local` files to version control.** Both are listed in `.gitignore`. Use Vercel's environment variable settings for production secrets.
+
+---
+
+## 🐛 Troubleshooting
+
+Common issues and their solutions when setting up RefriSmart-AI locally:
+
+### Database / Prisma
+
+| Issue | Likely Cause | Fix |
+|---|---|---|
+| `Error: Can't reach database server` | Wrong `DATABASE_URL` or DB not running | Verify connection string; ensure PostgreSQL is running or Neon DB is accessible |
+| `PrismaClientInitializationError` | Prisma client not generated | Run `npx prisma generate` inside `backend/` |
+| `Table doesn't exist` | Schema not pushed/migrated | Run `npx prisma db push` or `npx prisma migrate dev` |
+| `Connection pool timeout` | Too many concurrent connections (serverless) | Use Neon's pooler URL (`?pgbouncer=true&connection_limit=1`) |
+
+### Authentication
+
+| Issue | Likely Cause | Fix |
+|---|---|---|
+| `401 Unauthorized` on protected routes | JWT cookie missing or expired | Re-login; check that `NODE_ENV` matches cookie `secure` flag setting |
+| OTP email not received | SMTP misconfiguration | Verify Gmail App Password; ensure 2FA is enabled on the Gmail account |
+| OTP always shows as invalid | Clock skew / expired OTP | OTPs expire quickly — request a new one; check server time sync |
+
+### AI Diagnostics
+
+| Issue | Likely Cause | Fix |
+|---|---|---|
+| `Gemini API error 429` | Rate limit exceeded on free tier | Wait a moment; the fallback engine will handle it automatically |
+| Upload fails silently | File too large or wrong type | Ensure images are under Multer's size limit; accepted: JPEG, PNG, MP4, WebM |
+| `CLOUDINARY_API_SECRET not set` | Missing env variable | Check `backend/.env` for all three Cloudinary variables |
+
+### Payments
+
+| Issue | Likely Cause | Fix |
+|---|---|---|
+| Razorpay modal doesn't open | Wrong `NEXT_PUBLIC_RAZORPAY_KEY_ID` | Use the correct test/live key matching your account mode |
+| Payment succeeds but booking not created | Verification failure | Check that `RAZORPAY_KEY_SECRET` in backend matches the Razorpay dashboard |
+
+### Running Locally
+
+| Issue | Likely Cause | Fix |
+|---|---|---|
+| Port 5001 already in use | Previous backend instance still running | The `npm run dev` script auto-kills port 5001 — or manually run `lsof -ti:5001 \| xargs kill -9` |
+| CORS error in browser | Frontend URL not in CORS allowlist | Set `NODE_ENV=development` in `backend/.env` for permissive local CORS |
+| `Module not found: ts-node` | Missing dev dependencies | Run `npm install` inside `backend/` |
+
+---
+
+## 🧪 Testing
+
+RefriSmart-AI is a production application. Below are the recommended approaches for testing each layer:
+
+### Manual API Testing
+
+Use a REST client like [Insomnia](https://insomnia.rest/) or [Thunder Client](https://www.thunderclient.com/) (VS Code extension).
+
+**Base URL (local):** `http://localhost:5001/api`
+
+#### Example: Register a new user
+```bash
+curl -X POST http://localhost:5001/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test User", "email": "test@example.com", "password": "Test@1234"}'
+```
+
+#### Example: Trigger AI diagnosis (with media file)
+```bash
+curl -X POST http://localhost:5001/api/ai/diagnose \
+  -H "Cookie: token=<your_jwt>" \
+  -F "media=@/path/to/fridge_photo.jpg" \
+  -F "description=Fridge not cooling, making noise"
+```
+
+### Database Inspection
+
+```bash
+cd backend
+npx prisma studio   # Opens a browser-based DB GUI at http://localhost:5555
+```
+
+This gives you a live visual editor for all database tables — useful for verifying that bookings, diagnoses, and users are persisted correctly.
+
+### Smoke Test Checklist
+
+After setup, walk through these flows to verify everything works end-to-end:
+
+- [ ] Register a new user → receive OTP email → verify OTP → see dashboard
+- [ ] Upload an appliance photo → receive AI diagnostic report
+- [ ] Book a service → complete Razorpay payment → verify booking appears in admin panel
+- [ ] Browse products → place an order → verify order in user's order history
+- [ ] Submit a sell request → verify it appears in admin panel
+- [ ] Login as admin (`role: ADMIN`) → check all dashboard tabs load correctly
+
+### Lint & Type Checking
+
+```bash
+# Frontend
+cd frontend && npm run lint
+
+# Backend — TypeScript type check
+cd backend && npx tsc --noEmit
+```
+
+---
+
+## 🧩 Key Design Patterns
+
+Key architectural and coding patterns used throughout the codebase:
+
+### Backend Patterns
+
+| Pattern | Where Used | Benefit |
+|---|---|---|
+| **Controller → Service separation** | All API routes | Business logic decoupled from HTTP layer; easier to test and reuse |
+| **Middleware chain** | Auth, role guard, error handler | Cross-cutting concerns applied uniformly across all routes |
+| **Centralized error middleware** | `src/index.ts` | All unhandled errors caught in one place; no error leaks to clients |
+| **Repository pattern (via Prisma)** | All DB queries | Type-safe queries; easy to swap DB or add caching later |
+| **Graceful process handling** | `src/index.ts` | `uncaughtException` + `unhandledRejection` prevent silent server crashes |
+| **Cascade fallback** | `aiController.ts` | AI model chain with rule-based safety net ensures 100% diagnostic availability |
+
+### Frontend Patterns
+
+| Pattern | Where Used | Benefit |
+|---|---|---|
+| **App Router layouts** | `app/layout.tsx` | Shared layout, metadata, JSON-LD injected once for the whole app |
+| **Server Components (default)** | All page components | Reduced client-side JS bundle; better SEO and TTFB |
+| **Client Components (`"use client"`)** | Interactive forms, payment flow | Progressive enhancement — only interactive parts shipped to browser |
+| **Cookie-based auth (httpOnly)** | Auth middleware | XSS-immune token storage; auto-included in every API request |
+| **Component co-location** | `admin/_*.tsx` files | Dashboard sub-components live next to their parent page |
+
+### Data Flow
+
+```
+[User Action] → [Next.js Route Handler / Client fetch]
+     │
+     ▼
+[Express Controller] → [Service Layer] → [Prisma ORM] → [PostgreSQL]
+     │
+     ▼ (AI routes only)
+[Multer] → [Cloudinary] → [Gemini Vision API] → [Structured Result]
+     │
+     ▼
+[Response JSON] → [Next.js Component re-render]
+```
+
+---
+
+## ❓ FAQ
+
+**Q: Is this a real production application or just a demo?**
+> A: It is a real, production-deployed application actively used by **Golden Refrigeration**, a physical appliance repair business in Bhagalpur, Bihar, India. The live URL is [refrismart-ai.vercel.app](https://refrismart-ai.vercel.app).
+
+**Q: Which AI model does the diagnosis use?**
+> A: It uses **Google Gemini Vision** (multimodal) via the `@google/genai` SDK. Three Gemini models are tried in sequence (`gemini-flash-lite-latest` → `gemini-flash-latest` → `gemini-pro-latest`), and if all fail, a custom rule-based engine with 15+ diagnostic rules handles the request as a fallback.
+
+**Q: Can I use this for a different repair business?**
+> A: Yes! The codebase is designed to be adaptable. You would need to update the business details in `frontend/src/app/layout.tsx` (JSON-LD, meta tags), update the service area content on the homepage, and reconfigure your own environment variables.
+
+**Q: Is Razorpay required? Can I skip payment integration?**
+> A: Razorpay is used only for the ₹349 visiting fee and product orders. If you want to disable payments, you can remove the payment step from the service booking flow — the rest of the platform (AI diagnosis, admin, auth) works independently.
+
+**Q: What happens if the Gemini API is down?**
+> A: The multi-tier fallback strategy ensures the platform **always returns a diagnostic result**. The final fallback is a rule-based engine (keyword matching on the user's description + appliance type) that works 100% offline without any external API calls.
+
+**Q: How do I create an admin account?**
+> A: Register a user normally, then use **Prisma Studio** (`npx prisma studio`) to change that user's `role` field from `USER` to `ADMIN` directly in the database. Admin role assignment from the UI is intentionally not exposed for security reasons.
+
+**Q: What is the visiting charge and how is it handled?**
+> A: When a customer books a service, a ₹349 visiting fee is collected upfront via Razorpay. The order is created on the backend using Razorpay's API, the customer completes payment in the Razorpay modal, and the backend verifies the payment signature before confirming the booking in the database.
+
+**Q: Does the platform support multiple languages in the UI?**
+> A: The **AI diagnostic responses** support automatic English/Hinglish detection and response. The main **UI is in English**. A full Hindi/English UI toggle is on the roadmap.
+
+**Q: How are media files handled? Are they stored on the server?**
+> A: No. Uploaded images and videos are streamed directly to **Cloudinary** via Multer's memory storage. Files are never written to disk on the API server. After Cloudinary returns a CDN URL, the URL (not the file) is sent to Gemini and stored in the database.
 
 ---
 
