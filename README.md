@@ -61,6 +61,13 @@
 - [Testing](#-testing)
 - [Key Design Patterns](#-key-design-patterns)
 - [FAQ](#-faq)
+- [Complete Database Schema](#%EF%B8%8F-complete-database-schema)
+- [AI Prompt Engineering](#-ai-prompt-engineering)
+- [Service Area Coverage](#%EF%B8%8F-service-area-coverage-1)
+- [Service Lifecycle](#-service-lifecycle--step-by-step)
+- [Data Privacy & Compliance](#-data-privacy--compliance)
+- [Package Scripts Reference](#-package-scripts-reference)
+- [Changelog](#-changelog)
 
 ---
 
@@ -1021,6 +1028,249 @@ Key architectural and coding patterns used throughout the codebase:
 
 **Q: How are media files handled? Are they stored on the server?**
 > A: No. Uploaded images and videos are streamed directly to **Cloudinary** via Multer's memory storage. Files are never written to disk on the API server. After Cloudinary returns a CDN URL, the URL (not the file) is sent to Gemini and stored in the database.
+
+---
+
+## 🗃️ Complete Database Schema
+
+The full Prisma schema (`backend/prisma/schema.prisma`) covers every entity in the system with proper relations and enums:
+
+### Models Overview
+
+| Model | Primary Key | Description |
+|---|---|---|
+| `User` | UUID | Customers, admins — stores email/phone, OTP fields, role, verification status |
+| `Product` | UUID | Refurbished/new appliance listings with warranty, stock, and seller linkage |
+| `ServiceBooking` | UUID | End-to-end repair booking — guest + registered users, appliance, issue, status, location, cost |
+| `ServiceAssignment` | bookingId | Links a booking to a specific technician with pincode and route notes |
+| `ServiceEvent` | UUID | Audit trail of every status change on a booking (PENDING → ASSIGNED → COMPLETED) |
+| `ServiceOtp` | UUID | OTP verification for service completion — prevents false job-done claims |
+| `DiagnosisLog` | UUID | AI diagnostic results — appliance, issue, diagnosis text, estimated cost, media URL |
+| `Technician` | UUID | Technician records — pincode-based dispatch, active status, assignments |
+| `SellRequest` | UUID | Customer appliance sell/pickup request with condition, expected price, pincode |
+| `SellOffer` | UUID | Admin counter-offer on a sell request with pickup slot and offer price |
+| `ProductOrder` | UUID | Product purchase orders — delivery address, payment status, order status lifecycle |
+| `Gallery` | UUID | Admin-managed work gallery images/videos displayed on the public site |
+| `DocumentLog` | UUID | Audit log for invoice PDFs, QR codes, and other generated documents per booking |
+| `Notification` | UUID | In-app notifications linked to user email and booking events |
+
+### Status Enums
+
+```prisma
+enum Status {            // ServiceBooking lifecycle
+  PENDING → ASSIGNED → OUT_FOR_REPAIR → REPAIRING
+  → FIXED → ESTIMATE_APPROVED → PAYMENT_PENDING → COMPLETED
+  → CANCELLED
+}
+
+enum OrderStatus {       // ProductOrder lifecycle
+  PLACED → DISPATCHED → OUT_FOR_DELIVERY → DELIVERED → CANCELLED
+}
+
+enum SellRequestStatus { // SellRequest lifecycle
+  REQUESTED → OFFER_SENT → ACCEPTED / REJECTED → REFURBISHED_LISTED
+}
+
+enum Role { ADMIN | CUSTOMER | TECHNICIAN }
+enum PaymentStatus { PENDING | PAID }
+enum ProductType { NEW | REFURBISHED }
+enum WarrantyType { BRAND | SHOP }
+```
+
+> 💡 **Key design:** `ServiceEvent` provides a full immutable audit trail — every status change is appended as a new row, never overwriting history. This allows replaying the full lifecycle of any booking.
+
+---
+
+## 🧠 AI Prompt Engineering
+
+The diagnostic engine's quality hinges on a carefully crafted system prompt sent to Google Gemini Vision. Here's how it works:
+
+### Prompt Structure
+
+```
+[SYSTEM ROLE]
+You are an expert appliance repair technician with 20+ years of experience
+servicing refrigerators, ACs, and washing machines in India.
+
+[CONTEXT INJECTION]
+- Appliance type: {appliance}         ← from user's form selection
+- User description: {issue}           ← free-text problem description
+- Language detected: {lang}           ← auto-detected (English / Hinglish)
+
+[MEDIA ATTACHMENT]
+- Uploaded image/video via Gemini File API (not base64 — uses CDN URL)
+
+[OUTPUT FORMAT INSTRUCTIONS]
+Return a structured JSON with:
+  • faultIdentified: string
+  • severity: "minor" | "moderate" | "critical"
+  • safetyWarnings: string[]
+  • repairSteps: string[]
+  • estimatedCostRange: { min: number, max: number, currency: "INR" }
+  • fallbackUsed: false
+```
+
+### Language Auto-Detection Logic
+
+```typescript
+function detectLanguage(text: string): "en" | "hi" {
+  // Check for Unicode Devanagari range (U+0900–U+097F)
+  if (/[\u0900-\u097F]/.test(text)) return "hi";
+
+  // Check for common Hindi/Hinglish keywords in Roman script
+  const hindiKeywords = ["nahi", "chal", "band", "thanda", "garam", "noise", "awaaz", "kaam"];
+  if (hindiKeywords.some(k => text.toLowerCase().includes(k))) return "hi";
+
+  return "en";
+}
+```
+
+When Hindi/Hinglish is detected, the prompt is augmented with:
+> *"Respond in friendly Hinglish (Roman script Hindi mixed with English) — easy to understand for a non-technical Indian customer."*
+
+### Rule-Based Fallback (15+ Diagnostic Rules)
+
+If all 3 Gemini models fail, the rule engine matches keywords:
+
+| Keyword Triggers | Fault Identified | Severity |
+|---|---|---|
+| `not cooling`, `warm`, `thanda nahi` | Refrigerant leak / compressor fault | Moderate |
+| `noise`, `sound`, `awaaz` | Fan blade or compressor vibration | Minor–Moderate |
+| `water leak`, `pani`, `dripping` | Clogged defrost drain or door seal | Minor |
+| `not starting`, `dead`, `band` | Power board or compressor failure | Critical |
+| `ice`, `frost`, `defrost` | Defrost timer or heater failure | Moderate |
+| `smell`, `burning`, `jal raha` | Electrical fault — immediate safety risk | Critical |
+
+---
+
+## 🗺️ Service Area Coverage
+
+RefriSmart-AI / Golden Refrigeration serves the following areas in and around **Bhagalpur, Bihar**:
+
+<div align="center">
+
+| Zone | Areas Covered |
+|:---|:---|
+| **Bhagalpur City** | Adampur, Tatarpur, Khalifabagh, Mirjanhat, Barari, Champanagar |
+| **Sabour Block** | Sabour, Jagdishpur, Piro, Naupur |
+| **Naugachia** | Naugachia Town, Gopalpura |
+| **Kahalgaon** | Kahalgaon Town, Pirpainti |
+| **Sultanganj** | Sultanganj Town, Nathnagar |
+| **Banka** | Banka Town, Amarpur |
+
+</div>
+
+> 📍 **Pincode-Based Dispatch**: Technicians are assigned based on their registered pincode — the system matches the customer's service address pincode to the nearest available technician automatically.
+
+---
+
+## 🔄 Service Lifecycle — Step by Step
+
+A complete walkthrough of what happens from booking to job completion:
+
+```
+1. CUSTOMER books a service (selects appliance + describes issue)
+        │
+        ▼
+2. ₹349 VISITING FEE collected via Razorpay (order created → verified)
+        │
+        ▼
+3. ServiceBooking created in DB with status: PENDING
+        │
+        ▼
+4. ADMIN reviews booking in dashboard → assigns a Technician
+   (ServiceAssignment record created; status: ASSIGNED)
+        │
+        ▼
+5. Technician travels to customer location
+   (status updated: OUT_FOR_REPAIR → REPAIRING)
+        │
+        ▼
+6. Technician diagnoses fault → submits cost estimate
+   (status: FIXED → ESTIMATE_APPROVED by customer)
+        │
+        ▼
+7. Customer pays remaining amount (cash/UPI QR)
+   (status: PAYMENT_PENDING → COMPLETED)
+        │
+        ▼
+8. Invoice PDF + ServiceOTP verified → Job closed
+   ServiceEvent rows capture every transition as an audit trail
+```
+
+---
+
+## 🔐 Data Privacy & Compliance
+
+| Practice | Implementation |
+|---|---|
+| **No plaintext passwords** | All passwords salted + hashed with bcryptjs before storage |
+| **No files on server disk** | Uploads go directly to Cloudinary via memory buffers — never written to disk |
+| **HTTP-only cookies** | JWTs stored in `httpOnly` cookies — inaccessible to JavaScript, immune to XSS |
+| **OTP expiry** | Email OTPs have a configurable TTL (Time-To-Live) — expired OTPs are rejected |
+| **Env secrets** | All API keys, DB credentials, and payment secrets are in `.env` files excluded from git |
+| **CORS allowlist** | In production, only the whitelisted frontend domain can call the API |
+| **No analytics tracking** | No third-party tracking scripts (Google Analytics, Meta Pixel) that collect user behavior |
+| **Guest support** | Users can book services and get AI diagnoses as guests (no forced account creation) |
+
+> ⚠️ **GDPR Note:** This platform currently serves Indian users and complies with Indian data protection best practices. If deployed globally, additional GDPR measures (data export, deletion endpoints) should be implemented.
+
+---
+
+## 📦 Package Scripts Reference
+
+### Backend (`backend/package.json`)
+
+| Script | Command | Description |
+|---|---|---|
+| `dev` | `ts-node src/index.ts` | Start development server with hot reload |
+| `build` | `tsc` | Compile TypeScript → `dist/` for production |
+| `start` | `node dist/index.js` | Run compiled production server |
+| `prisma:generate` | `npx prisma generate` | Regenerate Prisma client after schema changes |
+| `prisma:push` | `npx prisma db push` | Sync schema to DB (dev, no migration history) |
+| `prisma:migrate` | `npx prisma migrate dev` | Create and run a tracked migration |
+| `prisma:studio` | `npx prisma studio` | Open browser-based DB GUI |
+
+### Frontend (`frontend/package.json`)
+
+| Script | Command | Description |
+|---|---|---|
+| `dev` | `next dev` | Start Next.js development server (port 3000) |
+| `build` | `next build` | Create optimized production build |
+| `start` | `next start` | Serve production build locally |
+| `lint` | `next lint` | Run ESLint on the entire frontend codebase |
+
+---
+
+## 📝 Changelog
+
+All notable changes to RefriSmart-AI are documented here.
+
+### [v2.0.0] — 2026
+**Major production release**
+- ✅ Migrated to **Next.js 16** App Router with full SSR/SSG support
+- ✅ **Multi-model AI fallback** system (3 Gemini models + rule engine)
+- ✅ **Technician portal** with job view and OTP-based job completion verification
+- ✅ **ServiceEvent audit trail** — immutable history of every status change per booking
+- ✅ **ServiceOTP system** — technician cannot mark a job complete without customer OTP
+- ✅ **SellOffer system** — admin can counter-offer on sell requests with pickup slot
+- ✅ **Gallery management** — admin-managed work gallery displayed on the public site
+- ✅ **Pincode-based technician dispatch** — auto-matches nearest technician to booking
+- ✅ **Guest booking** — customers can book without creating an account
+- ✅ **Bilingual AI responses** — auto-detects English vs Hinglish
+- ✅ **Refurbished product marketplace** — sell requests auto-list as products after acceptance
+- ✅ Upgraded to **Express v5**, **Prisma v7**, **@google/genai v1.44**
+
+### [v1.0.0] — 2025
+**Initial production launch**
+- ✅ Core AI diagnostic engine (Gemini Vision)
+- ✅ Razorpay payment integration (₹349 visiting fee)
+- ✅ JWT + email OTP authentication
+- ✅ Admin dashboard (bookings, orders, diagnoses)
+- ✅ Product catalog and ordering
+- ✅ Appliance sell/pickup request flow
+- ✅ Local SEO (JSON-LD, sitemap, geo-targeting)
+- ✅ Vercel serverless deployment
 
 ---
 
