@@ -42,6 +42,10 @@
 - [API Reference](#-api-reference)
 - [AI Diagnostic Flow](#-ai-diagnostic-flow)
 - [Database Schema](#-database-schema)
+- [Invoice & Document Generation](#-invoice--document-generation)
+- [Operational Analytics](#-operational-analytics)
+- [Guest Booking Support](#-guest-booking-support)
+- [Service Rating System](#-service-rating-system)
 - [SEO & Local Search Strategy](#-seo--local-search-strategy)
 - [Deployment](#-deployment)
 - [Contact](#-contact)
@@ -121,6 +125,18 @@ Built mobile-first with **Tailwind CSS v4**, ensuring a polished experience acro
 
 ### 🗺️ Local SEO Optimization
 Structured data (JSON-LD), Open Graph meta tags, auto-generated XML sitemap, and robots.txt — engineered to rank for local Google searches in Bhagalpur, Bihar.
+
+### 📄 Invoice & Document Generation
+Auto-generated **PDF invoices** for both service bookings and product orders. Service invoices include cost breakdown, technician info, and a unique **QR code** for booking verification. All documents are stored in the `DocumentLog` model and retrievable at any time.
+
+### 🌟 Guest Booking
+First-time customers can book a service **without creating an account**. Guest bookings flow through the same admin dashboard and technician dispatch system as registered-user bookings, removing friction from the first customer interaction.
+
+### ⭐ Service Rating System
+After job completion, customers can submit a **1–5 star rating** with an optional review. Ratings are visible in the admin analytics dashboard and per-technician performance metrics.
+
+### 📊 Operational Analytics
+Admin-only analytics endpoint delivers revenue breakdowns, technician performance metrics, booking conversion funnels, and pincode-level service area heatmap data.
 
 ---
 
@@ -368,47 +384,131 @@ cd frontend && npm run dev
 
 ## 📡 API Reference
 
-All routes are prefixed with `/api`. Protected routes require a valid JWT cookie.
+All routes are prefixed with `/api`. Protected routes require a valid JWT cookie (`userAuth`) or admin role (`adminAuth`).
 
-### Authentication
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/auth/register` | ❌ | Register new user (triggers OTP email) |
-| `POST` | `/auth/login` | ❌ | Login — sets JWT cookie |
-| `POST` | `/auth/verify-otp` | ❌ | Verify email OTP |
-| `POST` | `/auth/logout` | ✅ | Clear auth cookie |
-
-### AI Diagnostics
+### 🔐 Authentication
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/ai/diagnose` | ✅ | Upload media → Gemini analysis → stored diagnosis |
-| `GET` | `/ai/history` | ✅ | Fetch current user's diagnosis history |
+| `POST` | `/auth/register` | ❌ | Register new user — triggers OTP email verification |
+| `POST` | `/auth/login` | ❌ | Email + password login — sets JWT cookie |
+| `POST` | `/auth/logout` | ❌ | Clears auth cookie |
+| `GET` | `/auth/me` | ✅ | Get currently logged-in user's profile |
+| `POST` | `/auth/send-verify-otp` | ✅ | Send email OTP to verify user's email address |
+| `POST` | `/auth/verify-otp` | ✅ | Submit OTP to complete email verification |
+| `POST` | `/auth/send-whatsapp-otp` | ✅ | Send OTP via WhatsApp for phone verification |
+| `POST` | `/auth/verify-phone-otp` | ✅ | Submit OTP to verify user's phone number |
+| `POST` | `/auth/send-reset-otp` | ❌ | Send password reset OTP to registered email |
+| `POST` | `/auth/reset-password` | ❌ | Reset password using OTP received by email |
+| `POST` | `/auth/request-login-otp` | ❌ | Passwordless login — request OTP via phone |
+| `POST` | `/auth/verify-login` | ❌ | Passwordless login — verify phone OTP, get JWT |
+| `POST` | `/auth/request-email-login-otp` | ❌ | Passwordless login — request OTP via email |
+| `POST` | `/auth/verify-email-login` | ❌ | Passwordless login — verify email OTP, get JWT |
 
-### Services & Bookings
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/service/book` | ✅ | Book a repair service (triggers Razorpay order) |
-| `GET` | `/service/my` | ✅ | Get user's service history |
-
-### Products
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/products` | ❌ | List all available products |
-| `POST` | `/products/order` | ✅ | Place a product order |
-
-### Admin (Role-Gated)
+### 🤖 AI Diagnostics
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/admin/stats` | 🔒 Admin | Dashboard statistics |
-| `GET/PATCH` | `/admin/services` | 🔒 Admin | Manage service requests |
-| `GET/PATCH` | `/admin/orders` | 🔒 Admin | Manage product orders |
-| `GET` | `/admin/diagnoses` | 🔒 Admin | All AI diagnoses (all users) |
-| `GET/DELETE` | `/admin/users` | 🔒 Admin | User management |
+| `POST` | `/ai/diagnose` | ✅ | Upload image/video → Gemini Vision analysis → stored `DiagnosisLog` |
+| `GET` | `/ai/history` | ✅ | Fetch current user's full diagnosis history |
+
+### 🛠️ Service Bookings
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/booking/slots` | ❌ | Get available booking time slots |
+| `POST` | `/booking/create` | ✅ | Create a new service booking (guest or logged-in) |
+| `POST` | `/service/book` | ❌ | Legacy guest booking endpoint |
+| `GET` | `/service/my-bookings/:userId` | ✅ | Get bookings for a specific user (by path param) |
+| `GET` | `/service/my-bookings` | ✅ | Get bookings for logged-in user (by query) |
+| `GET` | `/service/guest-booking` | ❌ | Look up a guest booking by email + reference |
+| `GET` | `/booking/timeline/:bookingId` | ✅ | Full audit trail of status events for a booking |
+| `GET` | `/booking/:id/reminders` | 🔒 Admin | Booking reminders (pre-visit notifications) |
+| `PATCH` | `/booking/:id/status` | 🔒 Admin | Update booking status (PENDING→ASSIGNED→COMPLETED etc.) |
+| `PATCH` | `/booking/:id/reschedule` | 🔒 Admin | Reschedule a booking to a new time slot |
+| `PATCH` | `/booking/:id/cancel` | 🔒 Admin | Cancel a booking |
+| `POST` | `/bookings/:bookingId/cancel` | ✅ | Customer-initiated booking cancellation |
+| `POST` | `/booking/:id/send-otp` | 🔒 Admin | Send job-completion OTP to customer |
+| `POST` | `/booking/:id/verify-otp` | 🔒 Admin | Verify job-completion OTP (marks job done) |
+| `POST` | `/booking/:id/razorpay` | ✅ | Create Razorpay order for visiting fee payment |
+| `POST` | `/booking/:id/razorpay/verify` | ✅ | Verify Razorpay payment and confirm booking |
+| `POST` | `/bookings/:bookingId/confirm-payment` | ✅ | Confirm manual (cash/UPI) payment for a booking |
+| `POST` | `/service/:id/rating` | ❌ | Submit star rating + review after service completion |
+
+### 📦 Products & Orders
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/products` | ❌ | List all products (new + refurbished) |
+| `POST` | `/orders` | ✅ | Place a new product order |
+| `GET` | `/orders/my` | ✅ | Get logged-in user's order history |
+| `GET` | `/orders/my/invoice/:orderId` | ✅ | Download customer-facing invoice PDF for an order |
+| `POST` | `/orders/:orderId/razorpay` | ✅ | Create Razorpay order for product payment |
+| `POST` | `/orders/:orderId/razorpay/verify` | ✅ | Verify Razorpay payment for product order |
+
+### 🔧 Admin — Products & Orders
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/admin/orders` | 🔒 Admin | View all product orders with status filters |
+| `PATCH` | `/admin/orders/:id` | 🔒 Admin | Update order status (PLACED→DISPATCHED→DELIVERED) |
+| `PATCH` | `/admin/orders/:id/reassign-customer` | 🔒 Admin | Reassign an order to a different customer account |
+| `PATCH` | `/admin/orders/:id/confirm-payment` | 🔒 Admin | Confirm manual payment for a product order |
+| `POST` | `/admin/orders/:id/generate-invoice` | 🔒 Admin | Generate and store admin invoice PDF for an order |
+| `GET` | `/docs/order-invoice/:orderId` | 🔒 Admin | Download admin-side order invoice PDF |
+| `POST` | `/admin/upload-image` | 🔒 Admin | Upload a product image to Cloudinary |
+| `POST` | `/admin/suggest-price` | 🔒 Admin | AI-powered price suggestion for a product |
+| `POST` | `/admin/add-product` | 🔒 Admin | Add a new product to the catalog |
+| `POST` | `/admin/seed-demo-products` | 🔒 Admin | Seed demo product data |
+| `DELETE` | `/admin/delete-product/:id` | 🔒 Admin | Remove a product from the catalog |
+
+### 🤝 Sell Requests
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/sell/upload-image` | ✅ | Upload image for appliance sell request |
+| `POST` | `/sell/request` | ✅ | Submit a new appliance sell/pickup request |
+| `GET` | `/sell/requests` | ✅ | List sell requests (admin sees all, user sees own) |
+| `POST` | `/sell/requests/:id/offer` | 🔒 Admin | Send a purchase offer to a sell request |
+| `POST` | `/sell/offers/:id/respond` | ✅ | Accept or reject an admin offer |
+| `POST` | `/sell/requests/:id/move-to-refurbished` | 🔒 Admin | Mark accepted appliance as refurbished product listing |
+
+### 🖼️ Gallery
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/admin/gallery` | 🔒 Admin | Upload a new gallery image/video (up to 100 MB) |
+| `GET` | `/gallery` | ❌ | Fetch all public gallery items |
+| `DELETE` | `/admin/gallery/:id` | 🔒 Admin | Delete a gallery item |
+
+### 🔧 Technician Portal
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/technician/jobs` | 🔒 Admin | List all jobs assigned to technicians |
+| `PATCH` | `/technician/jobs/:bookingId/status` | 🔒 Admin | Update technician job status |
+| `GET` | `/technician/notifications` | ✅ | Get in-app notifications for a technician |
+| `PUT` | `/technician/notifications/:id/read` | ✅ | Mark a notification as read |
+
+### 📊 Admin Analytics & Ops
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/admin/stats` | 🔒 Admin | Full dashboard statistics (bookings, revenue, users) |
+| `GET` | `/admin/stats-basic` | 🔒 Admin | Lightweight stats for quick panel overview |
+| `GET` | `/admin/service-overview` | 🔒 Admin | Aggregate service request breakdown by status |
+| `GET` | `/admin/all-diagnoses` | 🔒 Admin | All AI diagnoses across all users |
+| `GET` | `/ops/analytics` | 🔒 Admin | Operational analytics — revenue, technician performance |
+| `PUT` | `/admin/assign-technician/:id` | 🔒 Admin | Assign a technician to a service booking |
+| `PATCH` | `/admin/service/:id` | 🔒 Admin | Update service request details |
+| `GET` | `/history/:userId` | ✅ | Get service history for a specific user |
+
+### 📄 Documents & Invoices
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/docs/:docType` | 🔒 Admin | Generate a document (invoice, QR code) by type |
+| `GET` | `/docs/invoice/:bookingId` | ✅ | Download/view service invoice PDF for a booking |
 
 ---
 
@@ -841,7 +941,9 @@ A complete reference for all required environment variables across both services
 | `SMTP_PORT` | ✅ | `587` | SMTP port (587 for TLS, 465 for SSL) |
 | `SMTP_USER` | ✅ | `your@gmail.com` | Gmail address used to send OTP emails |
 | `SMTP_PASS` | ✅ | `xxxx xxxx xxxx xxxx` | Gmail App Password (not your account password) |
-| `NODE_ENV` | ⚠️ Optional | `production` | Set to `production` in deployment; affects CORS and cookie security |
+| `ALLOWED_ORIGINS` | ⚠️ Optional | `https://refrismart-ai.vercel.app` | Comma-separated list of allowed frontend origins in production CORS |
+| `HOST` | ⚠️ Optional | `0.0.0.0` | Server bind address (defaults to `0.0.0.0`) |
+| `NODE_ENV` | ⚠️ Optional | `production` | Set to `production` in deployment; enables strict CORS and secure cookies |
 | `PORT` | ⚠️ Optional | `5001` | API server port (defaults to 5001 locally) |
 
 ### Frontend (`frontend/.env.local`)
@@ -1140,6 +1242,85 @@ If all 3 Gemini models fail, the rule engine matches keywords:
 | `not starting`, `dead`, `band` | Power board or compressor failure | Critical |
 | `ice`, `frost`, `defrost` | Defrost timer or heater failure | Moderate |
 | `smell`, `burning`, `jal raha` | Electrical fault — immediate safety risk | Critical |
+
+---
+
+## 📄 Invoice & Document Generation
+
+RefriSmart-AI includes an automated document generation engine for professional invoices and QR codes:
+
+### Service Invoice
+Generated automatically after a booking reaches `COMPLETED` status. The invoice PDF includes:
+- Customer details (name, address, phone)
+- Appliance type, fault identified, repair steps performed
+- Cost breakdown (visiting fee + labour + parts)
+- Technician name and service date
+- Unique booking reference and QR code for verification
+
+### Product Order Invoice
+Generated for product purchases. Available to both customers (via `/orders/my/invoice/:orderId`) and admins (via `/admin/orders/:id/generate-invoice`).
+
+### Document Types (`/docs/:docType`)
+
+| Document Type | Description |
+|---|---|
+| `invoice` | Service booking invoice PDF |
+| `qr` | QR code image linking to booking status page |
+
+All documents are persisted in the `DocumentLog` database model and linked to the relevant booking for future retrieval.
+
+---
+
+## 📊 Operational Analytics
+
+The `/ops/analytics` endpoint (admin-only) provides advanced operational metrics:
+
+| Metric | Description |
+|---|---|
+| **Revenue by period** | Daily / weekly / monthly revenue breakdown |
+| **Technician performance** | Jobs completed, average turnaround time per technician |
+| **Booking funnel** | Conversion from created → paid → completed |
+| **Top appliance categories** | Most commonly repaired appliance types |
+| **Service area heatmap data** | Booking counts by pincode for coverage analysis |
+
+Access via `GET /api/ops/analytics` with admin credentials.
+
+---
+
+## 🌟 Guest Booking Support
+
+RefriSmart-AI supports **fully unauthenticated service bookings**, removing the account-creation barrier for first-time customers:
+
+```
+Guest visits → fills service form (no login required)
+         │
+         ▼
+Booking created with guest email + phone stored directly
+         │
+         ▼
+Razorpay visiting fee collected (₹349)
+         │
+         ▼
+Booking confirmation sent to guest email
+         │
+         ▼
+Guest can track booking via GET /service/guest-booking
+         (lookup by email + booking reference)
+```
+
+**Key design:** Guest bookings use the same `ServiceBooking` model as authenticated bookings — the `userId` field is nullable. This ensures the full admin workflow (assign technician, OTP verification, invoice generation) works identically for guest and registered users.
+
+---
+
+## ⭐ Service Rating System
+
+After a service is marked `COMPLETED`, customers can submit a rating:
+
+- **Endpoint:** `POST /api/service/:id/rating`
+- **Auth:** No authentication required (uses booking reference validation)
+- **Fields:** Star rating (1–5), optional text review
+- **Storage:** Rating stored on the `ServiceBooking` record
+- **Display:** Admin dashboard shows average rating per technician in the analytics view
 
 ---
 
