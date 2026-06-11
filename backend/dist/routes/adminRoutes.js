@@ -3,7 +3,7 @@ import multer from "multer";
 import { assignTechnician, bookService, cancelServiceBooking, cancelBooking, confirmManualPayment, createBooking, createServiceRazorpayOrder, createSellRequest, deleteGalleryItem, generateDocument, generateInvoiceByBooking, getAdminServiceOverview, getAllDiagnoses, getBookingReminders, getBookingSlots, getBookingTimeline, getGallery, getHistory, getGuestBooking, getMyBookingsByPath, getMyBookingsByQuery, getOpsAnalytics, getSellRequests, getStats, getStatsBasic, getTechnicianJobs, moveSellRequestToRefurbished, rescheduleBooking, respondSellOffer, saveServiceRating, sendBookingOtp, sendSellOffer, updateAdminService, updateBookingStatus, updateTechnicianJobStatus, uploadGalleryItem, uploadSellRequestImage, verifyServiceRazorpayPayment, verifyBookingOtp, getTechnicianNotifications, markNotificationAsRead, } from "../controllers/adminController.js";
 import { adminAuth, userAuth } from "../middlewares/authMiddleware.js";
 const adminRoutes = Router();
-const galleryUpload = multer({ dest: "tmp/", limits: { fileSize: 100 * 1024 * 1024 } });
+const galleryUpload = multer({ dest: "/tmp", limits: { fileSize: 100 * 1024 * 1024 } });
 adminRoutes.get("/history/:userId", userAuth, getHistory);
 adminRoutes.get("/booking/slots", getBookingSlots);
 // Issue #6 Fix: createBooking was fully unauthenticated — any caller could pass

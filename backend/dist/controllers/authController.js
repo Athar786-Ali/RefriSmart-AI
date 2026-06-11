@@ -398,7 +398,7 @@ export const getMe = async (req, res) => {
             return res.status(404).json({ error: "User not found." });
         // Apply master admin promotion on every /me call — covers existing accounts
         // that were created before the admin hardwiring was added.
-        const MASTER_ADMIN_PHONE = "9060877595";
+        const MASTER_ADMIN_PHONE = "7070494254";
         const adminEmail = (process.env.ADMIN_EMAIL || "mdatharsbr@gmail.com").toLowerCase().trim();
         const isOwnerEmail = String(user.email || "").toLowerCase() === adminEmail ||
             String(user.email || "").toLowerCase() === "atharalisbr@gmail.com";
@@ -446,7 +446,7 @@ export const requestLoginOtp = async (req, res) => {
         const normalizedPhone = String(phone || "").replace(/\D/g, "");
         const trimmedName = name ? String(name).trim() : "";
         // Master Admin phone — always hardwired
-        const MASTER_ADMIN_PHONE = "9060877595";
+        const MASTER_ADMIN_PHONE = "7070494254";
         if (!normalizedPhone || normalizedPhone.length !== 10) {
             return res.status(400).json({ error: "Valid 10-digit phone number is required." });
         }
@@ -501,7 +501,7 @@ export const verifyLogin = async (req, res) => {
         const { phone, otp } = req.body;
         const normalizedPhone = String(phone || "").replace(/\D/g, "");
         // Master Admin phone — always hardwired as supreme ADMIN
-        const MASTER_ADMIN_PHONE = "9060877595";
+        const MASTER_ADMIN_PHONE = "7070494254";
         if (!normalizedPhone || !otp) {
             return res.status(400).json({ error: "Phone and OTP are required." });
         }
