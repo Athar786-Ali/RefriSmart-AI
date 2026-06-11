@@ -28,7 +28,7 @@ const buildSmartFallback = (
   const i = issue.toLowerCase();
   const isEn = lang === "ENGLISH";
 
-  // Map (appliance + issue keywords) → specific diagnosis
+  // Map (appliance + issue keywords) to specific diagnosis
   type DiagMap = { match: (a: string, i: string) => boolean; en: ConsultantPayload; hi: ConsultantPayload };
   const rules: DiagMap[] = [
     {
@@ -36,18 +36,18 @@ const buildSmartFallback = (
       en: {
         isRelevant: true,
         problem: "Low refrigerant gas (R-600a/R-134a) or faulty compressor start relay",
-        technicalExplanation: "Step 1: Technician checks gas pressure with manifold gauge. Step 2: If gas is low, the evaporator coil is inspected for leaks using a leak detector. Step 3: Leak is sealed with brazing/welding. Step 4: Vacuum is pulled and fresh refrigerant recharged to spec pressure. Step 5: If gas is OK, the compressor start relay (PTC) is tested and replaced if faulty (common ₹150-300 part). Step 6: Condenser coils are cleaned of dust/lint for optimal heat rejection. Repair time: 2-4 hours.",
+        technicalExplanation: "Step 1: Technician checks gas pressure with manifold gauge. Step 2: If gas is low, the evaporator coil is inspected for leaks using a leak detector. Step 3: Leak is sealed with brazing/welding. Step 4: Vacuum is pulled and fresh refrigerant recharged to spec pressure. Step 5: If gas is OK, the compressor start relay (PTC) is tested and replaced if faulty (common Rs.150-300 part). Step 6: Condenser coils are cleaned of dust/lint for optimal heat rejection. Repair time: 2-4 hours.",
         safetyAlert: "Refrigerant gas under pressure — do not attempt DIY. Compressor capacitors hold charge even when unplugged.",
         conclusion: "Book Golden Refrigeration for same-day service in Sabour/Bhagalpur. Our technicians carry gas cylinders and spare relays for on-site repair.",
-        estimatedCostRange: "₹1,200 - ₹3,500 total (Visit ₹300 + Gas refill ₹800-1,500 + Labour ₹300-500 + Parts ₹0-900 if relay/capacitor needed)",
+        estimatedCostRange: "Rs.1,200 - Rs.3,500 total (Visit Rs.300 + Gas refill Rs.800-1,500 + Labour Rs.300-500 + Parts Rs.0-900 if relay/capacitor needed)",
       },
       hi: {
         isRelevant: true,
         problem: "Refrigerant gas (R-600a/R-134a) kam ho gaya ya compressor start relay kharab hai",
-        technicalExplanation: "Step 1: Technician manifold gauge se gas pressure check karega. Step 2: Agar gas low hai to evaporator coil mein leak dhundha jaega. Step 3: Leak ko brazing se seal kiya jaega. Step 4: Vacuum pull karke fresh gas bhara jaega. Step 5: Agar gas theek hai to PTC relay (₹150-300 ka part) replace ki jaegi. Step 6: Condenser coil saaf ki jaegi. Repair time: 2-4 ghante.",
+        technicalExplanation: "Step 1: Technician manifold gauge se gas pressure check karega. Step 2: Agar gas low hai to evaporator coil mein leak dhundha jaega. Step 3: Leak ko brazing se seal kiya jaega. Step 4: Vacuum pull karke fresh gas bhara jaega. Step 5: Agar gas theek hai to PTC relay (Rs.150-300 ka part) replace ki jaegi. Step 6: Condenser coil saaf ki jaegi. Repair time: 2-4 ghante.",
         safetyAlert: "Refrigerant gas pressure mein hota hai — khud mat kholein. Compressor capacitor mein charge rehta hai plug nikalne ke baad bhi.",
         conclusion: "Golden Refrigeration ko book karein — Sabour/Bhagalpur mein same-day service available hai. Hamara technician gas cylinder aur spare parts lekar aata hai.",
-        estimatedCostRange: "₹1,200 - ₹3,500 total (Visit ₹300 + Gas refill ₹800-1,500 + Labour ₹300-500 + Parts ₹0-900)",
+        estimatedCostRange: "Rs.1,200 - Rs.3,500 total (Visit Rs.300 + Gas refill Rs.800-1,500 + Labour Rs.300-500 + Parts Rs.0-900)",
       },
     },
     {
@@ -55,18 +55,18 @@ const buildSmartFallback = (
       en: {
         isRelevant: true,
         problem: "Low refrigerant (R-22/R-32), dirty air filter, or faulty capacitor",
-        technicalExplanation: "Step 1: Technician measures indoor/outdoor temperature split — below 8°C difference indicates gas shortage. Step 2: Gas pressure checked on service port. Step 3: If low — leak test, seal, and recharge (R-22 or R-32 per unit spec). Step 4: Air filter and indoor coil inspected and cleaned (blocked filter reduces cooling 30-40%). Step 5: Capacitor checked with multimeter — weak capacitor causes compressor to start slow or not at all. Repair time: 1.5-3 hours.",
+        technicalExplanation: "Step 1: Technician measures indoor/outdoor temperature split — below 8C difference indicates gas shortage. Step 2: Gas pressure checked on service port. Step 3: If low — leak test, seal, and recharge (R-22 or R-32 per unit spec). Step 4: Air filter and indoor coil inspected and cleaned (blocked filter reduces cooling 30-40%). Step 5: Capacitor checked with multimeter — weak capacitor causes compressor to start slow or not at all. Repair time: 1.5-3 hours.",
         safetyAlert: "High-voltage capacitors inside outdoor unit — do not open. Refrigerant gas can cause frostbite if handled without protection.",
         conclusion: "Book Golden Refrigeration now for expert AC service in Bhagalpur/Sabour. We offer same-day slots for cooling emergencies.",
-        estimatedCostRange: "₹1,500 - ₹4,500 total (Visit ₹300 + Gas refill R-22: ₹900-1,800 / R-32: ₹1,200-2,500 + Filter clean ₹200 + Capacitor ₹300-600 if needed)",
+        estimatedCostRange: "Rs.1,500 - Rs.4,500 total (Visit Rs.300 + Gas refill R-22: Rs.900-1,800 / R-32: Rs.1,200-2,500 + Filter clean Rs.200 + Capacitor Rs.300-600 if needed)",
       },
       hi: {
         isRelevant: true,
         problem: "Gas (R-22/R-32) leak, dirty filter, ya capacitor kharab",
-        technicalExplanation: "Step 1: Technician inlet-outlet temperature difference check karega — 8°C se kam difference gas ki kami batata hai. Step 2: Service port pe gas pressure check hoga. Step 3: Gas low hai to leak seal karke recharge hoga. Step 4: Air filter aur indoor coil saaf hogi — blocked filter se 30-40% cooling kum hoti hai. Step 5: Capacitor multimeter se test hoga — weak capacitor compressor start nahi karta. Repair time: 1.5-3 ghante.",
+        technicalExplanation: "Step 1: Technician inlet-outlet temperature difference check karega — 8C se kam difference gas ki kami batata hai. Step 2: Service port pe gas pressure check hoga. Step 3: Gas low hai to leak seal karke recharge hoga. Step 4: Air filter aur indoor coil saaf hogi — blocked filter se 30-40% cooling kum hoti hai. Step 5: Capacitor multimeter se test hoga — weak capacitor compressor start nahi karta. Repair time: 1.5-3 ghante.",
         safetyAlert: "Outdoor unit mein high-voltage capacitor hota hai — khud mat kholein. Gas se frostbite ho sakta hai.",
         conclusion: "Golden Refrigeration ko abhi book karein — Bhagalpur/Sabour mein same-day AC service available hai.",
-        estimatedCostRange: "₹1,500 - ₹4,500 total (Visit ₹300 + Gas R-22: ₹900-1,800 / R-32: ₹1,200-2,500 + Filter ₹200 + Capacitor ₹300-600)",
+        estimatedCostRange: "Rs.1,500 - Rs.4,500 total (Visit Rs.300 + Gas R-22: Rs.900-1,800 / R-32: Rs.1,200-2,500 + Filter Rs.200 + Capacitor Rs.300-600)",
       },
     },
     {
@@ -74,18 +74,18 @@ const buildSmartFallback = (
       en: {
         isRelevant: true,
         problem: "Clogged drain pump filter or cracked drain hose",
-        technicalExplanation: "Step 1: Technician removes the drain pump filter (front-bottom panel) — this is usually clogged with lint, coins, or small clothes. Step 2: Filter is cleaned or replaced (₹200-400). Step 3: Drain hose is inspected for cracks or kinks. Step 4: Door seal/gasket is checked for tears that allow water to escape. Step 5: Machine is run on a test cycle to confirm no leak. Repair time: 45-90 minutes.",
+        technicalExplanation: "Step 1: Technician removes the drain pump filter (front-bottom panel) — this is usually clogged with lint, coins, or small clothes. Step 2: Filter is cleaned or replaced (Rs.200-400). Step 3: Drain hose is inspected for cracks or kinks. Step 4: Door seal/gasket is checked for tears that allow water to escape. Step 5: Machine is run on a test cycle to confirm no leak. Repair time: 45-90 minutes.",
         safetyAlert: "Unplug the washing machine before any inspection. Water + electricity is a shock hazard.",
         conclusion: "Golden Refrigeration provides doorstep washing machine repair in Sabour/Bhagalpur — book now for a next-day slot.",
-        estimatedCostRange: "₹500 - ₹2,000 total (Visit ₹300 + Drain pump filter ₹200-400 + Hose replacement ₹300-800 + Labour ₹200-300)",
+        estimatedCostRange: "Rs.500 - Rs.2,000 total (Visit Rs.300 + Drain pump filter Rs.200-400 + Hose replacement Rs.300-800 + Labour Rs.200-300)",
       },
       hi: {
         isRelevant: true,
         problem: "Drain pump filter band ho gaya ya drain hose mein crack hai",
-        technicalExplanation: "Step 1: Technician front-bottom panel se drain pump filter nikalega — usme lint, sikke ya kapda fasa hota hai. Step 2: Filter saaf ya replace hoga (₹200-400). Step 3: Drain hose kinks ya crack ke liye check hogi. Step 4: Door seal torn hai to pani bahar aata hai — seal replace hogi. Step 5: Test cycle chalaya jaega. Repair time: 45-90 minute.",
+        technicalExplanation: "Step 1: Technician front-bottom panel se drain pump filter nikalega — usme lint, sikke ya kapda fasa hota hai. Step 2: Filter saaf ya replace hoga (Rs.200-400). Step 3: Drain hose kinks ya crack ke liye check hogi. Step 4: Door seal torn hai to pani bahar aata hai — seal replace hogi. Step 5: Test cycle chalaya jaega. Repair time: 45-90 minute.",
         safetyAlert: "Inspection se pehle machine ka plug nikaal dein — pani aur bijli dono khatra hain.",
         conclusion: "Golden Refrigeration Sabour/Bhagalpur mein ghar pe washing machine repair karta hai — next-day slot book karein.",
-        estimatedCostRange: "₹500 - ₹2,000 total (Visit ₹300 + Filter ₹200-400 + Hose ₹300-800 + Labour ₹200-300)",
+        estimatedCostRange: "Rs.500 - Rs.2,000 total (Visit Rs.300 + Filter Rs.200-400 + Hose Rs.300-800 + Labour Rs.200-300)",
       },
     },
     {
@@ -93,18 +93,18 @@ const buildSmartFallback = (
       en: {
         isRelevant: true,
         problem: "Fan motor bearing wear or loose mounting bracket",
-        technicalExplanation: "Step 1: Technician identifies whether noise is from evaporator fan (inside) or condenser fan (outside/back). Step 2: Fan blades inspected for cracks or ice buildup. Step 3: Motor bearing checked — worn bearings cause grinding/rattling noise. Step 4: Mounting screws and brackets tightened. Step 5: If bearing worn — fan motor assembly replaced (₹400-1,200 depending on model). Step 6: Unit levelled properly to reduce vibration. Repair time: 1-2 hours.",
+        technicalExplanation: "Step 1: Technician identifies whether noise is from evaporator fan (inside) or condenser fan (outside/back). Step 2: Fan blades inspected for cracks or ice buildup. Step 3: Motor bearing checked — worn bearings cause grinding/rattling noise. Step 4: Mounting screws and brackets tightened. Step 5: If bearing worn — fan motor assembly replaced (Rs.400-1,200 depending on model). Step 6: Unit levelled properly to reduce vibration. Repair time: 1-2 hours.",
         safetyAlert: "Motor contains live wires — unplug before any inspection. Do not touch fan blades while machine is running.",
         conclusion: "Book Golden Refrigeration for a noise diagnosis in Bhagalpur — same-day inspection slots available.",
-        estimatedCostRange: "₹700 - ₹2,500 total (Visit ₹300 + Labour ₹300-500 + Fan motor ₹400-1,200 + Screws/mounts ₹100-200)",
+        estimatedCostRange: "Rs.700 - Rs.2,500 total (Visit Rs.300 + Labour Rs.300-500 + Fan motor Rs.400-1,200 + Screws/mounts Rs.100-200)",
       },
       hi: {
         isRelevant: true,
         problem: "Fan motor bearing kharab ya mounting loose hai",
-        technicalExplanation: "Step 1: Technician pata karega noise evaporator fan (andar) se hai ya condenser fan (bahar/peeche) se. Step 2: Fan blades mein crack ya ice check hogi. Step 3: Motor bearing check hogi — ghisi bearing grinding/rattling awaz deti hai. Step 4: Mounting screws tight kiye jaenge. Step 5: Bearing kharab hai to fan motor assembly replace hogi (₹400-1,200). Step 6: Machine level kiya jaega vibration kam karne ke liye. Repair time: 1-2 ghante.",
+        technicalExplanation: "Step 1: Technician pata karega noise evaporator fan (andar) se hai ya condenser fan (bahar/peeche) se. Step 2: Fan blades mein crack ya ice check hogi. Step 3: Motor bearing check hogi — ghisi bearing grinding/rattling awaz deti hai. Step 4: Mounting screws tight kiye jaenge. Step 5: Bearing kharab hai to fan motor assembly replace hogi (Rs.400-1,200). Step 6: Machine level kiya jaega vibration kam karne ke liye. Repair time: 1-2 ghante.",
         safetyAlert: "Motor mein live wire hoti hai — inspect se pehle plug nikaalein. Chalu machine ke fan ko haath mat lagaein.",
         conclusion: "Bhagalpur mein noise diagnosis ke liye Golden Refrigeration book karein — same-day slot available hai.",
-        estimatedCostRange: "₹700 - ₹2,500 total (Visit ₹300 + Labour ₹300-500 + Fan motor ₹400-1,200 + Fittings ₹100-200)",
+        estimatedCostRange: "Rs.700 - Rs.2,500 total (Visit Rs.300 + Labour Rs.300-500 + Fan motor Rs.400-1,200 + Fittings Rs.100-200)",
       },
     },
     {
@@ -112,30 +112,28 @@ const buildSmartFallback = (
       en: {
         isRelevant: true,
         problem: "Failed start relay, blown thermal fuse, or PCB power board fault",
-        technicalExplanation: "Step 1: Technician checks power supply at socket with multimeter. Step 2: PTC start relay tested — shake test (rattling = failed relay, costs ₹150-300). Step 3: Thermal fuse continuity checked — blown fuse means no power to compressor. Step 4: Overload protector tested. Step 5: If all small parts OK, PCB main board diagnosed — board repair or replacement (₹1,200-3,500). Step 6: Wiring harness inspected for rodent damage or burn marks. Repair time: 1-3 hours.",
+        technicalExplanation: "Step 1: Technician checks power supply at socket with multimeter. Step 2: PTC start relay tested — shake test (rattling = failed relay, costs Rs.150-300). Step 3: Thermal fuse continuity checked — blown fuse means no power to compressor. Step 4: Overload protector tested. Step 5: If all small parts OK, PCB main board diagnosed — board repair or replacement (Rs.1,200-3,500). Step 6: Wiring harness inspected for rodent damage or burn marks. Repair time: 1-3 hours.",
         safetyAlert: "Do not plug/unplug repeatedly — this can damage the PCB further. Capacitors inside hold lethal charge.",
         conclusion: "Book Golden Refrigeration for expert electrical diagnosis in Bhagalpur/Sabour — we carry all common spare parts for same-day repair.",
-        estimatedCostRange: "₹500 - ₹4,000 total (Visit ₹300 + Relay ₹150-300 + Thermal fuse ₹100-200 + PCB ₹1,200-3,500 if needed)",
+        estimatedCostRange: "Rs.500 - Rs.4,000 total (Visit Rs.300 + Relay Rs.150-300 + Thermal fuse Rs.100-200 + PCB Rs.1,200-3,500 if needed)",
       },
       hi: {
         isRelevant: true,
         problem: "Start relay fail, thermal fuse blown, ya PCB power board kharab",
-        technicalExplanation: "Step 1: Socket pe voltage multimeter se check hoga. Step 2: PTC relay shake test — rattling sound aaye to relay kharab hai (₹150-300). Step 3: Thermal fuse continuity check — fuse blown matlab compressor ko power nahi milti. Step 4: Overload protector test hoga. Step 5: Agar sab theek hai to PCB main board diagnose hoga (₹1,200-3,500). Step 6: Wiring harness mein jalane ke nishan ya chuhe ka damage check hoga. Repair time: 1-3 ghante.",
+        technicalExplanation: "Step 1: Socket pe voltage multimeter se check hoga. Step 2: PTC relay shake test — rattling sound aaye to relay kharab hai (Rs.150-300). Step 3: Thermal fuse continuity check — fuse blown matlab compressor ko power nahi milti. Step 4: Overload protector test hoga. Step 5: Agar sab theek hai to PCB main board diagnose hoga (Rs.1,200-3,500). Step 6: Wiring harness mein jalane ke nishan ya chuhe ka damage check hoga. Repair time: 1-3 ghante.",
         safetyAlert: "Bar bar plug mat karein — PCB aur damage ho sakta hai. Andar capacitor mein high voltage hoti hai.",
         conclusion: "Bhagalpur/Sabour mein electrical diagnosis ke liye Golden Refrigeration book karein — hum common parts lekar aate hain same-day repair ke liye.",
-        estimatedCostRange: "₹500 - ₹4,000 total (Visit ₹300 + Relay ₹150-300 + Fuse ₹100-200 + PCB ₹1,200-3,500)",
+        estimatedCostRange: "Rs.500 - Rs.4,000 total (Visit Rs.300 + Relay Rs.150-300 + Fuse Rs.100-200 + PCB Rs.1,200-3,500)",
       },
     },
   ];
 
-  // Find best matching rule
   for (const rule of rules) {
     if (rule.match(a, i)) {
       return isEn ? rule.en : rule.hi;
     }
   }
 
-  // General fallback using the existing structured fallback data
   return {
     isRelevant: true,
     problem: fallback.probableFault,
@@ -148,9 +146,72 @@ const buildSmartFallback = (
     conclusion: isEn
       ? `Book Golden Refrigeration for expert ${appliance} repair in Bhagalpur/Sabour — same-day or next-day slots available.`
       : `Bhagalpur/Sabour mein ${appliance} repair ke liye Golden Refrigeration book karein — same-day ya next-day slot available hai.`,
-    estimatedCostRange: costRange + " (Visit ₹300 + Labour + Parts — final amount after on-site inspection)",
+    estimatedCostRange: costRange + " (Visit Rs.300 + Labour + Parts — final amount after on-site inspection)",
   };
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GEMINI CALL HELPER — tries one model, returns text or throws
+// ─────────────────────────────────────────────────────────────────────────────
+async function callGemini(
+  model: string,
+  prompt: string,
+  uploadedFilePart: any,
+): Promise<string> {
+  let contents: any;
+
+  if (uploadedFilePart) {
+    contents = [{
+      role: "user",
+      parts: [
+        { fileData: { mimeType: uploadedFilePart.mimeType, fileUri: uploadedFilePart.uri } },
+        { text: prompt },
+      ],
+    }];
+  } else {
+    contents = prompt;
+  }
+
+  const response = await ai.models.generateContent({ model, contents }) as { text?: string };
+  return (response.text || "").trim();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PARSE GEMINI RESPONSE — strip markdown fences, extract JSON
+// ─────────────────────────────────────────────────────────────────────────────
+function parseGeminiResponse(raw: string): ConsultantPayload | null {
+  if (!raw) return null;
+
+  // Strip markdown code fences: ```json ... ``` or ``` ... ```
+  const cleaned = raw
+    .replace(/^```(?:json)?\s*/im, "")
+    .replace(/\s*```\s*$/im, "")
+    .trim();
+
+  const jsonStr = extractJsonObject(cleaned);
+  if (!jsonStr) return null;
+
+  try {
+    const candidate = JSON.parse(jsonStr) as ConsultantPayload;
+    if (typeof candidate?.isRelevant !== "boolean") return null;
+    return {
+      isRelevant: candidate.isRelevant,
+      problem: String(candidate.problem || "").trim(),
+      technicalExplanation: String(candidate.technicalExplanation || "").trim(),
+      safetyAlert: String(candidate.safetyAlert || "").trim(),
+      conclusion: String(candidate.conclusion || "").trim(),
+      estimatedCostRange: String(candidate.estimatedCostRange || "").trim(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+const isQuotaError = (msg: string) =>
+  msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota") || msg.includes("rate");
+
+const isNotFoundError = (msg: string) =>
+  msg.includes("404") || msg.toLowerCase().includes("not found");
 
 export const diagnose = async (req: Request, res: Response) => {
   try {
@@ -163,6 +224,7 @@ export const diagnose = async (req: Request, res: Response) => {
     };
     const resolvedAppliance = String(applianceType || appliance || "").trim();
     const resolvedIssue = String(issueDetails || issue || "").trim();
+
     if (!resolvedAppliance && !resolvedIssue && !file) {
       return res.status(400).json({ error: "Please provide an appliance type, issue description, or upload a photo/video." });
     }
@@ -180,14 +242,14 @@ Give a SPECIFIC, REAL diagnosis based on the exact appliance and issue described
 
 Reply in ${replyLanguage === "ENGLISH" ? "clear English" : "friendly Hinglish (Roman script)"}.
 
-Return ONLY this JSON (no markdown, no explanation):
+Return ONLY this JSON (no markdown, no explanation outside the JSON):
 {
   "isRelevant": true,
   "problem": "Name the exact failed component (e.g. compressor start relay, R-22 gas leak, drain pump filter clog, PCB capacitor blown)",
   "technicalExplanation": "Step-by-step: what failed and why, what technician will check and do, which parts may be replaced, how long it takes",
   "safetyAlert": "Real safety warning specific to this repair, or empty string if none",
   "conclusion": "Warm recommendation to book Golden Refrigeration with same-day/next-day availability in Bhagalpur/Sabour",
-  "estimatedCostRange": "Realistic total cost for Bhagalpur 2024-25: visit ₹300 + labour + parts breakdown, give a total range"
+  "estimatedCostRange": "Realistic total cost for Bhagalpur 2024-25: visit Rs.300 + labour + parts breakdown, give a total range"
 }
 If completely unrelated to appliance repair: { "isRelevant": false, "problem": "", "technicalExplanation": "", "safetyAlert": "", "conclusion": "", "estimatedCostRange": "" }`;
 
@@ -196,97 +258,111 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
     let uploadedFilePart: any = null;
     let storedMediaUrl: string | null = null;
     let storedMediaType: "image" | "video" | null = null;
+    let geminiUsed = false;
+    let allQuotaExhausted = true;
 
-    // Upload media file to Gemini File API if provided
+    // ── Upload media to Gemini File API ──────────────────────────────────────
     if (file) {
       try {
-        console.log(`[AI Diagnose] Uploading media to Gemini File API: ${file.originalname} (${file.mimetype})`);
-        const uploaded = await ai.files.upload({
-          file: file.path,
-          config: { mimeType: file.mimetype },
-        });
-        // Wait until file is ACTIVE (Gemini processes it asynchronously)
+        console.log(`\n[AI] Uploading media: ${file.originalname} (${file.mimetype})`);
+        const uploaded = await ai.files.upload({ file: file.path, config: { mimeType: file.mimetype } });
         let fileInfo = uploaded;
-        let attempts = 0;
-        while ((fileInfo as any).state === "PROCESSING" && attempts < 10) {
-          await new Promise((r) => setTimeout(r, 2000));
+        let polls = 0;
+        while ((fileInfo as any).state === "PROCESSING" && polls < 12) {
+          await new Promise((r) => setTimeout(r, 2500));
           fileInfo = await ai.files.get({ name: (fileInfo as any).name }) as typeof uploaded;
-          attempts++;
+          polls++;
         }
         uploadedFilePart = fileInfo;
-        console.log(`[AI Diagnose] File uploaded to Gemini — URI: ${(fileInfo as any).uri}, state: ${(fileInfo as any).state}`);
+        console.log(`[AI] File ready — URI: ${(fileInfo as any).uri}, state: ${(fileInfo as any).state}`);
       } catch (e: any) {
-        console.error("[AI Diagnose] Failed to upload to Gemini File API:", e.message);
-        // Continue without file — text-only diagnosis
+        console.error("[AI] File upload failed:", e.message, "— continuing without file");
       }
     }
 
-    // Try each model in order — correct Gemini model IDs for @google/genai SDK
-    const models = [
-      "gemini-2.0-flash",          // Best free-tier model — fast & capable
-      "gemini-1.5-flash",          // Fallback flash model
-      "gemini-1.5-flash-8b",       // Lightweight fallback
+    // ── Try every Gemini model, with per-model retry on quota errors ─────────
+    // Ordered: best → lightest. All are valid free-tier model IDs.
+    const MODELS = [
+      "gemini-3.5-flash",                // Newest & best (2025)
+      "gemini-2.5-flash-preview-05-20",  // Latest preview
+      "gemini-2.0-flash",                // Primary free-tier
+      "gemini-2.0-flash-lite",           // Lighter quota bucket
+      "gemini-1.5-flash",                // Stable classic
+      "gemini-1.5-flash-8b",             // Ultra-light
+      "gemini-1.5-pro",                  // High quality
     ];
 
-    for (const model of models) {
-      try {
-        console.log(`\n[AI Diagnose] ▶ Calling Gemini model: ${model}`);
-        console.log(`[AI Diagnose]   Appliance: "${resolvedAppliance}" | Issue: "${resolvedIssue.slice(0, 80)}"`);        
+    const MAX_RETRIES_PER_MODEL = 3;
 
-        let response: { text?: string };
+    for (const model of MODELS) {
+      if (parsed) break;
 
-        if (uploadedFilePart) {
-          // Multimodal request: text + uploaded file
-          const filePart = {
-            fileData: {
-              mimeType: uploadedFilePart.mimeType,
-              fileUri: uploadedFilePart.uri,
-            },
-          };
-          const textPart = { text: prompt };
-          response = await ai.models.generateContent({
-            model,
-            contents: [{ role: "user", parts: [filePart, textPart] }],
-          }) as { text?: string };
-        } else {
-          // Text-only request
-          response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-          }) as { text?: string };
-        }
+      for (let attempt = 1; attempt <= MAX_RETRIES_PER_MODEL; attempt++) {
+        try {
+          console.log(`\n[AI] >> Model: ${model} | Attempt ${attempt}/${MAX_RETRIES_PER_MODEL}`);
+          console.log(`[AI]    ${resolvedAppliance} — "${resolvedIssue.slice(0, 100)}"`);
 
-        const raw = (response.text || "").trim();
-        console.log(`[AI Diagnose] ✅ Raw response from ${model} (first 400 chars):`);
-        console.log(raw.slice(0, 400));
+          const raw = await callGemini(model, prompt, uploadedFilePart);
 
-        if (!raw) { lastModelError = "Empty response from Gemini"; continue; }
+          console.log(`[AI] Raw response (${model}):\n${raw.slice(0, 600)}`);
 
-        const jsonStr = extractJsonObject(raw);
-        if (!jsonStr) { lastModelError = `No JSON object found in Gemini response: ${raw.slice(0, 100)}`; continue; }
+          if (!raw) {
+            lastModelError = `Empty response from ${model}`;
+            break;
+          }
 
-        const candidate = JSON.parse(jsonStr) as ConsultantPayload;
-        if (typeof candidate?.isRelevant === "boolean") {
-          parsed = {
-            isRelevant: candidate.isRelevant,
-            problem: String(candidate.problem || "").trim(),
-            technicalExplanation: String(candidate.technicalExplanation || "").trim(),
-            safetyAlert: String(candidate.safetyAlert || "").trim(),
-            conclusion: String(candidate.conclusion || "").trim(),
-            estimatedCostRange: String(candidate.estimatedCostRange || "").trim(),
-          };
-          console.log(`[AI Diagnose] 🎉 SUCCESS — Gemini (${model}) answered the diagnosis!`);
+          const candidate = parseGeminiResponse(raw);
+          if (candidate) {
+            parsed = candidate;
+            geminiUsed = true;
+            allQuotaExhausted = false;
+            lastModelError = "";
+            console.log(`\n[AI] SUCCESS — Gemini model "${model}" gave a valid diagnosis!`);
+            break;
+          }
+
+          lastModelError = `${model}: JSON parse failed or missing isRelevant. Raw: ${raw.slice(0, 120)}`;
+          allQuotaExhausted = false;
+          console.warn(`[AI] Parse failed for ${model}. Raw snippet: ${raw.slice(0, 200)}`);
+          break; // Parsing issues won't improve with retry
+
+        } catch (err: any) {
+          lastModelError = String(err?.message || err || "Unknown error");
+
+          if (isNotFoundError(lastModelError)) {
+            console.warn(`[AI] Model not found / not available: ${model} — skipping`);
+            break;
+          }
+
+          if (isQuotaError(lastModelError)) {
+            allQuotaExhausted = true; // Keep flag — still all quota
+
+            // Honour the Retry-After hint from the API response
+            const retryMatch = lastModelError.match(/retry[^0-9]*?(\d+)[\s.]/i)
+              || lastModelError.match(/retryDelay.*?(\d+)/i);
+            const waitMs = retryMatch
+              ? Math.min(Number(retryMatch[1]) * 1000 + 1000, 65000)
+              : Math.min(8000 * attempt, 32000); // 8s, 16s, 24s
+
+            if (attempt < MAX_RETRIES_PER_MODEL) {
+              console.warn(`[AI] Quota hit on ${model}. Waiting ${waitMs / 1000}s then retrying (${attempt + 1}/${MAX_RETRIES_PER_MODEL})...`);
+              await new Promise((r) => setTimeout(r, waitMs));
+              continue;
+            } else {
+              console.warn(`[AI] ${model} still quota-limited after ${MAX_RETRIES_PER_MODEL} attempts. Moving to next model.`);
+              break;
+            }
+          }
+
+          // Non-quota, non-404 error — log and move on
+          allQuotaExhausted = false;
+          console.error(`[AI] Error from ${model}:`, lastModelError.slice(0, 300));
           break;
         }
-        lastModelError = "Gemini returned JSON but missing 'isRelevant' field";
-        console.warn(`[AI Diagnose] ⚠ Invalid structure from ${model}:`, jsonStr.slice(0, 200));
-      } catch (err: any) {
-        lastModelError = err.message || "Unknown Gemini error";
-        console.error(`[AI Diagnose] ❌ Model ${model} threw error:`, lastModelError);
       }
     }
 
-    // Persist uploaded media locally
+    // ── Persist uploaded media to Cloudinary ─────────────────────────────────
     if (file) {
       try {
         const stored = await storeMediaFromTempFile({
@@ -304,28 +380,36 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
     if (uploadedFilePart) { try { await ai.files.delete({ name: uploadedFilePart.name }); } catch {} }
     if (file && fs.existsSync(file.path)) { try { fs.unlinkSync(file.path); } catch {} }
 
-    // Only use smart fallback if ALL Gemini models completely failed
+    // ── ABSOLUTE LAST RESORT: hardcoded fallback ──────────────────────────────
     if (!parsed) {
-      console.warn(`\n[AI Diagnose] ⚠️  ALL GEMINI MODELS FAILED — using hardcoded fallback.`);
-      console.warn(`[AI Diagnose] Last error: ${lastModelError}`);
-      console.warn(`[AI Diagnose] GEMINI_API_KEY present: ${Boolean(process.env.GEMINI_API_KEY)} | Key prefix: ${(process.env.GEMINI_API_KEY || "").slice(0, 8)}...`);
+      if (allQuotaExhausted) {
+        console.warn(`\n[AI] *** ALL GEMINI QUOTA EXHAUSTED ***`);
+        console.warn(`[AI] Key prefix: ${(process.env.GEMINI_API_KEY || "").slice(0, 10)}...`);
+        console.warn(`[AI] Get a fresh key: https://aistudio.google.com/apikey`);
+      } else {
+        console.warn(`\n[AI] All Gemini models failed. Last error: ${lastModelError}`);
+      }
+      console.warn(`[AI] Using hardcoded fallback (last resort).`);
+
       const fallback = fallbackStructuredDiagnosis(resolvedAppliance, resolvedIssue, replyLanguage);
-      const costRange = `₹${Number(fallback.estimatedCostMin).toLocaleString("en-IN")} - ₹${Number(fallback.estimatedCostMax).toLocaleString("en-IN")}`;
+      const costRange = `Rs.${Number(fallback.estimatedCostMin).toLocaleString("en-IN")} - Rs.${Number(fallback.estimatedCostMax).toLocaleString("en-IN")}`;
       parsed = buildSmartFallback(resolvedAppliance, resolvedIssue, replyLanguage, fallback, costRange);
     } else {
-      console.log(`[AI Diagnose] ✅ Using LIVE Gemini response (not fallback).`);
+      console.log(`\n[AI] LIVE Gemini response used — NOT hardcoded fallback.`);
     }
 
+    // ── Format final response ─────────────────────────────────────────────────
     const strictMessage =
       replyLanguage === "ENGLISH"
         ? "I am specialized in Golden Refrigeration appliance diagnostics. Please ask about your repair needs."
         : "Main Golden Refrigeration appliance diagnostics mein specialize karta hoon. Kripya apni repair problem batayein.";
+
     const safeProblem = parsed.problem || resolvedAppliance || "an internal fault";
     const technicalExplanation = parsed.technicalExplanation || "A technician will inspect and diagnose the exact fault on-site.";
     const safetyAlert = parsed.safetyAlert || "";
     let conclusion = parsed.conclusion || "Book Golden Refrigeration for expert service in Bhagalpur/Sabour.";
     if (!/golden refrigeration/i.test(conclusion)) {
-      conclusion += replyLanguage === "ENGLISH" ? " — Golden Refrigeration, Bhagalpur/Sabour." : " — Golden Refrigeration, Bhagalpur/Sabour.";
+      conclusion += " — Golden Refrigeration, Bhagalpur/Sabour.";
     }
     const estimatedCostRange = parsed.isRelevant ? (parsed.estimatedCostRange || "") : "";
 
@@ -365,11 +449,12 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
         whatsapp: `https://wa.me/91${TECHNICIAN_PHONE}`,
         sms: `sms:+91${TECHNICIAN_PHONE}`,
       },
-      // Expose whether Gemini or fallback was used — helpful for debugging
-      geminiUsed: !lastModelError,
-      fallbackUsed: !parsed || Boolean(lastModelError),
+      geminiUsed,
+      fallbackUsed: !geminiUsed,
+      quotaExhausted: allQuotaExhausted && !geminiUsed,
       modelError: lastModelError || undefined,
     });
+
   } catch (error) {
     console.error("AI Diagnosis Error:", error);
     res.status(500).json({ error: "AI diagnosis failed.", details: (error as Error).message });
