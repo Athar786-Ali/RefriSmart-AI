@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import fs from "node:fs";
-import { ai } from "../config/gemini.js";
+import { getGeminiClient, rotateKey, totalKeys } from "../config/gemini.js";
 import { resolveUserIdFromRequest, type AuthenticatedRequest } from "../middlewares/authMiddleware.js";
 import { TECHNICIAN_PHONE, detectInputLanguage, extractJsonObject, fallbackStructuredDiagnosis } from "../config/runtime.js";
 import { createDiagnosisLog, listDiagnosisLogs } from "../services/diagnosisService.js";
@@ -151,7 +151,7 @@ const buildSmartFallback = (
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GEMINI CALL HELPER — tries one model, returns text or throws
+// GEMINI CALL HELPER — always uses current active key via getGeminiClient()
 // ─────────────────────────────────────────────────────────────────────────────
 async function callGemini(
   model: string,
@@ -172,7 +172,9 @@ async function callGemini(
     contents = prompt;
   }
 
-  const response = await ai.models.generateContent({ model, contents }) as { text?: string };
+  // Use the currently active key (rotated automatically on quota errors)
+  const client = getGeminiClient();
+  const response = await client.models.generateContent({ model, contents }) as { text?: string };
   return (response.text || "").trim();
 }
 
@@ -269,12 +271,12 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
     if (file) {
       try {
         console.log(`\n[AI] Uploading media: ${file.originalname} (${file.mimetype})`);
-        const uploaded = await ai.files.upload({ file: file.path, config: { mimeType: file.mimetype } });
+        const uploaded = await getGeminiClient().files.upload({ file: file.path, config: { mimeType: file.mimetype } });
         let fileInfo = uploaded;
         let polls = 0;
         while ((fileInfo as any).state === "PROCESSING" && polls < 12) {
           await new Promise((r) => setTimeout(r, 2500));
-          fileInfo = await ai.files.get({ name: (fileInfo as any).name }) as typeof uploaded;
+          fileInfo = await getGeminiClient().files.get({ name: (fileInfo as any).name }) as typeof uploaded;
           polls++;
         }
         uploadedFilePart = fileInfo;
@@ -353,19 +355,25 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
           }
 
           if (isQuotaError(lastModelError)) {
+            // Try rotating to the next API key first (different project = fresh quota)
+            if (totalKeys() > 1) {
+              rotateKey();
+              console.warn(`[AI] Quota hit on key. Rotated to next key — retrying ${model}...`);
+              continue; // Retry same model with new key immediately
+            }
+            // Only one key — wait with backoff
             allQuotaExhausted = true;
-            // Honour the Retry-After hint from the API response
             const retryMatch = lastModelError.match(/retry[^0-9]*?(\d+)[\s.]/i)
               || lastModelError.match(/retryDelay.*?(\d+)/i);
             const waitMs = retryMatch
               ? Math.min(Number(retryMatch[1]) * 1000 + 1000, 65000)
-              : Math.min(8000 * attempt, 32000); // 8s, 16s, 24s
+              : Math.min(8000 * attempt, 32000);
             if (attempt < MAX_RETRIES_PER_MODEL) {
               console.warn(`[AI] Quota hit on ${model}. Waiting ${waitMs / 1000}s then retrying (${attempt + 1}/${MAX_RETRIES_PER_MODEL})...`);
               await new Promise((r) => setTimeout(r, waitMs));
               continue;
             } else {
-              console.warn(`[AI] ${model} still quota-limited after ${MAX_RETRIES_PER_MODEL} attempts. Moving to next model.`);
+              console.warn(`[AI] ${model} quota exhausted on all keys. Trying next model.`);
               break;
             }
           }
@@ -393,7 +401,7 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
         console.error("Failed to persist diagnosis media:", err.message);
       }
     }
-    if (uploadedFilePart) { try { await ai.files.delete({ name: uploadedFilePart.name }); } catch {} }
+    if (uploadedFilePart) { try { await getGeminiClient().files.delete({ name: uploadedFilePart.name }); } catch {} }
     if (file && fs.existsSync(file.path)) { try { fs.unlinkSync(file.path); } catch {} }
 
     // ── ABSOLUTE LAST RESORT: hardcoded fallback ──────────────────────────────
