@@ -197,36 +197,73 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
     let storedMediaUrl: string | null = null;
     let storedMediaType: "image" | "video" | null = null;
 
-    // Upload media file to Gemini if provided
+    // Upload media file to Gemini File API if provided
     if (file) {
       try {
-        uploadedFilePart = await ai.files.upload({
+        console.log(`[AI Diagnose] Uploading media to Gemini File API: ${file.originalname} (${file.mimetype})`);
+        const uploaded = await ai.files.upload({
           file: file.path,
           config: { mimeType: file.mimetype },
         });
+        // Wait until file is ACTIVE (Gemini processes it asynchronously)
+        let fileInfo = uploaded;
+        let attempts = 0;
+        while ((fileInfo as any).state === "PROCESSING" && attempts < 10) {
+          await new Promise((r) => setTimeout(r, 2000));
+          fileInfo = await ai.files.get({ name: (fileInfo as any).name }) as typeof uploaded;
+          attempts++;
+        }
+        uploadedFilePart = fileInfo;
+        console.log(`[AI Diagnose] File uploaded to Gemini — URI: ${(fileInfo as any).uri}, state: ${(fileInfo as any).state}`);
       } catch (e: any) {
-        console.error("Failed to upload to Gemini File API:", e.message);
+        console.error("[AI Diagnose] Failed to upload to Gemini File API:", e.message);
+        // Continue without file — text-only diagnosis
       }
     }
 
-    // Try each model — NO timeout, let AI take as long as it needs
-    // gemini-flash-lite-latest and gemini-flash-latest are within free tier quota
-    const models = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-pro-latest"];
+    // Try each model in order — correct Gemini model IDs for @google/genai SDK
+    const models = [
+      "gemini-2.0-flash",          // Best free-tier model — fast & capable
+      "gemini-1.5-flash",          // Fallback flash model
+      "gemini-1.5-flash-8b",       // Lightweight fallback
+    ];
+
     for (const model of models) {
       try {
-        console.log(`[AI Diagnose] Calling model: ${model} for "${resolvedAppliance}" — "${resolvedIssue}"`);
-        const contents = uploadedFilePart ? [uploadedFilePart, prompt] : [prompt];
-        const response = await (uploadedFilePart
-          ? ai.models.generateContent({ model, contents })
-          : ai.models.generateContent({ model, contents: prompt })) as { text?: string };
+        console.log(`\n[AI Diagnose] ▶ Calling Gemini model: ${model}`);
+        console.log(`[AI Diagnose]   Appliance: "${resolvedAppliance}" | Issue: "${resolvedIssue.slice(0, 80)}"`);        
+
+        let response: { text?: string };
+
+        if (uploadedFilePart) {
+          // Multimodal request: text + uploaded file
+          const filePart = {
+            fileData: {
+              mimeType: uploadedFilePart.mimeType,
+              fileUri: uploadedFilePart.uri,
+            },
+          };
+          const textPart = { text: prompt };
+          response = await ai.models.generateContent({
+            model,
+            contents: [{ role: "user", parts: [filePart, textPart] }],
+          }) as { text?: string };
+        } else {
+          // Text-only request
+          response = await ai.models.generateContent({
+            model,
+            contents: prompt,
+          }) as { text?: string };
+        }
 
         const raw = (response.text || "").trim();
-        console.log(`[AI Diagnose] Raw response (${model}):`, raw.slice(0, 300));
+        console.log(`[AI Diagnose] ✅ Raw response from ${model} (first 400 chars):`);
+        console.log(raw.slice(0, 400));
 
-        if (!raw) { lastModelError = "Empty response"; continue; }
+        if (!raw) { lastModelError = "Empty response from Gemini"; continue; }
 
         const jsonStr = extractJsonObject(raw);
-        if (!jsonStr) { lastModelError = "No JSON found in response"; continue; }
+        if (!jsonStr) { lastModelError = `No JSON object found in Gemini response: ${raw.slice(0, 100)}`; continue; }
 
         const candidate = JSON.parse(jsonStr) as ConsultantPayload;
         if (typeof candidate?.isRelevant === "boolean") {
@@ -238,13 +275,14 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
             conclusion: String(candidate.conclusion || "").trim(),
             estimatedCostRange: String(candidate.estimatedCostRange || "").trim(),
           };
-          console.log(`[AI Diagnose] Success with model: ${model}`);
+          console.log(`[AI Diagnose] 🎉 SUCCESS — Gemini (${model}) answered the diagnosis!`);
           break;
         }
-        lastModelError = "Invalid response structure";
+        lastModelError = "Gemini returned JSON but missing 'isRelevant' field";
+        console.warn(`[AI Diagnose] ⚠ Invalid structure from ${model}:`, jsonStr.slice(0, 200));
       } catch (err: any) {
-        lastModelError = err.message || "Unknown model error";
-        console.error(`[AI Diagnose] Model ${model} error:`, lastModelError);
+        lastModelError = err.message || "Unknown Gemini error";
+        console.error(`[AI Diagnose] ❌ Model ${model} threw error:`, lastModelError);
       }
     }
 
@@ -266,12 +304,16 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
     if (uploadedFilePart) { try { await ai.files.delete({ name: uploadedFilePart.name }); } catch {} }
     if (file && fs.existsSync(file.path)) { try { fs.unlinkSync(file.path); } catch {} }
 
-    // Only use smart fallback if AI completely failed
+    // Only use smart fallback if ALL Gemini models completely failed
     if (!parsed) {
-      console.warn(`[AI Diagnose] All models failed. Using smart fallback. Last error: ${lastModelError}`);
+      console.warn(`\n[AI Diagnose] ⚠️  ALL GEMINI MODELS FAILED — using hardcoded fallback.`);
+      console.warn(`[AI Diagnose] Last error: ${lastModelError}`);
+      console.warn(`[AI Diagnose] GEMINI_API_KEY present: ${Boolean(process.env.GEMINI_API_KEY)} | Key prefix: ${(process.env.GEMINI_API_KEY || "").slice(0, 8)}...`);
       const fallback = fallbackStructuredDiagnosis(resolvedAppliance, resolvedIssue, replyLanguage);
       const costRange = `₹${Number(fallback.estimatedCostMin).toLocaleString("en-IN")} - ₹${Number(fallback.estimatedCostMax).toLocaleString("en-IN")}`;
       parsed = buildSmartFallback(resolvedAppliance, resolvedIssue, replyLanguage, fallback, costRange);
+    } else {
+      console.log(`[AI Diagnose] ✅ Using LIVE Gemini response (not fallback).`);
     }
 
     const strictMessage =
@@ -323,7 +365,9 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
         whatsapp: `https://wa.me/91${TECHNICIAN_PHONE}`,
         sms: `sms:+91${TECHNICIAN_PHONE}`,
       },
-      fallbackUsed: Boolean(lastModelError),
+      // Expose whether Gemini or fallback was used — helpful for debugging
+      geminiUsed: !lastModelError,
+      fallbackUsed: !parsed || Boolean(lastModelError),
       modelError: lastModelError || undefined,
     });
   } catch (error) {
