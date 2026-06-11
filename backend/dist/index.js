@@ -15,7 +15,18 @@ const getAllowedOrigins = () => {
     if (process.env.NODE_ENV !== "production")
         return true;
     const raw = process.env.ALLOWED_ORIGINS || "";
-    return raw.split(",").map((s) => s.trim()).filter(Boolean);
+    return raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .flatMap((origin) => {
+        // Accept both with and without protocol prefix
+        if (origin.startsWith("http://") || origin.startsWith("https://")) {
+            return [origin];
+        }
+        // Add both http and https variants if no protocol given
+        return [`http://${origin}`, `https://${origin}`];
+    });
 };
 app.use(cors({
     origin: getAllowedOrigins(),
