@@ -109,6 +109,7 @@ export const login = async (req: Request, res: Response) => {
 
     res.json({
       message: "Login successful.",
+      token,
       user: {
         id: effectiveUser.id,
         name: effectiveUser.name,
@@ -637,6 +638,7 @@ export const verifyLogin = async (req: Request, res: Response) => {
 
     res.json({
       message: "Login successful.",
+      token,
       user: {
         id: user.id,
         name: user.name,
@@ -795,13 +797,14 @@ export const verifyEmailLogin = async (req: Request, res: Response) => {
 
     res.json({
       message: "Login successful.",
+      token,
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
         role: role,
         isAccountVerified: true,
-        isPhoneVerified: true, // We assume verified if logging in via email 
+        isPhoneVerified: true,
         phone: user.phone,
       },
     });

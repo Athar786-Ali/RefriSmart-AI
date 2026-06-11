@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { getApiBase } from "@/lib/api";
+import { getApiBase, authFetch } from "@/lib/api";
 import { isFinalOrderStatus, normalizeOrderApiPayload } from "@/lib/order-status";
 import { toast } from "sonner";
 import {
@@ -71,15 +71,15 @@ export default function AdminDashboard() {
   const load = useCallback(async () => {
     if (!user || user.role !== "ADMIN") return;
     try {
-      const opts: RequestInit = { credentials: "include", cache: "no-store" };
+      const opts: RequestInit = { cache: "no-store" };
       const [sR, bR, aR, gR, oR, dR, sellR] = await Promise.all([
-        fetch(`${API}/admin/stats?t=${Date.now()}`,            opts),
-        fetch(`${API}/admin/service-overview?t=${Date.now()}`, opts),
-        fetch(`${API}/ops/analytics?t=${Date.now()}`,          opts),
-        fetch(`${API}/gallery?t=${Date.now()}`,                opts),
-        fetch(`${API}/admin/orders?t=${Date.now()}`,           opts),
-        fetch(`${API}/admin/all-diagnoses?t=${Date.now()}`,    opts),
-        fetch(`${API}/sell/requests?t=${Date.now()}`,          opts),
+        authFetch(`${API}/admin/stats?t=${Date.now()}`,            opts),
+        authFetch(`${API}/admin/service-overview?t=${Date.now()}`, opts),
+        authFetch(`${API}/ops/analytics?t=${Date.now()}`,          opts),
+        authFetch(`${API}/gallery?t=${Date.now()}`,                opts),
+        authFetch(`${API}/admin/orders?t=${Date.now()}`,           opts),
+        authFetch(`${API}/admin/all-diagnoses?t=${Date.now()}`,    opts),
+        authFetch(`${API}/sell/requests?t=${Date.now()}`,          opts),
       ]);
 
       const protectedResponses = [sR, bR, aR, oR, dR, sellR];
@@ -90,7 +90,7 @@ export default function AdminDashboard() {
 
       let sp = await sR.json().catch(() => null);
       if (!sR.ok || sp?.error) {
-        const fb = await fetch(`${API}/admin/stats-basic?t=${Date.now()}`, opts);
+        const fb = await authFetch(`${API}/admin/stats-basic?t=${Date.now()}`, opts);
         sp = await fb.json().catch(() => null);
       }
       if (sp) setStats({ ...sp, totalBookings: Number(sp.totalBookings||0), totalUsers: Number(sp.totalUsers||0), totalProducts: Number(sp.totalProducts||0) });

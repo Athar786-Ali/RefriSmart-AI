@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import Link from "next/link";
-import { getApiBase } from "@/lib/api";
+import { getApiBase, authFetch } from "@/lib/api";
 import {
   ArrowRight,
   Banknote,
@@ -192,8 +192,7 @@ export default function SellRequestPage() {
 
       if (showSpinner) setLoadingRequests(true);
       try {
-        const response = await fetch(`${API}/sell/requests?scope=mine`, {
-          credentials: "include",
+        const response = await authFetch(`${API}/sell/requests?scope=mine`, {
           cache: "no-store",
         });
         const payload = await parsePayload(response);
@@ -273,10 +272,9 @@ export default function SellRequestPage() {
     let fileData = "";
     try {
       fileData = await toDataUrl(file);
-      const response = await fetch(`${API}/sell/upload-image`, {
+      const response = await authFetch(`${API}/sell/upload-image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ fileData, fileName: file.name }),
       });
       const payload = await parsePayload(response);
@@ -325,10 +323,9 @@ export default function SellRequestPage() {
 
     setSubmitting(true);
     try {
-      const response = await fetch(`${API}/sell/request`, {
+      const response = await authFetch(`${API}/sell/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           userId: user.id,
           contactName: form.contactName.trim(),
@@ -385,10 +382,9 @@ export default function SellRequestPage() {
   const handleOfferAction = async (offerId: string, action: "ACCEPT" | "REJECT") => {
     setRespondingOfferId(offerId);
     try {
-      const response = await fetch(`${API}/sell/offers/${offerId}/respond`, {
+      const response = await authFetch(`${API}/sell/offers/${offerId}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ action }),
       });
       const payload = await response.json().catch(() => null);

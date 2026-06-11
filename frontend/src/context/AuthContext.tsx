@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
-import { getApiBase } from "@/lib/api";
+import { getApiBase, authFetch, setStoredToken, getStoredToken } from "@/lib/api";
 
 export type AuthUser = {
   id: string;
@@ -47,7 +47,7 @@ const readCachedUser = () => {
 // How often to silently re-verify the session (every 10 minutes)
 const SESSION_REFRESH_INTERVAL = 10 * 60 * 1000;
 
-// How many consecutive network failures before we give up on the cached session
+// How many consecutive network failures before we give up
 const MAX_NETWORK_FAILURES = 3;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -63,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.localStorage.setItem("user", JSON.stringify(next));
       } else {
         window.localStorage.removeItem("user");
+        setStoredToken(null); // Clear token on logout
       }
     }
   }, []);
@@ -70,21 +71,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const apiBase = getApiBase();
     if (!apiBase) {
-      // When API_BASE is missing we cannot verify the session.
-      // Only clear the user if there is no cached session to fall back on.
       if (!readCachedUser()) setUser(null);
       setLoading(false);
       return;
     }
 
+    // If we have no token and no cached user, skip the /me call
+    const hasToken = !!getStoredToken();
+    const hasCachedUser = !!readCachedUser();
+    if (!hasToken && !hasCachedUser) {
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch(`${apiBase}/auth/me`, {
-        method: "GET",
-        credentials: "include",
-      });
+      // Use authFetch which includes Authorization: Bearer header
+      const res = await authFetch(`${apiBase}/auth/me`);
 
       if (res.ok) {
-        // Successful response — reset failure counter
         networkFailureCount.current = 0;
         const payload = await res.json().catch(() => ({}));
         if (payload?.user?.id) {
@@ -94,40 +98,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (res.status === 401 || res.status === 403) {
-        // Only clear session if backend explicitly says token is invalid.
-        // But first confirm this isn't a transient server error.
-        networkFailureCount.current = 0; // Reset — this is a clean response
+        // Token is genuinely invalid — clean logout
+        networkFailureCount.current = 0;
         setUser(null);
+        setStoredToken(null);
         setLoading(false);
         return;
       }
 
-      // For 5xx and other errors — keep cached user alive (server may be restarting)
+      // 5xx — server issue, keep cached user
       console.warn(`[Auth] /auth/me returned ${res.status} — keeping cached session`);
-
     } catch (e) {
-      // Pure network error (no internet, backend down temporarily)
-      // Do NOT log out — increment failure count instead
       networkFailureCount.current += 1;
       console.warn(
-        `[Auth] Network error verifying session (attempt ${networkFailureCount.current}/${MAX_NETWORK_FAILURES}):`,
+        `[Auth] Network error (${networkFailureCount.current}/${MAX_NETWORK_FAILURES}):`,
         e
       );
-
-      if (networkFailureCount.current >= MAX_NETWORK_FAILURES) {
-        // Only clear after too many consecutive failures AND no cached user
-        if (!readCachedUser()) {
-          setUser(null);
-        }
+      if (networkFailureCount.current >= MAX_NETWORK_FAILURES && !readCachedUser()) {
+        setUser(null);
+        setStoredToken(null);
       }
-      // Keep cached user alive for network errors
     } finally {
       setLoading(false);
     }
   }, [setUser]);
 
   const logout = useCallback(async () => {
-    // Stop the refresh interval
     if (refreshTimerRef.current) {
       clearInterval(refreshTimerRef.current);
       refreshTimerRef.current = null;
@@ -135,51 +131,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const apiBase = getApiBase();
       if (apiBase) {
-        await fetch(`${apiBase}/auth/logout`, {
-          method: "POST",
-          credentials: "include",
-        });
+        await authFetch(`${apiBase}/auth/logout`, { method: "POST" });
       }
     } catch {
-      // ignore logout network errors
+      // ignore
     } finally {
       setUser(null);
+      setStoredToken(null);
       networkFailureCount.current = 0;
       toast.success("Logged out");
     }
   }, [setUser]);
 
-  // Initial session check on mount
+  // Initial session check
   useEffect(() => {
     const cachedUser = readCachedUser();
-    if (cachedUser) {
-      setUserState(cachedUser);
-    }
+    if (cachedUser) setUserState(cachedUser);
     void refresh();
   }, [refresh]);
 
-  // Silent session keepalive — re-verifies every 10 minutes
-  // This prevents "session ended" messages caused by stale auth checks
+  // Silent keepalive every 10 minutes
   useEffect(() => {
     refreshTimerRef.current = setInterval(() => {
       void refresh();
     }, SESSION_REFRESH_INTERVAL);
-
     return () => {
-      if (refreshTimerRef.current) {
-        clearInterval(refreshTimerRef.current);
-      }
+      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
     };
   }, [refresh]);
 
   const value = useMemo(
-    () => ({
-      user,
-      loading,
-      setUser,
-      refresh,
-      logout,
-    }),
+    () => ({ user, loading, setUser, refresh, logout }),
     [user, loading, setUser, refresh, logout],
   );
 
@@ -188,8 +170,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth must be used within AuthProvider.");
-  }
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider.");
   return ctx;
 }

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 // simultaneously, causing duplicate containers and bloating the bundle.
 import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/razorpay";
 import { useAuth } from "@/context/AuthContext";
-import { getApiBase } from "@/lib/api";
+import { getApiBase, authFetch } from "@/lib/api";
 import type { NormalizedProduct, Product } from "@/types";
 
 export type ProductCardItem = Product;
@@ -93,9 +93,8 @@ export default function ProductCard({ product }: ProductCardProps) {
     }
 
     try {
-      const res = await fetch(`${API}/auth/me`, {
+      const res = await authFetch(`${API}/auth/me`, {
         method: "GET",
-        credentials: "include",
         cache: "no-store",
       });
       const payload = await res.json().catch(() => ({}));
@@ -183,10 +182,9 @@ export default function ProductCard({ product }: ProductCardProps) {
     if (activeOrderId) return activeOrderId;
     const activeUser = await resolveActiveCheckoutUser(false);
     if (!activeUser?.id) return null;
-    const res = await fetch(`${API}/orders`, {
+    const res = await authFetch(`${API}/orders`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify({
         productId: product.id,
         deliveryAddress: address.trim(),
@@ -231,9 +229,8 @@ export default function ProductCard({ product }: ProductCardProps) {
         return;
       }
 
-      const orderRes = await fetch(`${API}/orders/${localOrderId}/razorpay`, {
+      const orderRes = await authFetch(`${API}/orders/${localOrderId}/razorpay`, {
         method: "POST",
-        credentials: "include",
       });
       const orderPayload = await orderRes.json().catch(() => ({}));
       if (!orderRes.ok) {
@@ -265,10 +262,9 @@ export default function ProductCard({ product }: ProductCardProps) {
         },
       });
 
-      const verifyRes = await fetch(`${API}/orders/${localOrderId}/razorpay/verify`, {
+      const verifyRes = await authFetch(`${API}/orders/${localOrderId}/razorpay/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify(paymentResponse),
       });
       const verifyPayload = await verifyRes.json().catch(() => ({}));

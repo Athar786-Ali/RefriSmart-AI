@@ -9,11 +9,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-import { getApiBase } from "@/lib/api";
+import { getApiBase, setStoredToken } from "@/lib/api";
 
 type LoginResponse = {
   message?: string;
   error?: string;
+  token?: string;
   channel?: "whatsapp" | "sms" | "dev" | "email";
   otpPreview?: string;
   user?: {
@@ -151,6 +152,11 @@ export default function LoginPage() {
         isPhoneVerified: Boolean(data.user.isPhoneVerified),
         phone: data.user.phone ?? null,
       };
+      
+      // Store JWT token for Safari / cross-origin auth
+      if (data.token) {
+        setStoredToken(data.token);
+      }
       
       localStorage.setItem("user", JSON.stringify(sessionUser));
       setUser(sessionUser);
