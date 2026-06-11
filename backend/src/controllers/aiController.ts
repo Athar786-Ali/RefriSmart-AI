@@ -212,12 +212,18 @@ function parseGeminiResponse(raw: string): ConsultantPayload | null {
 const isQuotaError = (msg: string) =>
   msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota") || msg.includes("rate");
 
-// 503 = temporary server overload — always retry with backoff
+// 503 = temporary server overload
 const isOverloadError = (msg: string) =>
   msg.includes("503") || msg.includes("UNAVAILABLE") || msg.includes("high demand") || msg.includes("overload");
 
+// 404 = model not found for this project type
 const isNotFoundError = (msg: string) =>
   msg.includes("404") || msg.toLowerCase().includes("not found");
+
+// 403 = API not enabled on this project / permission denied
+const isProjectError = (msg: string) =>
+  msg.includes("403") || msg.includes("PERMISSION_DENIED") || msg.includes("disabled") || msg.includes("API_KEY_INVALID");
+
 
 export const diagnose = async (req: Request, res: Response) => {
   try {
@@ -336,32 +342,46 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
           lastModelError = String(err?.message || err || "Unknown error");
 
           if (isNotFoundError(lastModelError)) {
-            console.warn(`[AI] Model not available: ${model} — skipping`);
+            // Model not available for this project type — skip entirely
+            console.warn(`[AI] Model not available: ${model} — skipping all keys`);
+            allQuotaExhausted = false;
+            break;
+          }
+
+          if (isProjectError(lastModelError)) {
+            // 403 = this project has API disabled — rotate key immediately
+            console.warn(`[AI] Project error (403) — API disabled on this key. Rotating to next key...`);
+            if (totalKeys() > 1) {
+              rotateKey();
+              continue; // Retry with next key's project
+            }
+            allQuotaExhausted = false;
+            console.error(`[AI] All projects have API disabled. Check Google Cloud Console.`);
             break;
           }
 
           if (isOverloadError(lastModelError)) {
             // 503 = temporary server overload — retry with longer wait
-            const waitMs = Math.min(15000 * attempt, 60000); // 15s, 30s, 45s
+            const waitMs = Math.min(12000 * attempt, 45000); // 12s, 24s, 36s
             if (attempt < MAX_RETRIES_PER_MODEL) {
               console.warn(`[AI] ${model} overloaded (503). Waiting ${waitMs / 1000}s then retrying (${attempt + 1}/${MAX_RETRIES_PER_MODEL})...`);
               await new Promise((r) => setTimeout(r, waitMs));
               continue;
             } else {
               console.warn(`[AI] ${model} still overloaded after ${MAX_RETRIES_PER_MODEL} retries. Trying next model.`);
-              allQuotaExhausted = false; // 503 is NOT a quota issue
+              allQuotaExhausted = false;
               break;
             }
           }
 
           if (isQuotaError(lastModelError)) {
-            // Try rotating to the next API key first (different project = fresh quota)
+            // Rotate to next API key first (different project = fresh quota)
             if (totalKeys() > 1) {
               rotateKey();
-              console.warn(`[AI] Quota hit on key. Rotated to next key — retrying ${model}...`);
-              continue; // Retry same model with new key immediately
+              console.warn(`[AI] Quota hit. Rotated to next key — retrying ${model} immediately...`);
+              continue;
             }
-            // Only one key — wait with backoff
+            // Only one key available — backoff wait
             allQuotaExhausted = true;
             const retryMatch = lastModelError.match(/retry[^0-9]*?(\d+)[\s.]/i)
               || lastModelError.match(/retryDelay.*?(\d+)/i);
@@ -369,7 +389,7 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
               ? Math.min(Number(retryMatch[1]) * 1000 + 1000, 65000)
               : Math.min(8000 * attempt, 32000);
             if (attempt < MAX_RETRIES_PER_MODEL) {
-              console.warn(`[AI] Quota hit on ${model}. Waiting ${waitMs / 1000}s then retrying (${attempt + 1}/${MAX_RETRIES_PER_MODEL})...`);
+              console.warn(`[AI] Quota hit on ${model}. Waiting ${waitMs / 1000}s then retrying...`);
               await new Promise((r) => setTimeout(r, waitMs));
               continue;
             } else {
@@ -378,9 +398,9 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
             }
           }
 
-          // Non-quota, non-404 error — log and move on
+          // Any other unexpected error
           allQuotaExhausted = false;
-          console.error(`[AI] Error from ${model}:`, lastModelError.slice(0, 300));
+          console.error(`[AI] Unexpected error from ${model}:`, lastModelError.slice(0, 300));
           break;
         }
       }
