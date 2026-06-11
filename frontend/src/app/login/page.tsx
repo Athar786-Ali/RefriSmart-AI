@@ -358,17 +358,17 @@ export default function LoginPage() {
                 </label>
                 <div className="flex h-16 items-center gap-3 rounded-2xl border border-slate-700/80
                                 bg-slate-800/60 focus-within:border-cyan-500/60
-                                focus-within:bg-slate-800 px-5 transition-all">
+                                focus-within:bg-slate-800 px-5 transition-all overflow-hidden">
                   <KeyRound className="h-5 w-5 text-slate-500 shrink-0" />
                   <input
                     ref={otpInputRef}
                     type="text" value={otp}
                     onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     placeholder="• • • • • •"
-                    className="flex-1 bg-transparent text-2xl font-black tracking-[0.5em]
+                    className="flex-1 min-w-0 bg-transparent text-2xl font-black tracking-[0.3em]
                                text-white outline-none placeholder:text-slate-700
                                placeholder:tracking-widest placeholder:font-normal
-                               placeholder:text-xl text-center"
+                               placeholder:text-xl text-center pr-[0.3em]"
                     required autoComplete="one-time-code" inputMode="numeric"
                   />
                 </div>
