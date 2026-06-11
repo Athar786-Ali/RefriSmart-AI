@@ -210,6 +210,10 @@ function parseGeminiResponse(raw: string): ConsultantPayload | null {
 const isQuotaError = (msg: string) =>
   msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota") || msg.includes("rate");
 
+// 503 = temporary server overload — always retry with backoff
+const isOverloadError = (msg: string) =>
+  msg.includes("503") || msg.includes("UNAVAILABLE") || msg.includes("high demand") || msg.includes("overload");
+
 const isNotFoundError = (msg: string) =>
   msg.includes("404") || msg.toLowerCase().includes("not found");
 
@@ -283,13 +287,13 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
     // ── Try every Gemini model, with per-model retry on quota errors ─────────
     // Ordered: best → lightest. All are valid free-tier model IDs.
     const MODELS = [
-      "gemini-3.5-flash",                // Newest & best (2025)
-      "gemini-2.5-flash-preview-05-20",  // Latest preview
-      "gemini-2.0-flash",                // Primary free-tier
-      "gemini-2.0-flash-lite",           // Lighter quota bucket
-      "gemini-1.5-flash",                // Stable classic
-      "gemini-1.5-flash-8b",             // Ultra-light
-      "gemini-1.5-pro",                  // High quality
+      "gemini-3.5-flash",         // Best — retries on 503 (temporary overload)
+      "gemini-2.0-flash",         // Free-tier fallback
+      "gemini-2.0-flash-lite",    // Lighter quota
+      "gemini-2.5-flash-preview-05-20",  // Preview fallback
+      "gemini-1.5-flash",         // Classic stable
+      "gemini-1.5-flash-8b",      // Ultra-light
+      "gemini-1.5-pro",           // High quality
     ];
 
     const MAX_RETRIES_PER_MODEL = 3;
@@ -330,20 +334,32 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
           lastModelError = String(err?.message || err || "Unknown error");
 
           if (isNotFoundError(lastModelError)) {
-            console.warn(`[AI] Model not found / not available: ${model} — skipping`);
+            console.warn(`[AI] Model not available: ${model} — skipping`);
             break;
           }
 
-          if (isQuotaError(lastModelError)) {
-            allQuotaExhausted = true; // Keep flag — still all quota
+          if (isOverloadError(lastModelError)) {
+            // 503 = temporary server overload — retry with longer wait
+            const waitMs = Math.min(15000 * attempt, 60000); // 15s, 30s, 45s
+            if (attempt < MAX_RETRIES_PER_MODEL) {
+              console.warn(`[AI] ${model} overloaded (503). Waiting ${waitMs / 1000}s then retrying (${attempt + 1}/${MAX_RETRIES_PER_MODEL})...`);
+              await new Promise((r) => setTimeout(r, waitMs));
+              continue;
+            } else {
+              console.warn(`[AI] ${model} still overloaded after ${MAX_RETRIES_PER_MODEL} retries. Trying next model.`);
+              allQuotaExhausted = false; // 503 is NOT a quota issue
+              break;
+            }
+          }
 
+          if (isQuotaError(lastModelError)) {
+            allQuotaExhausted = true;
             // Honour the Retry-After hint from the API response
             const retryMatch = lastModelError.match(/retry[^0-9]*?(\d+)[\s.]/i)
               || lastModelError.match(/retryDelay.*?(\d+)/i);
             const waitMs = retryMatch
               ? Math.min(Number(retryMatch[1]) * 1000 + 1000, 65000)
               : Math.min(8000 * attempt, 32000); // 8s, 16s, 24s
-
             if (attempt < MAX_RETRIES_PER_MODEL) {
               console.warn(`[AI] Quota hit on ${model}. Waiting ${waitMs / 1000}s then retrying (${attempt + 1}/${MAX_RETRIES_PER_MODEL})...`);
               await new Promise((r) => setTimeout(r, waitMs));
