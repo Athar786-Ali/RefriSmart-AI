@@ -76,6 +76,13 @@
 - [Data Privacy & Compliance](#-data-privacy--compliance)
 - [Package Scripts Reference](#-package-scripts-reference)
 - [Changelog](#-changelog)
+- [Business Impact](#-business-impact)
+- [Interview Talking Points](#-interview-talking-points)
+- [API Error Codes Reference](#-api-error-codes-reference)
+- [Email Templates](#-email-templates)
+- [Webhook & Payment Security](#-webhook--payment-security)
+- [Error Handling Architecture](#-error-handling-architecture)
+- [Local Development Tips](#-local-development-tips)
 
 ---
 
@@ -1576,6 +1583,348 @@ All notable changes to RefriSmart-AI are documented here.
 - ✅ Appliance sell/pickup request flow
 - ✅ Local SEO (JSON-LD, sitemap, geo-targeting)
 - ✅ Vercel serverless deployment
+
+---
+
+## 📈 Business Impact
+
+RefriSmart-AI was built to solve **real operational pain points** for a physical appliance repair business. Here's the measurable difference the platform delivers:
+
+| Problem Before | Solution Delivered | Business Outcome |
+|---|---|---|
+| Customers described faults over phone — hard to triage | AI Vision diagnosis before booking | Technicians arrive prepared; fewer wasted visits |
+| Zero visibility into daily bookings and revenue | Live admin dashboard with stats | Owner can monitor operations from any device |
+| Manual cash collection at doorstep | Razorpay ₹349 visiting fee upfront | Eliminates no-shows; guarantees technician visit commitment |
+| No online presence beyond JustDial listing | Full-stack web app with JSON-LD SEO | Discoverable on Google local searches for Bhagalpur |
+| Paper-based service records | PostgreSQL with full ServiceEvent audit trail | Every job has a permanent, queryable history |
+| Customers couldn't track repair status | Real-time status updates via admin dashboard | Reduced inbound "where's my technician?" calls |
+| Old appliances had no resale channel | Sell & Refurbish marketplace | New revenue stream — refurbished appliances re-listed for sale |
+| Trust gap with first-time customers | Star ratings + review system visible in admin | Owner can monitor service quality and technician performance |
+
+> 💡 **Key insight**: Collecting the ₹349 visiting fee online (rather than cash at door) acts as a **commitment signal** — it filters out low-intent bookings and ensures the technician's time is respected. This single change meaningfully reduces no-show rates.
+
+---
+
+## 🎤 Interview Talking Points
+
+If you're showcasing this project in a technical interview, here are the strongest talking points organized by topic:
+
+### System Design
+- **Serverless architecture**: Chose Vercel Serverless Functions over a traditional always-on server to achieve zero idle cost — only pay when the function runs
+- **Stateless auth**: JWT in HTTP-only cookies means no session store (Redis/Memcached) is needed — the server can scale horizontally without any sticky-session concern
+- **Monorepo trade-offs**: Co-locating frontend and backend simplifies CI/CD (single repo, single Vercel project config) at the cost of slightly blurred boundaries — accepted for a solo-developer project of this scale
+- **Prisma as abstraction layer**: Using Prisma ORM means the underlying DB could be swapped (e.g., from Neon to PlanetScale) with minimal code changes — only the `DATABASE_URL` and connection config change
+
+### AI Integration
+- **Why Gemini over OpenAI?** Google Gemini Flash has a generous free tier (1,500 req/day), native multimodal support (images + video in a single API call), and lower latency for short diagnostic prompts
+- **Fallback resilience**: The 4-tier fallback (3 Gemini models → rule engine) ensures **100% uptime for diagnostics** even during API outages — this is a deliberate design decision, not an afterthought
+- **Prompt engineering**: Structured JSON output format in the prompt ensures the frontend receives a consistent schema regardless of which Gemini model responds — no brittle regex parsing
+- **File API vs base64**: Used Gemini's File API with Cloudinary CDN URLs instead of base64-encoding media — avoids the 2x payload overhead and stays within Gemini's inline data limits
+
+### Database Design
+- **UUID primary keys**: Chose UUIDs over auto-increment integers to prevent ID enumeration attacks and to support potential future multi-database sharding
+- **ServiceEvent as audit trail**: Instead of overwriting the `status` field, every transition appends a new `ServiceEvent` row — this gives a **full replay-able history** of every booking's lifecycle without any triggers or additional complexity
+- **Nullable `userId` on ServiceBooking**: Allows the same model to handle both guest and authenticated bookings — no separate guest table, no code duplication
+
+### Security
+- **Why HTTP-only cookies over localStorage?** LocalStorage is accessible by any JS on the page — an XSS attack can steal tokens. HTTP-only cookies are invisible to JS and automatically sent by the browser
+- **bcryptjs salting**: Each user gets a unique salt — even if two users have the same password, their hashes are different, preventing rainbow table attacks
+- **Role guard middleware**: Implemented as a separate Express middleware function — adding a new admin route requires only one decorator, not duplicated auth logic
+
+### Performance
+- **Next.js App Router**: Server Components render on the server and send HTML — no JS bundle for static content, better SEO, faster TTFB
+- **Cloudinary CDN**: Zero media bandwidth from the API server — all images/videos served from Cloudinary's global edge, removing a major bottleneck
+- **Connection pooling on serverless**: Neon's pgBouncer pooler handles connection reuse across cold-started serverless function invocations — without this, each function cold-start would create a new DB connection, exhausting the pool in seconds
+
+---
+
+## 🔴 API Error Codes Reference
+
+All API errors follow a consistent JSON structure:
+
+```json
+{
+  "success": false,
+  "message": "Human-readable error description",
+  "code": "MACHINE_READABLE_CODE"
+}
+```
+
+### HTTP Status Codes Used
+
+| HTTP Status | Meaning | When It Occurs |
+|---|---|---|
+| `200 OK` | Success | Standard successful response |
+| `201 Created` | Resource created | New user registered, booking created, order placed |
+| `400 Bad Request` | Validation error | Missing required fields, invalid format |
+| `401 Unauthorized` | Not authenticated | JWT missing, expired, or invalid |
+| `403 Forbidden` | Not authorized | Valid JWT but insufficient role (e.g., non-admin hitting admin route) |
+| `404 Not Found` | Resource not found | Booking ID, user ID, or product ID does not exist |
+| `409 Conflict` | Duplicate resource | Email already registered, OTP already used |
+| `422 Unprocessable Entity` | Business logic failure | Payment verification failed, OTP incorrect |
+| `429 Too Many Requests` | Rate limited | Gemini API quota exceeded (handled by fallback internally) |
+| `500 Internal Server Error` | Unexpected server error | Unhandled exception caught by central error middleware |
+
+### Common Error Codes
+
+| Code | Description |
+|---|---|
+| `AUTH_TOKEN_MISSING` | No JWT cookie present in request |
+| `AUTH_TOKEN_INVALID` | JWT signature verification failed |
+| `AUTH_TOKEN_EXPIRED` | JWT has passed its expiry time |
+| `USER_NOT_FOUND` | No user matches the given ID or email |
+| `EMAIL_ALREADY_EXISTS` | Registration attempt with a duplicate email |
+| `OTP_INVALID` | Submitted OTP does not match stored OTP |
+| `OTP_EXPIRED` | OTP TTL has passed — must request a new one |
+| `BOOKING_NOT_FOUND` | Booking ID does not exist in the database |
+| `PAYMENT_VERIFICATION_FAILED` | Razorpay signature mismatch — possible tampering |
+| `AI_ALL_MODELS_FAILED` | All Gemini models failed; rule-based fallback was used |
+| `MEDIA_UPLOAD_FAILED` | Cloudinary upload returned an error |
+| `INSUFFICIENT_STOCK` | Product order quantity exceeds available stock |
+| `ROLE_REQUIRED_ADMIN` | Endpoint requires ADMIN role; current user does not have it |
+
+---
+
+## 📧 Email Templates
+
+RefriSmart-AI sends **transactional emails** for key events using Nodemailer + Gmail SMTP. All emails are sent as **HTML templates** with the Golden Refrigeration branding.
+
+### Email Events & Triggers
+
+| Event | Trigger | Recipient |
+|---|---|---|
+| **Email OTP Verification** | User registers → calls `/auth/send-verify-otp` | New user |
+| **Password Reset OTP** | User calls `/auth/send-reset-otp` | Account owner |
+| **Booking Confirmation** | Booking status moves to `PAID` | Customer (guest or registered) |
+| **Technician Assignment** | Admin assigns technician → status: `ASSIGNED` | Customer |
+| **Job Completion OTP** | Admin triggers completion flow | Customer (OTP to hand to technician) |
+| **Sell Request Offer** | Admin sends offer on sell request | Seller |
+
+### Email Template Structure
+
+```html
+<!-- OTP Verification Email (simplified) -->
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+  <div style="background: #1a1a2e; padding: 20px; text-align: center;">
+    <h1 style="color: #fff;">🔧 Golden Refrigeration</h1>
+  </div>
+  <div style="padding: 30px; background: #f9f9f9;">
+    <h2>Your OTP Code</h2>
+    <p>Use the following code to verify your email address:</p>
+    <div style="background: #fff; border: 2px solid #e0e0e0; border-radius: 8px;
+                padding: 20px; text-align: center; font-size: 32px;
+                font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">
+      {{OTP_CODE}}
+    </div>
+    <p style="color: #666; font-size: 12px;">This code expires in 10 minutes.</p>
+  </div>
+</div>
+```
+
+### Email Configuration Best Practices
+
+- **Use Gmail App Passwords** — not your regular Gmail password. Enable 2-Step Verification → Generate an App Password under *Google Account → Security*
+- **SMTP_PORT 587** (STARTTLS) is preferred over 465 (SSL) for Gmail compatibility with Nodemailer
+- **Test locally** with [Mailtrap](https://mailtrap.io/) — a fake SMTP server that catches all emails without delivering them, perfect for development
+- **Rate limiting**: Gmail SMTP allows ~500 emails/day on a free account — more than sufficient for a local business platform at this scale
+
+---
+
+## 🔐 Webhook & Payment Security
+
+Razorpay payment verification is the most security-critical flow in the platform. Here's how it's implemented:
+
+### Payment Verification Flow
+
+```
+1. Backend creates Razorpay order (POST /api/booking/:id/razorpay)
+   → Razorpay returns { orderId, amount, currency }
+   → orderId stored in ServiceBooking.razorpayOrderId
+
+2. Frontend initialises Razorpay checkout with orderId
+   → Customer completes payment in Razorpay modal
+   → Razorpay returns { razorpay_order_id, razorpay_payment_id, razorpay_signature }
+
+3. Frontend sends all three values to backend (POST /api/booking/:id/razorpay/verify)
+
+4. Backend recomputes expected signature:
+   expectedSig = HMAC-SHA256(
+     razorpay_order_id + "|" + razorpay_payment_id,
+     RAZORPAY_KEY_SECRET
+   )
+
+5. If expectedSig === razorpay_signature → payment is genuine
+   Booking status updated to PAID in the database
+
+6. If signature mismatch → 422 PAYMENT_VERIFICATION_FAILED
+   No booking update; potential fraud logged
+```
+
+### Why This Approach Is Secure
+
+| Threat | Mitigation |
+|---|---|
+| **Replay attack** (reusing old payment proof) | Each `razorpay_order_id` is unique and single-use — once verified, it cannot be re-submitted |
+| **Forged payment** (fake payment_id) | HMAC-SHA256 signature binds the payment to the specific order — can't forge without `RAZORPAY_KEY_SECRET` |
+| **Man-in-the-middle** (intercepting and modifying) | HTTPS enforced on both Vercel frontend and backend — all traffic encrypted in transit |
+| **Key exposure** | `RAZORPAY_KEY_SECRET` only lives in `backend/.env` (server-side) — never sent to the browser |
+
+> ⚠️ **Important**: The `NEXT_PUBLIC_RAZORPAY_KEY_ID` (prefixed `NEXT_PUBLIC_`) is intentionally exposed to the browser — this is the **public key** used only to initialise the Razorpay checkout UI. The **secret key** never leaves the server.
+
+---
+
+## 🏗️ Error Handling Architecture
+
+RefriSmart-AI uses a **centralized error handling** pattern across the entire Express backend:
+
+### Error Flow
+
+```
+Route Handler throws or calls next(error)
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│      Central Error Middleware           │
+│  (last middleware in src/index.ts)      │
+│                                         │
+│  1. Log error (with stack in dev)       │
+│  2. Determine HTTP status code          │
+│  3. Sanitize message for prod           │
+│  4. Return { success: false, message }  │
+└─────────────────────────────────────────┘
+```
+
+### Custom Error Class
+
+```typescript
+// src/utils/AppError.ts
+export class AppError extends Error {
+  public statusCode: number;
+  public code: string;
+  public isOperational: boolean;
+
+  constructor(message: string, statusCode: number, code: string) {
+    super(message);
+    this.statusCode = statusCode;
+    this.code = code;
+    this.isOperational = true; // distinguishes from programming errors
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+// Usage in controller:
+if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+```
+
+### Process-Level Safety
+
+```typescript
+// src/index.ts — prevents silent crashes in production
+process.on('uncaughtException', (error) => {
+  console.error('UNCAUGHT EXCEPTION:', error);
+  process.exit(1); // exit cleanly; Vercel will restart the function
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION:', reason);
+  // Don't exit — log and continue; Vercel will catch fatal crashes
+});
+```
+
+### Prisma Error Handling
+
+Prisma throws typed errors that the central middleware maps to appropriate HTTP responses:
+
+| Prisma Error Code | Mapped HTTP Status | Typical Cause |
+|---|---|---|
+| `P2002` (Unique constraint) | `409 Conflict` | Duplicate email registration |
+| `P2025` (Record not found) | `404 Not Found` | Querying a deleted or non-existent record |
+| `P2003` (Foreign key constraint) | `400 Bad Request` | Referencing a non-existent related record |
+| `P2016` (Query interpretation) | `400 Bad Request` | Malformed query (usually a bug — logged in detail) |
+
+---
+
+## 💡 Local Development Tips
+
+Practical tips for running RefriSmart-AI locally without issues:
+
+### Speed Up Development
+
+```bash
+# Use Prisma Studio to inspect the DB visually (avoids raw SQL)
+npx prisma studio
+# Opens at http://localhost:5555
+
+# Watch mode for backend (auto-reloads on file save)
+npm run dev   # Already uses ts-node-dev or nodemon internally
+
+# Run both frontend and backend concurrently (if you add a root package.json script)
+npx concurrently "cd backend && npm run dev" "cd frontend && npm run dev"
+```
+
+### Fake SMTP for Local Email Testing
+
+Instead of sending real emails locally, use [Mailtrap](https://mailtrap.io/):
+
+```env
+# backend/.env — Mailtrap config for local dev
+SMTP_HOST=sandbox.smtp.mailtrap.io
+SMTP_PORT=2525
+SMTP_USER=<your_mailtrap_user>
+SMTP_PASS=<your_mailtrap_password>
+```
+
+All OTP emails are caught by Mailtrap's inbox — no real emails sent during development.
+
+### Seed the Database Quickly
+
+```bash
+# Seed demo products (built-in admin endpoint)
+curl -X POST http://localhost:5001/api/admin/seed-demo-products \
+  -H "Cookie: token=<admin_jwt>"
+
+# Reset and re-push the schema (WARNING: destroys all data)
+cd backend && npx prisma migrate reset
+```
+
+### Disable Razorpay in Local Dev
+
+Add a `SKIP_PAYMENT=true` env flag and wrap payment steps conditionally — useful for testing the full booking flow without needing a real Razorpay account. Alternatively, use Razorpay's test mode keys (prefix: `rzp_test_`) which accept the standard test card without real charges.
+
+### Environment Variable Validation
+
+Add this snippet at the top of `backend/src/index.ts` to catch missing env vars at startup rather than at runtime:
+
+```typescript
+const REQUIRED_ENV = [
+  'DATABASE_URL', 'JWT_SECRET', 'GEMINI_API_KEY',
+  'CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET',
+  'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET',
+  'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS',
+];
+
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+}
+```
+
+### VS Code Recommended Extensions
+
+```json
+// .vscode/extensions.json
+{
+  "recommendations": [
+    "prisma.prisma",            // Prisma schema syntax highlighting
+    "dbaeumer.vscode-eslint",   // ESLint integration
+    "esbenp.prettier-vscode",   // Code formatting
+    "rangav.vscode-thunder-client", // REST API testing inside VS Code
+    "bradlc.vscode-tailwindcss",    // Tailwind CSS IntelliSense
+    "ms-vscode.vscode-typescript-next" // Latest TypeScript support
+  ]
+}
+```
 
 ---
 
