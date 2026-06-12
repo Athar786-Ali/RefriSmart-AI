@@ -59,6 +59,10 @@
 - [Performance Optimizations](#-performance-optimizations)
 - [Supported Brands](#%EF%B8%8F-supported-brands)
 - [Bilingual AI Support](#-bilingual-ai-support)
+- [API Response Examples](#-api-response-examples)
+- [Notification System](#-notification-system)
+- [Frontend Context & State](#-frontend-context--state-management)
+- [Pincode Dispatch Algorithm](#-pincode-dispatch-algorithm)
 - [Roadmap](#%EF%B8%8F-roadmap)
 - [Contributing](#-contributing)
 - [License](#-license)
@@ -548,6 +552,113 @@ All routes are prefixed with `/api`. Protected routes require a valid JWT cookie
 
 ---
 
+## 📋 API Response Examples
+
+All API endpoints return JSON with a consistent `{ success, message, data }` envelope. Below are representative payloads for the most commonly used routes.
+
+### Registration Success (`POST /api/auth/register`)
+
+```json
+{
+  "success": true,
+  "message": "Account created. OTP sent to your email — please verify.",
+  "user": {
+    "id": "a3f2c1d4-7b8e-4c2a-9f1d-3e6b8a2c5d0e",
+    "name": "Rajan Kumar",
+    "email": "rajan@example.com",
+    "role": "CUSTOMER",
+    "isAccountVerified": false
+  }
+}
+```
+
+### AI Diagnosis Result (`POST /api/ai/diagnose`)
+
+```json
+{
+  "success": true,
+  "diagnosis": {
+    "id": "d9e1b3f2-4a7c-4e3b-8f2a-1d6e9c3b7a0f",
+    "appliance": "Refrigerator",
+    "issue": "Not cooling, making a humming noise",
+    "faultIdentified": "Condenser coil is dirty causing overheating; compressor working overtime",
+    "severity": "moderate",
+    "safetyWarnings": [
+      "Unplug the appliance before cleaning the coils",
+      "Do not use sharp objects near the refrigerant lines"
+    ],
+    "repairSteps": [
+      "Clean condenser coils with a coil brush",
+      "Check and clean condenser fan motor",
+      "Test compressor amperage draw"
+    ],
+    "estimatedCostRange": { "min": 800, "max": 2500, "currency": "INR" },
+    "fallbackUsed": false,
+    "mediaUrl": "https://res.cloudinary.com/your-cloud/image/upload/v1/diagnoses/fridge_photo.jpg",
+    "createdAt": "2026-06-12T18:15:00.000Z"
+  }
+}
+```
+
+### Service Booking Created (`POST /api/booking/create`)
+
+```json
+{
+  "success": true,
+  "booking": {
+    "id": "b7c9d2e1-5f3a-4b8c-9e1d-2a7f6c4b0e3d",
+    "appliance": "AC",
+    "issue": "Not cooling even at 16°C setting",
+    "status": "PENDING",
+    "scheduledAt": "2026-06-15T10:00:00.000Z",
+    "address": "123 MG Road, Tatarpur, Bhagalpur, Bihar — 812001",
+    "contactName": "Rajan Kumar",
+    "contactPhone": "9876543210",
+    "finalCost": null
+  },
+  "razorpayOrder": {
+    "id": "order_Pq7mNxAbCd1234",
+    "amount": 34900,
+    "currency": "INR"
+  }
+}
+```
+
+### Admin Dashboard Stats (`GET /api/admin/stats`)
+
+```json
+{
+  "success": true,
+  "stats": {
+    "totalBookings": 248,
+    "pendingBookings": 12,
+    "completedBookings": 201,
+    "totalRevenue": 86548,
+    "totalUsers": 184,
+    "totalOrders": 67,
+    "totalDiagnoses": 412,
+    "totalSellRequests": 34,
+    "topAppliances": [
+      { "appliance": "Refrigerator", "count": 102 },
+      { "appliance": "AC", "count": 87 },
+      { "appliance": "Washing Machine", "count": 59 }
+    ]
+  }
+}
+```
+
+### Error Response (generic)
+
+```json
+{
+  "success": false,
+  "message": "Booking not found",
+  "code": "BOOKING_NOT_FOUND"
+}
+```
+
+---
+
 ## 🤖 AI Diagnostic Flow
 
 ```
@@ -831,6 +942,45 @@ RefriSmart-AI implements **defense-in-depth** security across every layer:
 | **File Uploads** | Multer + Cloudinary | Files processed in memory with size/type limits; stored on CDN, not on the API server |
 | **Error Handling** | Centralized error middleware | Stack traces never exposed to clients in production; generic error messages returned |
 | **Graceful Shutdown** | Process handlers | `uncaughtException` and `unhandledRejection` handlers prevent silent crashes |
+
+---
+
+## 🔔 Notification System
+
+RefriSmart-AI includes an **in-app notification system** for technicians, stored in PostgreSQL via the `Notification` model. Notifications are created server-side whenever a job-relevant event occurs.
+
+### Notification Triggers
+
+| Event | Recipient | Message Content |
+|---|---|---|
+| Admin assigns a technician to a booking | Technician (by email) | `"New job assigned: {appliance} repair at {address}"` |
+| Booking status changes | Technician | `"Your job #{id} status updated to {status}"` |
+| Sell offer accepted by customer | Admin dashboard | Visible directly in the admin sell-request panel |
+| Job-completion OTP sent | Customer (via email) | OTP email; notification for technician on portal |
+
+### Notification Endpoints
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/technician/notifications` | ✅ Technician | Fetch all unread notifications for the logged-in technician |
+| `PUT` | `/api/technician/notifications/:id/read` | ✅ Technician | Mark a specific notification as read |
+
+### Notification Model (Prisma)
+
+```prisma
+model Notification {
+  id        String   @id @default(uuid())
+  userEmail String           // Technician's email — used as lookup key
+  message   String           // Human-readable notification text
+  bookingId String           // Linked booking for context/navigation
+  createdAt DateTime @default(now())
+  read      Boolean  @default(false)
+}
+```
+
+> 💡 **Design note**: Notifications are keyed by `userEmail` (not `userId`) to support future expansion where notifications could target unregistered technician contacts. The `bookingId` field lets the frontend deep-link directly to the relevant job.
+
+> 📌 **Roadmap**: FCM (Firebase Cloud Messaging) push notifications are planned — so technicians receive alerts even when the browser is closed or the app is not open.
 
 ---
 
@@ -1233,6 +1383,136 @@ Key architectural and coding patterns used throughout the codebase:
 
 ---
 
+## 🌐 Frontend Context & State Management
+
+The frontend uses **React Context API** for lightweight global state — a deliberate choice to avoid Redux/Zustand overhead for a focused, single-business application.
+
+### Context Providers (`frontend/src/context/`)
+
+| Context | File | Purpose | Key Values Exposed |
+|---|---|---|---|
+| `AuthContext` | `AuthContext.tsx` | Global logged-in user state, persisted across page navigations | `user`, `isLoading`, `setUser()`, `logout()` |
+
+### Auth Initialization Flow
+
+```
+App boots → Root layout mounts <AuthProvider>
+         │
+         ▼
+  AuthContext calls GET /api/auth/me on mount
+  (JWT cookie is sent automatically by the browser)
+         │
+         ├── 200 OK  → sets user state → authenticated UI renders
+         │
+         └── 401     → user = null   → redirects to /login
+```
+
+### Data Fetching Pattern
+
+RefriSmart-AI uses **native `fetch`** inside `useEffect` hooks — no SWR or React Query — keeping the bundle lean for a content-focused frontend.
+
+```typescript
+// Standard authenticated fetch pattern used throughout the app
+useEffect(() => {
+  const fetchData = async () => {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/endpoint`, {
+      credentials: 'include', // sends the JWT cookie automatically
+    });
+    const data = await res.json();
+    if (data.success) setItems(data.items);
+    else toast.error(data.message);
+  };
+  fetchData();
+}, []);
+```
+
+### Toast Notification System
+
+User feedback is handled by **Sonner** (mounted once in `layout.tsx` via `<Toaster />`):
+
+```typescript
+import { toast } from 'sonner';
+
+toast.success('Booking confirmed! Check your email.');
+toast.error('Payment failed — please try again.');
+toast.loading('Uploading your photo to AI engine...');
+toast.promise(uploadPromise, {
+  loading: 'Diagnosing your appliance...',
+  success: 'AI diagnosis ready!',
+  error: 'Diagnosis failed. Falling back to rule engine.',
+});
+```
+
+### `"use client"` Boundary Strategy
+
+RefriSmart-AI follows Next.js App Router best practices for the Server/Client Component split:
+
+| Component Type | Directive | Examples |
+|---|---|---|
+| **Page shells** (layout, SEO, static content) | Server Component (no directive) | `layout.tsx`, homepage sections |
+| **Interactive UI** (forms, modals, payment flow) | `"use client"` | Booking form, AI upload, payment button |
+| **Admin dashboard tabs** | `"use client"` | `_services.tsx`, `_orders.tsx`, `_dashboard.tsx` |
+| **Auth-gated pages** | `"use client"` | `/admin/page.tsx`, `/technician/page.tsx` |
+
+> 💡 **Key benefit**: Only interactive components ship JavaScript to the browser. Static sections (hero, service cards, contact info) are rendered as pure HTML — improving TTFB and Lighthouse scores.
+
+---
+
+## 📍 Pincode Dispatch Algorithm
+
+When an admin assigns a technician to a service booking, the system uses a **pincode-based matching** strategy:
+
+```
+Admin opens booking in dashboard
+         │
+         ▼
+System fetches all active Technicians (active: true)
+         │
+         ▼
+Technicians are sorted/filtered by pincode proximity
+  to the customer's service address pincode
+         │
+         ▼
+Admin selects the best-match technician from the list
+(PUT /api/admin/assign-technician/:bookingId)
+         │
+         ▼
+ServiceAssignment record created:
+  { bookingId, technicianId, pincode, routeNote, assignedAt }
+         │
+         ▼
+Booking status → ASSIGNED
+In-app Notification created for technician
+```
+
+### Technician Model
+
+```prisma
+model Technician {
+  id          String   @id @default(uuid())
+  name        String
+  phone       String   @unique
+  email       String?  @unique
+  role        Role     @default(TECHNICIAN)
+  pincode     String               // Primary dispatch zone
+  active      Boolean  @default(true)   // Can be deactivated without deletion
+  createdAt   DateTime @default(now())
+  assignments ServiceAssignment[]
+}
+```
+
+### Pincode Coverage Example
+
+| Technician | Home Pincode | Zones Covered |
+|---|---|---|
+| Mohd. Arif | 812001 | Bhagalpur City, Tatarpur, Adampur |
+| Ravi Kumar | 813210 | Sabour, Jagdishpur, Naupur |
+| Anuj Singh | 813203 | Naugachia, Gopalpura |
+
+> 💡 **Future enhancement**: Technician live-location tracking via Google Maps API is on the roadmap — this will enable real-time routing rather than pincode-level matching.
+
+---
+
 ## ❓ FAQ
 
 **Q: Is this a real production application or just a demo?**
@@ -1572,6 +1852,23 @@ All notable changes to RefriSmart-AI are documented here.
 - ✅ **Bilingual AI responses** — auto-detects English vs Hinglish
 - ✅ **Refurbished product marketplace** — sell requests auto-list as products after acceptance
 - ✅ Upgraded to **Express v5**, **Prisma v7**, **@google/genai v1.44**
+
+### [v2.1.0] — June 2026
+**Dependency Upgrades & Stability Release**
+- ✅ Upgraded **@google/genai** to v1.44 — improved Gemini API stability and File API support
+- ✅ Upgraded **Prisma** to v7.4 — faster Rust query engine and new `@prisma/adapter-pg` for serverless
+- ✅ Upgraded **Express** to v5.2.1 — native async error propagation (no more `try/catch` wrappers needed)
+- ✅ Upgraded **Next.js** to 16.1.6 — latest App Router stability and caching fixes
+- ✅ Upgraded **bcryptjs** to v3.0.3 — improved salt-round performance
+- ✅ Added `react-hot-toast` alongside Sonner for legacy component compatibility
+- ✅ Added `@prisma/adapter-pg` for direct PostgreSQL adapter (serverless connection pooling)
+- ✅ `SellOffer` pickup-slot scheduling — admin can now specify a pickup date/time with the offer
+- ✅ `DocumentLog` model — every generated invoice/QR is now tracked with full metadata
+- ✅ `fallbackUsed` flag added to all `DiagnosisLog` records — frontend can display a fallback indicator
+- ✅ Backend `npm run dev` auto-kills port 5001 before starting — eliminates "EADDRINUSE" errors
+- 🔧 Fixed: Prisma `adapter-pg` integration for Neon serverless connection pooling
+- 🔧 Fixed: CORS cookie `sameSite` policy for cross-subdomain Vercel deployments
+- 🔧 Fixed: Multer v2 breaking change — `fileFilter` callback signature updated
 
 ### [v1.0.0] — 2025
 **Initial production launch**
