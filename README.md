@@ -22,6 +22,7 @@
   <img src="https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel&logoColor=white" />
   <img src="https://img.shields.io/badge/License-MIT-brightgreen?style=for-the-badge" />
   <img src="https://img.shields.io/badge/Status-Production-success?style=for-the-badge" />
+  <img src="https://img.shields.io/github/stars/Athar786-Ali/RefriSmart-AI?style=for-the-badge&logo=github&color=yellow" />
 </p>
 
 ### 🌐 [Live Demo → refrismart-ai.vercel.app](https://refrismart-ai.vercel.app)
@@ -42,6 +43,8 @@
 - [Getting Started](#-getting-started)
 - [API Reference](#-api-reference)
 - [AI Diagnostic Flow](#-ai-diagnostic-flow)
+- [AI Resilience — Multi-Model Fallback](#-ai-resilience--multi-model-fallback-strategy)
+- [Gemini Multi-Key Rotation](#-gemini-multi-key-rotation)
 - [Database Schema](#-database-schema)
 - [Invoice & Document Generation](#-invoice--document-generation)
 - [Operational Analytics](#-operational-analytics)
@@ -55,7 +58,8 @@
 - [Contact](#-contact)
 - [Screenshots & UI Preview](#%EF%B8%8F-screenshots--ui-preview)
 - [Security Architecture](#-security-architecture)
-- [AI Resilience — Multi-Model Fallback](#-ai-resilience--multi-model-fallback-strategy)
+- [Cross-Browser Auth (Safari Fix)](#-cross-browser-auth--safari-fix)
+- [CORS & Session Resilience](#-cors--session-resilience)
 - [Performance Optimizations](#-performance-optimizations)
 - [Supported Brands](#%EF%B8%8F-supported-brands)
 - [Bilingual AI Support](#-bilingual-ai-support)
@@ -123,12 +127,14 @@ How RefriSmart-AI compares to traditional approaches and generic booking platfor
 | Pincode-based technician auto-dispatch | ❌ | ❌ | ✅ |
 | Appliance sell & refurbishment marketplace | ❌ | ❌ | ✅ |
 | Offline-safe rule-based AI fallback | ❌ | ❌ | ✅ |
+| Gemini multi-key rotation (zero API downtime) | ❌ | ❌ | ✅ |
 | Guest booking (no account required) | ✅ Phone | ⚠️ Partial | ✅ |
 | OTP-verified job completion | ❌ | ❌ | ✅ |
 | Auto-generated PDF invoices with QR code | ❌ | ⚠️ Some | ✅ |
 | Technician portal with job notifications | ❌ | ⚠️ Some | ✅ |
 | Full audit trail (ServiceEvent) | ❌ | ❌ | ✅ |
 | Local SEO with JSON-LD structured data | ❌ | ❌ | ✅ |
+| Safari/cross-browser auth support | ❌ | ⚠️ Partial | ✅ |
 | Integrated payment gateway (Razorpay) | ❌ | ✅ | ✅ |
 
 > 💡 **The key differentiator**: No other local repair platform pre-diagnoses faults using multimodal AI before the technician visits — this directly reduces wasted site visits and improves first-fix rates.
@@ -139,6 +145,9 @@ How RefriSmart-AI compares to traditional approaches and generic booking platfor
 
 ### 🧠 AI-Powered Diagnostics (Core Innovation)
 Upload images or videos of a faulty appliance. The platform sends the media to **Google Gemini Vision**, which returns a structured diagnostic report — identifying the likely fault, severity, recommended repair steps, and estimated cost bracket. All diagnoses are stored with full history per user.
+
+### 🔑 Gemini Multi-Key Rotation
+The platform maintains a **pool of multiple Gemini API keys** and rotates through them intelligently. If one key hits its rate limit or returns an error, the system automatically switches to the next available key — achieving near-zero API downtime even under heavy diagnostic loads.
 
 ### 🛠️ Service Booking System
 End-to-end service request flow: customers select appliance type, describe the issue, choose a time slot, and confirm with a **₹349 visiting charge** paid via Razorpay. Technicians are notified and admins can update service status in real-time.
@@ -155,7 +164,7 @@ A fully tabbed admin panel with role-based access to:
 Visiting fees and product purchases handled through Razorpay's payment gateway, with order IDs tracked in the database for reconciliation.
 
 ### 🔐 Secure Authentication
-JWT-based stateless authentication with **email OTP verification** (Nodemailer). Passwords hashed with bcryptjs. Cookie-based token delivery with protected API routes via custom middleware.
+JWT-based stateless authentication with **email OTP verification** (Nodemailer). Passwords hashed with bcryptjs. Cookie-based token delivery with protected API routes via custom middleware. **Token-based fallback** for Safari and cross-origin environments where third-party cookies are blocked.
 
 ### 📦 Product Catalog & Sell Flow
 Users can browse refrigeration parts and products, place orders, or submit an old appliance for pickup with valuation — creating a circular economy within the platform.
@@ -186,6 +195,7 @@ Admin-only analytics endpoint delivers revenue breakdowns, technician performanc
 ┌─────────────────────────────────────────────────────────────────┐
 │                         CLIENT (Browser)                        │
 │              Next.js 16 App Router — Vercel CDN                 │
+│         (Cookie auth + Token-based fallback for Safari)         │
 └────────────────────────────┬────────────────────────────────────┘
                              │ HTTPS REST API
 ┌────────────────────────────▼────────────────────────────────────┐
@@ -195,13 +205,14 @@ Admin-only analytics endpoint delivers revenue breakdowns, technician performanc
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
 │  │  Auth Layer  │  │  AI Layer    │  │   Business Logic      │  │
 │  │  JWT + OTP   │  │  Gemini SDK  │  │  Services/Orders/     │  │
-│  │  bcryptjs    │  │  Cloudinary  │  │  Products/Admin       │  │
+│  │  bcryptjs    │  │  Key Rotator │  │  Products/Admin       │  │
+│  │  Token Auth  │  │  Cloudinary  │  │                       │  │
 │  └──────────────┘  └──────────────┘  └──────────────────────┘  │
 │                                                                  │
-│  ┌──────────────┐  ┌──────────────┐                             │
-│  │  Razorpay    │  │  Nodemailer  │                             │
-│  │  Payments    │  │  SMTP Email  │                             │
-│  └──────────────┘  └──────────────┘                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │  Razorpay    │  │  Nodemailer  │  │  Session Keepalive   │  │
+│  │  Payments    │  │  SMTP Email  │  │  & CORS Manager      │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
 └────────────────────────────┬────────────────────────────────────┘
                              │ Prisma ORM
 ┌────────────────────────────▼────────────────────────────────────┐
@@ -216,6 +227,8 @@ Admin-only analytics endpoint delivers revenue breakdowns, technician performanc
 - **Prisma ORM** — type-safe database queries with auto-generated TypeScript client
 - **Cloudinary CDN** — media stored and served from global CDN, not the API server
 - **Stateless auth** — JWTs in HTTP-only cookies; no session store needed
+- **Token-based auth fallback** — `Authorization: Bearer` header for Safari/cross-origin environments
+- **Gemini key pool** — multiple API keys rotated to eliminate rate-limit downtime
 
 ---
 
@@ -231,6 +244,7 @@ Admin-only analytics endpoint delivers revenue breakdowns, technician performanc
 | **Tailwind CSS** | v4 | Utility-first styling, mobile-first responsive design |
 | **Lucide React** | ^0.577 | Consistent SVG icon system |
 | **Sonner** | ^2.0.7 | Non-blocking toast notification system |
+| **React Hot Toast** | ^2.6.0 | Legacy component toast compatibility layer |
 | **React Player** | ^3.4 | Video playback for AI diagnosis media review |
 | **React QR Code** | ^2.0.18 | QR code generation for quick links |
 
@@ -242,8 +256,9 @@ Admin-only analytics endpoint delivers revenue breakdowns, technician performanc
 | **Express.js** | v5.2.1 | HTTP server & routing framework |
 | **TypeScript** | ^5.9 | Type safety for controllers, services, and middleware |
 | **Prisma ORM** | v7.4 | Database schema, migrations, and type-safe queries |
+| **@prisma/adapter-pg** | v7.4 | Direct PostgreSQL adapter for serverless connection pooling |
 | **PostgreSQL** | ^8.20 | Relational database (via `pg` driver) |
-| **@google/genai** | ^1.44 | Google Gemini Vision AI SDK |
+| **@google/genai** | ^1.44 | Google Gemini Vision AI SDK (multi-key pool support) |
 | **Cloudinary** | ^2.9 | Image & video cloud storage with CDN delivery |
 | **Razorpay** | ^2.9.6 | Payment gateway SDK — order creation & verification |
 | **Nodemailer** | ^8.0.6 | SMTP email for OTP and transactional messages |
@@ -303,10 +318,10 @@ RefriSmart-AI/
 │
 └── backend/                            # Express.js + Prisma API Server
     ├── src/
-    │   ├── index.ts                    # Server entry — middleware, routes, CORS
+    │   ├── index.ts                    # Server entry — middleware, routes, CORS, keepalive
     │   ├── controllers/
-    │   │   ├── authController.ts       # Register, login, OTP, JWT cookie management
-    │   │   ├── aiController.ts         # Gemini API integration — media upload & diagnosis
+    │   │   ├── authController.ts       # Register, login, OTP, JWT cookie + token management
+    │   │   ├── aiController.ts         # Gemini API integration — multi-key rotation, media upload
     │   │   ├── adminController.ts      # Full CRUD for all admin operations
     │   │   └── productController.ts    # Product listing, ordering, sell requests
     │   ├── routes/
@@ -314,9 +329,9 @@ RefriSmart-AI/
     │   │   ├── aiRoutes.ts
     │   │   ├── adminRoutes.ts
     │   │   └── productRoutes.ts
-    │   ├── middlewares/                # JWT auth guard, role check, error handler
+    │   ├── middlewares/                # JWT auth guard, role check, token auth, error handler
     │   ├── services/                   # Business logic decoupled from controllers
-    │   ├── config/                     # Cloudinary, Razorpay, Prisma client init
+    │   ├── config/                     # Cloudinary, Razorpay, Prisma client, Gemini key pool
     │   └── utils/                      # Reusable helpers (email templates, validators)
     │
     ├── prisma/
@@ -338,7 +353,7 @@ Make sure you have the following installed and accounts ready:
 - [PostgreSQL](https://www.postgresql.org/) (or a hosted DB like [Neon](https://neon.tech/))
 - [Cloudinary](https://cloudinary.com/) account — for media storage
 - [Razorpay](https://razorpay.com/) account — for payments
-- [Google AI Studio](https://aistudio.google.com/) account — for Gemini API key
+- [Google AI Studio](https://aistudio.google.com/) account — for Gemini API key(s)
 - Gmail account (with App Password enabled) — for OTP emails
 
 ---
@@ -375,8 +390,10 @@ CLOUDINARY_CLOUD_NAME="your_cloud_name"
 CLOUDINARY_API_KEY="your_api_key"
 CLOUDINARY_API_SECRET="your_api_secret"
 
-# Google Gemini AI
-GEMINI_API_KEY="your_google_gemini_api_key"
+# Google Gemini AI — add multiple keys for rotation (comma-separated)
+GEMINI_API_KEY="your_primary_gemini_key"
+GEMINI_API_KEY_2="your_secondary_gemini_key"   # optional — enables key rotation
+GEMINI_API_KEY_3="your_tertiary_gemini_key"    # optional — adds more headroom
 
 # Razorpay (payments)
 RAZORPAY_KEY_ID="your_razorpay_key_id"
@@ -387,6 +404,10 @@ SMTP_HOST="smtp.gmail.com"
 SMTP_PORT=587
 SMTP_USER="your_email@gmail.com"
 SMTP_PASS="your_gmail_app_password"
+
+# CORS
+ALLOWED_ORIGINS="https://refrismart-ai.vercel.app"
+NODE_ENV="production"
 ```
 
 **`frontend/.env.local`**
@@ -424,14 +445,14 @@ cd frontend && npm run dev
 
 ## 📡 API Reference
 
-All routes are prefixed with `/api`. Protected routes require a valid JWT cookie (`userAuth`) or admin role (`adminAuth`).
+All routes are prefixed with `/api`. Protected routes require a valid JWT cookie (`userAuth`) or admin role (`adminAuth`). Safari and cross-origin clients may pass the token as a `Bearer` token in the `Authorization` header instead.
 
 ### 🔐 Authentication
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | `POST` | `/auth/register` | ❌ | Register new user — triggers OTP email verification |
-| `POST` | `/auth/login` | ❌ | Email + password login — sets JWT cookie |
+| `POST` | `/auth/login` | ❌ | Email + password login — sets JWT cookie + returns token |
 | `POST` | `/auth/logout` | ❌ | Clears auth cookie |
 | `GET` | `/auth/me` | ✅ | Get currently logged-in user's profile |
 | `POST` | `/auth/send-verify-otp` | ✅ | Send email OTP to verify user's email address |
@@ -672,6 +693,7 @@ File streamed to Cloudinary → returns secure CDN URL
         │
         ▼
 Cloudinary URL + user's description sent to Gemini Vision API
+(with key rotation — picks next available key from pool)
         │
         ▼
 Gemini returns structured diagnosis:
@@ -686,6 +708,100 @@ Diagnosis stored in PostgreSQL (linked to user)
         ▼
 Result displayed to user with option to book a service
 ```
+
+---
+
+## 🧠 AI Resilience — Multi-Model Fallback Strategy
+
+The AI diagnostic engine is designed to **never fail silently**. If one model is unavailable or rate-limited, the system cascades through alternatives:
+
+```
+Request arrives at /api/ai/diagnose
+         │
+         ▼
+   ┌─────────────────────────────────────────────┐
+   │  Model 1: gemini-flash-lite-latest (Free)   │──✅──→ Return diagnosis
+   │  Fastest, lowest latency, free tier          │
+   └─────────────────────────┬───────────────────┘
+                             │ ❌ Failed / Rate-limited
+                             ▼
+   ┌─────────────────────────────────────────────┐
+   │  Model 2: gemini-flash-latest (Free)        │──✅──→ Return diagnosis
+   │  Higher quality, still within free quota     │
+   └─────────────────────────┬───────────────────┘
+                             │ ❌ Failed / Rate-limited
+                             ▼
+   ┌─────────────────────────────────────────────┐
+   │  Model 3: gemini-pro-latest (Paid)          │──✅──→ Return diagnosis
+   │  Highest quality, used as final AI attempt   │
+   └─────────────────────────┬───────────────────┘
+                             │ ❌ All AI models failed
+                             ▼
+   ┌─────────────────────────────────────────────┐
+   │  Smart Fallback Engine (Rule-Based)          │──✅──→ Return diagnosis
+   │  Appliance + issue keyword matching          │
+   │  15+ pre-built diagnostic rules              │
+   │  Bilingual support (English + Hinglish)      │
+   └─────────────────────────────────────────────┘
+```
+
+**Key design decisions:**
+- No hardcoded timeouts — AI models are given unlimited time to respond (avoids premature fallback)
+- Uploaded media files are cleaned up from temp storage after processing (Gemini File API + local disk)
+- Every diagnosis is persisted to PostgreSQL regardless of which model (or fallback) generated it
+- Response includes a `fallbackUsed` flag so the frontend can optionally indicate when rule-based diagnosis was used
+
+---
+
+## 🔑 Gemini Multi-Key Rotation
+
+A production system serving real users cannot afford Gemini API downtime. RefriSmart-AI implements an **active key rotation pool** to maximize uptime:
+
+### How It Works
+
+```
+Request for AI diagnosis arrives
+         │
+         ▼
+   Key Pool Manager selects current key (round-robin)
+         │
+         ▼
+   Gemini API call made with selected key
+         │
+         ├── ✅ Success → Return result
+         │
+         └── ❌ 429 Rate Limited or Error
+                  │
+                  ▼
+            Rotate to next key in pool
+                  │
+                  ▼
+            Retry with new key → ✅ Return result
+                  │
+                  └── ❌ All keys exhausted → Multi-model fallback
+```
+
+### Configuration
+
+Add multiple keys to `backend/.env`:
+
+```env
+GEMINI_API_KEY="AIza...key1"
+GEMINI_API_KEY_2="AIza...key2"
+GEMINI_API_KEY_3="AIza...key3"
+```
+
+The key pool manager reads all defined keys at startup and rotates through them on each request failure. A minimum of one key is required; additional keys are optional but strongly recommended for production loads.
+
+### Benefits
+
+| Scenario | Without Key Rotation | With Key Rotation |
+|---|---|---|
+| Single key hits rate limit | ❌ API down for 60s | ✅ Seamlessly continues on next key |
+| High diagnostic volume (burst) | ❌ 429 errors for users | ✅ Load spread across all keys |
+| Key quota resets (daily) | ❌ Manual monitoring needed | ✅ Automatic; no intervention required |
+
+> 💡 Each Google AI Studio account provides a free-tier key with 1,500 requests/day. Multiple Gmail accounts → multiple keys → effectively unlimited free-tier capacity at scale.
 
 ---
 
@@ -770,7 +886,7 @@ RefriSmart-AI is engineered to run a **full production SaaS at near-zero infrast
 | **Vercel** (Frontend + Backend) | Hobby (Free) | 100 GB bandwidth, 100K serverless invocations/day | **$0** |
 | **Neon** (PostgreSQL) | Free Tier | 0.5 GB storage, 191.9 compute hours/month | **$0** |
 | **Cloudinary** (Media CDN) | Free Tier | 25 GB storage, 25 GB bandwidth/month | **$0** |
-| **Google Gemini API** | Free Tier | 1,500 requests/day (`gemini-flash-lite`) | **$0** |
+| **Google Gemini API** | Free Tier | 1,500 requests/day per key (`gemini-flash-lite`) | **$0** |
 | **Razorpay** | Pay-per-transaction | No monthly fee | **2% per txn** |
 | **GitHub** | Free | Unlimited public repos | **$0** |
 | **Nodemailer** (Gmail SMTP) | Gmail App Password | 500 emails/day | **$0** |
@@ -933,7 +1049,7 @@ RefriSmart-AI implements **defense-in-depth** security across every layer:
 
 | Layer | Implementation | Details |
 |---|---|---|
-| **Authentication** | JWT + HTTP-Only Cookies | Tokens stored in `httpOnly`, `secure`, `sameSite` cookies — immune to XSS token theft |
+| **Authentication** | JWT + HTTP-Only Cookies + Bearer Token | Tokens stored in `httpOnly`, `secure`, `sameSite` cookies — immune to XSS token theft; Bearer token fallback for Safari |
 | **Password Storage** | bcryptjs (salted hashes) | Passwords never stored in plaintext; salted with per-user unique salts |
 | **Email Verification** | Time-limited OTP | 6-digit OTPs expire after a configured window; prevents unverified account abuse |
 | **CORS Policy** | Strict origin allowlist | Production mode restricts API access to explicitly whitelisted frontend domains only |
@@ -942,6 +1058,163 @@ RefriSmart-AI implements **defense-in-depth** security across every layer:
 | **File Uploads** | Multer + Cloudinary | Files processed in memory with size/type limits; stored on CDN, not on the API server |
 | **Error Handling** | Centralized error middleware | Stack traces never exposed to clients in production; generic error messages returned |
 | **Graceful Shutdown** | Process handlers | `uncaughtException` and `unhandledRejection` handlers prevent silent crashes |
+| **Payment Verification** | HMAC-SHA256 signature | Razorpay payment signature verified server-side before any booking is confirmed |
+
+---
+
+## 🌐 Cross-Browser Auth — Safari Fix
+
+Modern browsers like **Safari on iOS/macOS** block third-party cookies in cross-origin contexts, causing JWT cookies to silently drop on every API call — resulting in users being logged out instantly on Safari even after a successful login.
+
+### The Problem
+
+```
+Safari (iOS/macOS) blocks third-party cookies by default
+         │
+         ▼
+JWT stored in httpOnly cookie is NOT sent to the backend
+         │
+         ▼
+GET /api/auth/me returns 401 → AuthContext sets user = null
+         │
+         ▼
+User appears logged out immediately after login ❌
+```
+
+### The Solution — Token-Based Auth Fallback
+
+RefriSmart-AI implements a **dual-mode authentication** system:
+
+```
+Login success (POST /api/auth/login)
+         │
+         ├── Sets httpOnly JWT cookie (standard browsers)
+         │
+         └── ALSO returns { token: "jwt_string" } in response body
+                  │
+                  ▼
+Frontend stores token in localStorage (cross-origin safe)
+                  │
+                  ▼
+Every API request checks:
+  1. Does the browser send the cookie? → Use cookie auth
+  2. No cookie? → Send "Authorization: Bearer <token>" header
+```
+
+### Backend Middleware Update
+
+```typescript
+// middlewares/authMiddleware.ts
+export const authenticateUser = async (req, res, next) => {
+  // Primary: cookie-based auth (standard browsers)
+  let token = req.cookies?.token;
+
+  // Fallback: Bearer token from Authorization header (Safari / cross-origin)
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
+
+  if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+  const decoded = jwt.verify(token, process.env.JWT_SECRET!);
+  req.user = decoded;
+  next();
+};
+```
+
+### Frontend Token Management
+
+```typescript
+// On login success:
+const { token, user } = await res.json();
+if (token) localStorage.setItem('auth_token', token);
+
+// On every API fetch:
+const storedToken = localStorage.getItem('auth_token');
+const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+if (storedToken) headers['Authorization'] = `Bearer ${storedToken}`;
+
+const res = await fetch(`${API_URL}/endpoint`, {
+  credentials: 'include', // still sends cookie if available
+  headers,
+});
+
+// On logout:
+localStorage.removeItem('auth_token');
+```
+
+> 💡 **Why not just use localStorage everywhere?** `localStorage` is accessible by JavaScript on the page — making tokens vulnerable to XSS. The cookie remains the primary auth mechanism for standard browsers. The token in `localStorage` is only a fallback for environments where cookies are blocked.
+
+---
+
+## 🔄 CORS & Session Resilience
+
+### The CORS Challenge on Vercel
+
+When frontend (`refrismart-ai.vercel.app`) and backend (`refrismart-backend.vercel.app`) are deployed to **different subdomains**, cookies with `sameSite: 'strict'` are blocked as cross-site cookies. This was fixed by:
+
+```typescript
+// backend/src/index.ts — CORS configuration
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') ?? [],
+  credentials: true,           // Required for cookies to be sent cross-origin
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+}));
+
+// Cookie settings — cross-subdomain compatible
+res.cookie('token', jwtToken, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'none',   // Changed from 'strict' — allows cross-subdomain delivery
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+});
+```
+
+### Session Keepalive
+
+To prevent **silent auto-logouts** caused by Vercel Serverless Functions going cold (which can reset in-memory state), the frontend implements a **session keepalive ping**:
+
+```typescript
+// Every 5 minutes, ping /api/auth/me to keep the session warm
+// and detect stale tokens early (before user hits a protected action)
+useEffect(() => {
+  const keepalive = setInterval(async () => {
+    const res = await fetch(`${API_URL}/auth/me`, {
+      credentials: 'include',
+      headers: storedToken ? { Authorization: `Bearer ${storedToken}` } : {},
+    });
+    if (!res.ok) {
+      // Token expired — clear state and redirect to login
+      setUser(null);
+      localStorage.removeItem('auth_token');
+    }
+  }, 5 * 60 * 1000);
+
+  return () => clearInterval(keepalive);
+}, []);
+```
+
+### Network Resilience
+
+API calls include automatic retry logic for transient network failures:
+
+```typescript
+async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+  try {
+    return await fetch(url, options);
+  } catch (error) {
+    if (retries > 0) {
+      await new Promise(res => setTimeout(res, 1000)); // 1s back-off
+      return fetchWithRetry(url, options, retries - 1);
+    }
+    throw error;
+  }
+}
+```
 
 ---
 
@@ -984,48 +1257,6 @@ model Notification {
 
 ---
 
-## 🧠 AI Resilience — Multi-Model Fallback Strategy
-
-The AI diagnostic engine is designed to **never fail silently**. If one model is unavailable or rate-limited, the system cascades through alternatives:
-
-```
-Request arrives at /api/ai/diagnose
-         │
-         ▼
-   ┌─────────────────────────────────────────────┐
-   │  Model 1: gemini-flash-lite-latest (Free)   │──✅──→ Return diagnosis
-   │  Fastest, lowest latency, free tier          │
-   └─────────────────────────┬───────────────────┘
-                             │ ❌ Failed / Rate-limited
-                             ▼
-   ┌─────────────────────────────────────────────┐
-   │  Model 2: gemini-flash-latest (Free)        │──✅──→ Return diagnosis
-   │  Higher quality, still within free quota     │
-   └─────────────────────────┬───────────────────┘
-                             │ ❌ Failed / Rate-limited
-                             ▼
-   ┌─────────────────────────────────────────────┐
-   │  Model 3: gemini-pro-latest (Paid)          │──✅──→ Return diagnosis
-   │  Highest quality, used as final AI attempt   │
-   └─────────────────────────┬───────────────────┘
-                             │ ❌ All AI models failed
-                             ▼
-   ┌─────────────────────────────────────────────┐
-   │  Smart Fallback Engine (Rule-Based)          │──✅──→ Return diagnosis
-   │  Appliance + issue keyword matching          │
-   │  15+ pre-built diagnostic rules              │
-   │  Bilingual support (English + Hinglish)      │
-   └─────────────────────────────────────────────┘
-```
-
-**Key design decisions:**
-- No hardcoded timeouts — AI models are given unlimited time to respond (avoids premature fallback)
-- Uploaded media files are cleaned up from temp storage after processing (Gemini File API + local disk)
-- Every diagnosis is persisted to PostgreSQL regardless of which model (or fallback) generated it
-- Response includes a `fallbackUsed` flag so the frontend can optionally indicate when rule-based diagnosis was used
-
----
-
 ## ⚡ Performance Optimizations
 
 | Optimization | Impact |
@@ -1039,6 +1270,8 @@ Request arrives at /api/ai/diagnose
 | **Image Optimization** | Unsplash images loaded with quality and size parameters (`q=80&w=1200`) to reduce payload |
 | **Cookie-based Auth** | No `Authorization` header round-trips; cookies sent automatically, reducing JS overhead |
 | **Concurrent Rendering** | React 19 concurrent features for non-blocking UI updates during AI diagnosis loading |
+| **Session Keepalive** | Proactive token validation prevents stale-session 401 errors mid-session |
+| **Gemini Key Pool** | Load spread across multiple API keys — no single-key rate-limit bottleneck |
 
 ---
 
@@ -1088,6 +1321,7 @@ This ensures that both English-speaking and Hindi-speaking customers in Bhagalpu
 ### ✅ Shipped
 - [x] AI-powered fault diagnosis (Gemini Vision)
 - [x] Multi-model fallback with rule-based safety net
+- [x] Gemini multi-key rotation pool
 - [x] Razorpay payment integration (visiting charge)
 - [x] Email OTP verification flow
 - [x] Admin dashboard with live stats
@@ -1098,6 +1332,9 @@ This ensures that both English-speaking and Hindi-speaking customers in Bhagalpu
 - [x] Fully responsive mobile-first UI
 - [x] Cloudinary media storage
 - [x] Technician job portal
+- [x] Safari / cross-browser auth fix
+- [x] Session keepalive & CORS resilience
+- [x] Network retry with back-off
 
 </td>
 <td width="50%">
@@ -1112,6 +1349,7 @@ This ensures that both English-speaking and Hindi-speaking customers in Bhagalpu
 - [ ] PWA support for offline access & home screen install
 - [ ] Customer-facing booking cancellation from the UI
 - [ ] Admin bulk-export (CSV/Excel) for bookings and revenue
+- [ ] GDPR data export & deletion endpoints
 
 </td>
 </tr>
@@ -1135,6 +1373,17 @@ Contributions are welcome! If you'd like to improve RefriSmart-AI, here's how:
 - Write descriptive commit messages using [Conventional Commits](https://www.conventionalcommits.org/)
 - Test your changes locally before submitting a PR
 - Update the README if your change adds new features or modifies the setup process
+
+### Good First Issues
+
+| Area | Task | Difficulty |
+|---|---|---|
+| Frontend | Add loading skeleton for product grid | 🟢 Easy |
+| Backend | Add pagination to `/admin/orders` endpoint | 🟡 Medium |
+| Backend | Add rate limiting middleware (express-rate-limit) | 🟡 Medium |
+| Frontend | Implement customer-facing booking cancellation UI | 🟠 Medium |
+| Backend | Add CSV export endpoint for admin bookings | 🟠 Medium |
+| Full-stack | WhatsApp Business API notification integration | 🔴 Hard |
 
 ---
 
@@ -1196,6 +1445,9 @@ This entire platform — from **PostgreSQL schema design**, **RESTful API archit
 **Key solo-developer accomplishments:**
 - Architected a full-stack monorepo with separate frontend (Next.js) and backend (Express) — both deployed on Vercel
 - Integrated Google Gemini Vision AI with a custom 4-tier fallback strategy (3 AI models + rule-based engine)
+- Implemented **Gemini multi-key rotation** to eliminate rate-limit downtime in production
+- Fixed **Safari cross-browser auth** with dual-mode JWT (cookie + Bearer token fallback)
+- Built CORS/session resilience with keepalive pings and network retry back-off
 - Implemented end-to-end payment flow with Razorpay including webhook-safe order verification
 - Built a comprehensive admin operations dashboard with live stats and role-based access control
 - Engineered local SEO strategy with JSON-LD structured data, XML sitemap, and geo-targeting
@@ -1215,7 +1467,9 @@ A complete reference for all required environment variables across both services
 | `CLOUDINARY_CLOUD_NAME` | ✅ | `your_cloud_name` | Your Cloudinary account cloud name |
 | `CLOUDINARY_API_KEY` | ✅ | `123456789012345` | Cloudinary API key from dashboard |
 | `CLOUDINARY_API_SECRET` | ✅ | `your_api_secret` | Cloudinary API secret (keep private) |
-| `GEMINI_API_KEY` | ✅ | `AIzaSy...` | Google Gemini API key from [AI Studio](https://aistudio.google.com/) |
+| `GEMINI_API_KEY` | ✅ | `AIzaSy...` | Primary Google Gemini API key from [AI Studio](https://aistudio.google.com/) |
+| `GEMINI_API_KEY_2` | ⚠️ Optional | `AIzaSy...` | Second Gemini key for rotation pool |
+| `GEMINI_API_KEY_3` | ⚠️ Optional | `AIzaSy...` | Third Gemini key for rotation pool |
 | `RAZORPAY_KEY_ID` | ✅ | `rzp_live_...` | Razorpay Key ID (use `rzp_test_...` for dev) |
 | `RAZORPAY_KEY_SECRET` | ✅ | `your_key_secret` | Razorpay Key Secret (keep private) |
 | `SMTP_HOST` | ✅ | `smtp.gmail.com` | SMTP server hostname for OTP emails |
@@ -1258,12 +1512,14 @@ Common issues and their solutions when setting up RefriSmart-AI locally:
 | `401 Unauthorized` on protected routes | JWT cookie missing or expired | Re-login; check that `NODE_ENV` matches cookie `secure` flag setting |
 | OTP email not received | SMTP misconfiguration | Verify Gmail App Password; ensure 2FA is enabled on the Gmail account |
 | OTP always shows as invalid | Clock skew / expired OTP | OTPs expire quickly — request a new one; check server time sync |
+| Auto-logout on Safari | Third-party cookies blocked | Ensure frontend stores token in `localStorage` and sends `Authorization: Bearer` header |
+| CORS cookie rejected | `sameSite` misconfiguration | Set `sameSite: 'none'` with `secure: true` in cookie options for cross-domain deployment |
 
 ### AI Diagnostics
 
 | Issue | Likely Cause | Fix |
 |---|---|---|
-| `Gemini API error 429` | Rate limit exceeded on free tier | Wait a moment; the fallback engine will handle it automatically |
+| `Gemini API error 429` | Rate limit exceeded on current key | The key rotation system will automatically switch to the next key; add more keys to `GEMINI_API_KEY_2/3` |
 | Upload fails silently | File too large or wrong type | Ensure images are under Multer's size limit; accepted: JPEG, PNG, MP4, WebM |
 | `CLOUDINARY_API_SECRET not set` | Missing env variable | Check `backend/.env` for all three Cloudinary variables |
 
@@ -1309,6 +1565,12 @@ curl -X POST http://localhost:5001/api/ai/diagnose \
   -F "description=Fridge not cooling, making noise"
 ```
 
+#### Example: Test Bearer token auth (Safari fallback)
+```bash
+curl -X GET http://localhost:5001/api/auth/me \
+  -H "Authorization: Bearer <your_jwt_token>"
+```
+
 ### Database Inspection
 
 ```bash
@@ -1328,6 +1590,8 @@ After setup, walk through these flows to verify everything works end-to-end:
 - [ ] Browse products → place an order → verify order in user's order history
 - [ ] Submit a sell request → verify it appears in admin panel
 - [ ] Login as admin (`role: ADMIN`) → check all dashboard tabs load correctly
+- [ ] Test on Safari (iOS/macOS) → verify login persists across page navigations
+- [ ] Test with all Gemini keys disabled → verify rule-based fallback returns a diagnosis
 
 ### Lint & Type Checking
 
@@ -1355,6 +1619,8 @@ Key architectural and coding patterns used throughout the codebase:
 | **Repository pattern (via Prisma)** | All DB queries | Type-safe queries; easy to swap DB or add caching later |
 | **Graceful process handling** | `src/index.ts` | `uncaughtException` + `unhandledRejection` prevent silent server crashes |
 | **Cascade fallback** | `aiController.ts` | AI model chain with rule-based safety net ensures 100% diagnostic availability |
+| **Key pool rotation** | `aiController.ts` | Round-robin key selection eliminates single-key rate-limit failures |
+| **Dual-mode auth** | `authMiddleware.ts` | Cookie + Bearer token — works across all browsers and CORS environments |
 
 ### Frontend Patterns
 
@@ -1364,6 +1630,8 @@ Key architectural and coding patterns used throughout the codebase:
 | **Server Components (default)** | All page components | Reduced client-side JS bundle; better SEO and TTFB |
 | **Client Components (`"use client"`)** | Interactive forms, payment flow | Progressive enhancement — only interactive parts shipped to browser |
 | **Cookie-based auth (httpOnly)** | Auth middleware | XSS-immune token storage; auto-included in every API request |
+| **Bearer token fallback** | All authenticated fetches | Ensures auth works on Safari and cross-origin deployments |
+| **Session keepalive** | `AuthContext.tsx` | Proactive token validation prevents silent mid-session logouts |
 | **Component co-location** | `admin/_*.tsx` files | Dashboard sub-components live next to their parent page |
 
 ### Data Flow
@@ -1375,7 +1643,9 @@ Key architectural and coding patterns used throughout the codebase:
 [Express Controller] → [Service Layer] → [Prisma ORM] → [PostgreSQL]
      │
      ▼ (AI routes only)
-[Multer] → [Cloudinary] → [Gemini Vision API] → [Structured Result]
+[Multer] → [Cloudinary] → [Key Pool] → [Gemini Vision API] → [Structured Result]
+                                              │
+                                              └── ❌ → [Rule-Based Fallback]
      │
      ▼
 [Response JSON] → [Next.js Component re-render]
@@ -1400,7 +1670,7 @@ App boots → Root layout mounts <AuthProvider>
          │
          ▼
   AuthContext calls GET /api/auth/me on mount
-  (JWT cookie is sent automatically by the browser)
+  (JWT cookie + Bearer token sent automatically)
          │
          ├── 200 OK  → sets user state → authenticated UI renders
          │
@@ -1415,8 +1685,12 @@ RefriSmart-AI uses **native `fetch`** inside `useEffect` hooks — no SWR or Rea
 // Standard authenticated fetch pattern used throughout the app
 useEffect(() => {
   const fetchData = async () => {
+    const storedToken = localStorage.getItem('auth_token');
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/endpoint`, {
       credentials: 'include', // sends the JWT cookie automatically
+      headers: storedToken
+        ? { Authorization: `Bearer ${storedToken}` }
+        : {},
     });
     const data = await res.json();
     if (data.success) setItems(data.items);
@@ -1521,6 +1795,12 @@ model Technician {
 **Q: Which AI model does the diagnosis use?**
 > A: It uses **Google Gemini Vision** (multimodal) via the `@google/genai` SDK. Three Gemini models are tried in sequence (`gemini-flash-lite-latest` → `gemini-flash-latest` → `gemini-pro-latest`), and if all fail, a custom rule-based engine with 15+ diagnostic rules handles the request as a fallback.
 
+**Q: What is Gemini multi-key rotation and why is it needed?**
+> A: Each Google AI Studio API key has a rate limit (1,500 requests/day on free tier). The key rotation pool distributes requests across multiple keys — so even during high diagnostic volume, no single key's quota is exhausted. This ensures near-zero AI downtime in production.
+
+**Q: Why did auth stop working on Safari?**
+> A: Safari blocks third-party cookies by default in cross-origin contexts. The fix is a dual-mode auth system: the backend sets a cookie AND returns the JWT token in the response body. The frontend stores the token in `localStorage` and sends it as an `Authorization: Bearer` header on subsequent requests.
+
 **Q: Can I use this for a different repair business?**
 > A: Yes! The codebase is designed to be adaptable. You would need to update the business details in `frontend/src/app/layout.tsx` (JSON-LD, meta tags), update the service area content on the homepage, and reconfigure your own environment variables.
 
@@ -1528,7 +1808,7 @@ model Technician {
 > A: Razorpay is used only for the ₹349 visiting fee and product orders. If you want to disable payments, you can remove the payment step from the service booking flow — the rest of the platform (AI diagnosis, admin, auth) works independently.
 
 **Q: What happens if the Gemini API is down?**
-> A: The multi-tier fallback strategy ensures the platform **always returns a diagnostic result**. The final fallback is a rule-based engine (keyword matching on the user's description + appliance type) that works 100% offline without any external API calls.
+> A: The multi-tier fallback strategy ensures the platform **always returns a diagnostic result**. The key rotation pool tries all available keys first, then the multi-model fallback tries 3 Gemini model variants, and finally a rule-based engine (keyword matching on the user's description + appliance type) works 100% offline without any external API calls.
 
 **Q: How do I create an admin account?**
 > A: Register a user normally, then use **Prisma Studio** (`npx prisma studio`) to change that user's `role` field from `USER` to `ADMIN` directly in the database. Admin role assignment from the UI is intentionally not exposed for security reasons.
@@ -1815,7 +2095,7 @@ A complete walkthrough of what happens from booking to job completion:
 
 | Script | Command | Description |
 |---|---|---|
-| `dev` | `ts-node src/index.ts` | Start development server with hot reload |
+| `dev` | `ts-node src/index.ts` | Start development server with hot reload (auto-kills port 5001 first) |
 | `build` | `tsc` | Compile TypeScript → `dist/` for production |
 | `start` | `node dist/index.js` | Run compiled production server |
 | `prisma:generate` | `npx prisma generate` | Regenerate Prisma client after schema changes |
@@ -1827,7 +2107,7 @@ A complete walkthrough of what happens from booking to job completion:
 
 | Script | Command | Description |
 |---|---|---|
-| `dev` | `next dev` | Start Next.js development server (port 3000) |
+| `dev` | `next dev` | Start Next.js development server (port 3000, bound to 127.0.0.1) |
 | `build` | `next build` | Create optimized production build |
 | `start` | `next start` | Serve production build locally |
 | `lint` | `next lint` | Run ESLint on the entire frontend codebase |
@@ -1838,20 +2118,16 @@ A complete walkthrough of what happens from booking to job completion:
 
 All notable changes to RefriSmart-AI are documented here.
 
-### [v2.0.0] — 2026
-**Major production release**
-- ✅ Migrated to **Next.js 16** App Router with full SSR/SSG support
-- ✅ **Multi-model AI fallback** system (3 Gemini models + rule engine)
-- ✅ **Technician portal** with job view and OTP-based job completion verification
-- ✅ **ServiceEvent audit trail** — immutable history of every status change per booking
-- ✅ **ServiceOTP system** — technician cannot mark a job complete without customer OTP
-- ✅ **SellOffer system** — admin can counter-offer on sell requests with pickup slot
-- ✅ **Gallery management** — admin-managed work gallery displayed on the public site
-- ✅ **Pincode-based technician dispatch** — auto-matches nearest technician to booking
-- ✅ **Guest booking** — customers can book without creating an account
-- ✅ **Bilingual AI responses** — auto-detects English vs Hinglish
-- ✅ **Refurbished product marketplace** — sell requests auto-list as products after acceptance
-- ✅ Upgraded to **Express v5**, **Prisma v7**, **@google/genai v1.44**
+### [v2.2.0] — June 2026
+**Cross-Browser Auth, Key Rotation & Network Resilience**
+- ✅ **Safari auth fix** — implemented token-based auth fallback (`Authorization: Bearer`) for Safari and cross-origin environments where third-party cookies are blocked
+- ✅ **Gemini multi-key rotation** — implemented a key pool system; multiple `GEMINI_API_KEY_*` env vars are read at startup and rotated on rate-limit or error
+- ✅ **CORS `sameSite: none`** fix — changed cookie policy from `strict` to `none` for cross-subdomain Vercel deployments
+- ✅ **Session keepalive** — frontend pings `/api/auth/me` every 5 minutes to proactively detect stale tokens and re-authenticate before users hit a protected action
+- ✅ **Network retry with back-off** — all API calls retry up to 2 times on transient network failures with 1s back-off
+- ✅ **Auto-logout prevention** — multiple layers of resilience prevent users from being logged out due to transient server errors or cold-start delays
+- 🔧 Fixed: `sameSite` cookie policy incompatibility with Vercel cross-subdomain deployments
+- 🔧 Fixed: Gemini error handling now catches all error types (quota, network, model-specific) for more reliable model rotation
 
 ### [v2.1.0] — June 2026
 **Dependency Upgrades & Stability Release**
@@ -1869,6 +2145,21 @@ All notable changes to RefriSmart-AI are documented here.
 - 🔧 Fixed: Prisma `adapter-pg` integration for Neon serverless connection pooling
 - 🔧 Fixed: CORS cookie `sameSite` policy for cross-subdomain Vercel deployments
 - 🔧 Fixed: Multer v2 breaking change — `fileFilter` callback signature updated
+
+### [v2.0.0] — 2026
+**Major production release**
+- ✅ Migrated to **Next.js 16** App Router with full SSR/SSG support
+- ✅ **Multi-model AI fallback** system (3 Gemini models + rule engine)
+- ✅ **Technician portal** with job view and OTP-based job completion verification
+- ✅ **ServiceEvent audit trail** — immutable history of every status change per booking
+- ✅ **ServiceOTP system** — technician cannot mark a job complete without customer OTP
+- ✅ **SellOffer system** — admin can counter-offer on sell requests with pickup slot
+- ✅ **Gallery management** — admin-managed work gallery displayed on the public site
+- ✅ **Pincode-based technician dispatch** — auto-matches nearest technician to booking
+- ✅ **Guest booking** — customers can book without creating an account
+- ✅ **Bilingual AI responses** — auto-detects English vs Hinglish
+- ✅ **Refurbished product marketplace** — sell requests auto-list as products after acceptance
+- ✅ Upgraded to **Express v5**, **Prisma v7**, **@google/genai v1.44**
 
 ### [v1.0.0] — 2025
 **Initial production launch**
@@ -1897,6 +2188,8 @@ RefriSmart-AI was built to solve **real operational pain points** for a physical
 | Customers couldn't track repair status | Real-time status updates via admin dashboard | Reduced inbound "where's my technician?" calls |
 | Old appliances had no resale channel | Sell & Refurbish marketplace | New revenue stream — refurbished appliances re-listed for sale |
 | Trust gap with first-time customers | Star ratings + review system visible in admin | Owner can monitor service quality and technician performance |
+| Auth failing silently on Safari/iOS | Token-based auth fallback | 100% login reliability across all browsers and devices |
+| Gemini API rate limits causing diagnostic failures | Multi-key rotation pool | Near-zero AI diagnostic downtime even under heavy load |
 
 > 💡 **Key insight**: Collecting the ₹349 visiting fee online (rather than cash at door) acts as a **commitment signal** — it filters out low-intent bookings and ensures the technician's time is respected. This single change meaningfully reduces no-show rates.
 
@@ -1909,12 +2202,14 @@ If you're showcasing this project in a technical interview, here are the stronge
 ### System Design
 - **Serverless architecture**: Chose Vercel Serverless Functions over a traditional always-on server to achieve zero idle cost — only pay when the function runs
 - **Stateless auth**: JWT in HTTP-only cookies means no session store (Redis/Memcached) is needed — the server can scale horizontally without any sticky-session concern
+- **Dual-mode auth for cross-browser compatibility**: Implemented cookie + Bearer token fallback to solve Safari's third-party cookie blocking — a real production problem that required research and a non-obvious fix
 - **Monorepo trade-offs**: Co-locating frontend and backend simplifies CI/CD (single repo, single Vercel project config) at the cost of slightly blurred boundaries — accepted for a solo-developer project of this scale
 - **Prisma as abstraction layer**: Using Prisma ORM means the underlying DB could be swapped (e.g., from Neon to PlanetScale) with minimal code changes — only the `DATABASE_URL` and connection config change
 
 ### AI Integration
 - **Why Gemini over OpenAI?** Google Gemini Flash has a generous free tier (1,500 req/day), native multimodal support (images + video in a single API call), and lower latency for short diagnostic prompts
 - **Fallback resilience**: The 4-tier fallback (3 Gemini models → rule engine) ensures **100% uptime for diagnostics** even during API outages — this is a deliberate design decision, not an afterthought
+- **Key rotation pool**: Multiple API keys are maintained in a pool and rotated on failure — achieving effectively unlimited free-tier capacity with zero code changes as load grows
 - **Prompt engineering**: Structured JSON output format in the prompt ensures the frontend receives a consistent schema regardless of which Gemini model responds — no brittle regex parsing
 - **File API vs base64**: Used Gemini's File API with Cloudinary CDN URLs instead of base64-encoding media — avoids the 2x payload overhead and stays within Gemini's inline data limits
 
@@ -1925,6 +2220,7 @@ If you're showcasing this project in a technical interview, here are the stronge
 
 ### Security
 - **Why HTTP-only cookies over localStorage?** LocalStorage is accessible by any JS on the page — an XSS attack can steal tokens. HTTP-only cookies are invisible to JS and automatically sent by the browser
+- **Safari third-party cookie problem**: Identified, researched, and solved a real cross-browser authentication failure using a dual-mode auth system — demonstrates production debugging skills
 - **bcryptjs salting**: Each user gets a unique salt — even if two users have the same password, their hashes are different, preventing rainbow table attacks
 - **Role guard middleware**: Implemented as a separate Express middleware function — adding a new admin route requires only one decorator, not duplicated auth logic
 
@@ -1932,6 +2228,7 @@ If you're showcasing this project in a technical interview, here are the stronge
 - **Next.js App Router**: Server Components render on the server and send HTML — no JS bundle for static content, better SEO, faster TTFB
 - **Cloudinary CDN**: Zero media bandwidth from the API server — all images/videos served from Cloudinary's global edge, removing a major bottleneck
 - **Connection pooling on serverless**: Neon's pgBouncer pooler handles connection reuse across cold-started serverless function invocations — without this, each function cold-start would create a new DB connection, exhausting the pool in seconds
+- **Session keepalive**: Proactive token validation every 5 minutes prevents silent mid-session auth failures caused by serverless cold starts resetting in-memory state
 
 ---
 
@@ -1959,14 +2256,14 @@ All API errors follow a consistent JSON structure:
 | `404 Not Found` | Resource not found | Booking ID, user ID, or product ID does not exist |
 | `409 Conflict` | Duplicate resource | Email already registered, OTP already used |
 | `422 Unprocessable Entity` | Business logic failure | Payment verification failed, OTP incorrect |
-| `429 Too Many Requests` | Rate limited | Gemini API quota exceeded (handled by fallback internally) |
+| `429 Too Many Requests` | Rate limited | Gemini API quota exceeded (handled by key rotation + model fallback internally) |
 | `500 Internal Server Error` | Unexpected server error | Unhandled exception caught by central error middleware |
 
 ### Common Error Codes
 
 | Code | Description |
 |---|---|
-| `AUTH_TOKEN_MISSING` | No JWT cookie present in request |
+| `AUTH_TOKEN_MISSING` | No JWT cookie or Bearer token present in request |
 | `AUTH_TOKEN_INVALID` | JWT signature verification failed |
 | `AUTH_TOKEN_EXPIRED` | JWT has passed its expiry time |
 | `USER_NOT_FOUND` | No user matches the given ID or email |
@@ -1975,7 +2272,7 @@ All API errors follow a consistent JSON structure:
 | `OTP_EXPIRED` | OTP TTL has passed — must request a new one |
 | `BOOKING_NOT_FOUND` | Booking ID does not exist in the database |
 | `PAYMENT_VERIFICATION_FAILED` | Razorpay signature mismatch — possible tampering |
-| `AI_ALL_MODELS_FAILED` | All Gemini models failed; rule-based fallback was used |
+| `AI_ALL_MODELS_FAILED` | All Gemini models and all key rotations failed; rule-based fallback was used |
 | `MEDIA_UPLOAD_FAILED` | Cloudinary upload returned an error |
 | `INSUFFICIENT_STOCK` | Product order quantity exceeds available stock |
 | `ROLE_REQUIRED_ADMIN` | Endpoint requires ADMIN role; current user does not have it |
@@ -2183,6 +2480,16 @@ curl -X POST http://localhost:5001/api/admin/seed-demo-products \
 # Reset and re-push the schema (WARNING: destroys all data)
 cd backend && npx prisma migrate reset
 ```
+
+### Test Safari Auth Locally
+
+To simulate Safari's cross-origin cookie blocking locally:
+
+1. Open Chrome DevTools → Application → Cookies → Delete the `token` cookie
+2. Add `Authorization: Bearer <your_token>` manually in Thunder Client
+3. Verify that `/api/auth/me` returns your user profile using only the Bearer header
+
+This confirms the token-based fallback is working correctly.
 
 ### Disable Razorpay in Local Dev
 
