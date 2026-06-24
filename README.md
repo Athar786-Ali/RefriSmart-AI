@@ -95,6 +95,13 @@
 - [Future Monetization & Scaling Strategy](#-future-monetization--scaling-strategy)
 - [Accessibility Commitment](#♿-accessibility-commitment)
 - [Real-World Business Impact](#-real-world-business-impact)
+- [Middleware Pipeline](#-middleware-pipeline)
+- [Configuration Management](#️-configuration-management)
+- [How It's Different From a CRUD App](#️-how-its-different-from-a-crud-app)
+- [Tech Decisions & Trade-offs](#-tech-decisions--trade-offs)
+- [Monitoring & Observability](#-monitoring--observability)
+- [Scalability Considerations](#-scalability-considerations)
+- [Rate Limiting Strategy](#-rate-limiting-strategy)
 - [Project Stats](#-project-stats)
 
 ---
@@ -2624,6 +2631,307 @@ Since deploying RefriSmart-AI for **Golden Refrigeration**, Bhagalpur, measurabl
 
 ---
 
+## 🔗 Middleware Pipeline
+
+Every incoming API request flows through a deliberate chain of Express middleware before reaching a route handler. Understanding this pipeline is essential for debugging and extending the platform:
+
+```
+Incoming HTTP Request
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│ 1. CORS Middleware                      │
+│    - Validates Origin header            │
+│    - Sets Access-Control-* headers      │
+│    - Rejects unlisted origins (prod)    │
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│ 2. Cookie Parser                        │
+│    - Parses Cookie header into          │
+│      req.cookies object                 │
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│ 3. express.json() + urlencoded()        │
+│    - Parses JSON + form-encoded bodies  │
+│    - Sets req.body                      │
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│ 4. Route Matching                       │
+│    /api/auth/*  → authRoutes            │
+│    /api/ai/*    → aiRoutes              │
+│    /api/admin/* → adminRoutes (+ guard) │
+│    /api/booking/* → bookingRoutes       │
+│    etc.                                 │
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│ 5. Auth Middleware (protected routes)   │
+│    - Reads JWT from cookie OR           │
+│      Authorization: Bearer header      │
+│    - Verifies signature with JWT_SECRET │
+│    - Attaches decoded user to req.user  │
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│ 6. Role Guard (admin routes only)       │
+│    - Checks req.user.role === 'ADMIN'   │
+│    - Returns 403 if role mismatch       │
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│ 7. Multer (file upload routes only)     │
+│    - Processes multipart/form-data      │
+│    - Stores files in memory buffer      │
+│    - Applies file type + size limits    │
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│ 8. Route Controller / Service Layer     │
+│    - Business logic executes            │
+│    - Prisma queries run                 │
+│    - Response sent                      │
+└─────────────────────────────────────────┘
+         │
+         ▼ (on error only)
+┌─────────────────────────────────────────┐
+│ 9. Central Error Middleware             │
+│    - Catches all thrown errors          │
+│    - Maps to HTTP status codes          │
+│    - Returns { success: false, message }│
+└─────────────────────────────────────────┘
+```
+
+---
+
+## ⚙️ Configuration Management
+
+All runtime configuration lives in environment variables — never hardcoded. The `config/` directory in the backend centralizes service clients so they're initialized once and reused:
+
+### `backend/src/config/`
+
+| File | Purpose |
+|---|---|
+| `prismaClient.ts` | Singleton Prisma client with `@prisma/adapter-pg` for serverless-safe connections |
+| `cloudinary.ts` | Cloudinary SDK initialized with `CLOUDINARY_*` env vars |
+| `razorpay.ts` | Razorpay instance initialized with `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` |
+| `geminiKeyPool.ts` | Reads all `GEMINI_API_KEY*` vars at startup; exposes `getNextKey()` round-robin function |
+| `mailer.ts` | Nodemailer transporter initialized with `SMTP_*` env vars |
+
+### Environment Variable Loading
+
+```typescript
+// backend/src/index.ts — startup validation (recommended addition)
+const REQUIRED_ENV = [
+  'DATABASE_URL', 'JWT_SECRET',
+  'GEMINI_API_KEY',
+  'CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET',
+  'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET',
+  'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS',
+];
+
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    throw new Error(`❌ Missing required environment variable: ${key}`);
+  }
+}
+console.log('✅ All required environment variables loaded.');
+```
+
+This fails fast at startup rather than surfacing a cryptic error during a live user request.
+
+---
+
+## 🏋️ How It's Different From a CRUD App
+
+Many web apps are simply wrappers around database operations. RefriSmart-AI goes significantly further — here's where the real engineering complexity lives:
+
+| Complexity Layer | Implementation |
+|---|---|
+| **Multi-model AI cascade** | 3 Gemini models + rule engine — not a simple API call |
+| **Key pool rotation** | Round-robin across N API keys with automatic failover |
+| **Cross-browser auth** | Dual-mode JWT (cookie + Bearer) solving a real Safari production bug |
+| **Stateless serverless auth** | No session store — all state in signed JWTs + DB |
+| **CORS + cookie cross-domain** | `sameSite: none` + `credentials: true` — non-trivial for split Vercel deployments |
+| **HMAC payment verification** | Server-side Razorpay signature check — prevents forged payment claims |
+| **Audit trail design** | `ServiceEvent` append-only log — not a simple status field overwrite |
+| **Pincode dispatch matching** | Technician → customer geographic proximity matching |
+| **Guest + auth unification** | Nullable `userId` on bookings — same workflow, two user types |
+| **Bilingual AI prompting** | Language auto-detection modifies Gemini prompt dynamically |
+| **Session keepalive** | Proactive token renewal prevents serverless cold-start auth failures |
+| **Media pipeline** | Multer memory buffer → Cloudinary CDN → Gemini File API |
+| **Serverless DB pooling** | Neon pgBouncer pooler prevents connection exhaustion on cold starts |
+| **PDF invoice generation** | Auto-generated PDFs with QR codes, stored in `DocumentLog` |
+
+---
+
+## 🧱 Tech Decisions & Trade-offs
+
+Honest documentation of the architectural trade-offs made during development:
+
+### ✅ Chosen: Monorepo (frontend + backend in one repo)
+> **Trade-off**: Slightly blurred boundaries vs. two separate repos.
+> **Reason**: For a solo developer, one Vercel project, one GitHub Actions pipeline, and one `.env` file per environment is dramatically simpler. Acceptable trade-off at this scale.
+
+### ✅ Chosen: Express.js over Next.js API Routes for the backend
+> **Trade-off**: Separate deployment unit vs. everything in one Next.js project.
+> **Reason**: A standalone Express server gives full control over middleware ordering, route structure, and Prisma initialization. Next.js API Routes have cold-start limitations and no native middleware pipeline. For a 65+ endpoint API, Express is cleaner.
+
+### ✅ Chosen: React Context API over Redux/Zustand
+> **Trade-off**: Less powerful state management vs. heavyweight libraries.
+> **Reason**: The app has exactly one piece of truly global state: the logged-in user. Context is sufficient; adding Redux or Zustand would be over-engineering for a single-business focused platform.
+
+### ✅ Chosen: Native `fetch` over SWR/React Query
+> **Trade-off**: No automatic cache invalidation or background refetching.
+> **Reason**: The data model is straightforward — most pages do a single data load on mount. The complexity of SWR/React Query caching strategies isn't justified for this use case.
+
+### ✅ Chosen: Vercel Hobby (free tier) over dedicated VPS
+> **Trade-off**: Cold starts and serverless limitations vs. always-on server.
+> **Reason**: Zero infrastructure cost, automatic SSL, global CDN, and instant deployments on push. Cold starts are mitigated by the session keepalive ping and Neon's connection pooler.
+
+### ✅ Chosen: PostgreSQL (Neon) over MongoDB
+> **Trade-off**: Rigid schema vs. flexible documents.
+> **Reason**: The data is highly relational (bookings → assignments → technicians → events). PostgreSQL with Prisma gives type-safe joins, foreign key enforcement, and complex queries that would require multiple round-trips in a document store.
+
+### ✅ Chosen: Gemini over OpenAI GPT-4 Vision
+> **Trade-off**: Smaller ecosystem vs. more established API.
+> **Reason**: Gemini Flash has a 1,500 requests/day free tier per key (vs. OpenAI's pay-only model), native multimodal support, and lower latency for short structured prompts — critical for a cost-sensitive production deployment.
+
+---
+
+## 📡 Monitoring & Observability
+
+RefriSmart-AI is a production system — here's how it's monitored:
+
+### Current Monitoring Stack
+
+| Layer | Tool | What's Monitored |
+|---|---|---|
+| **Deployment health** | Vercel Dashboard | Build status, function invocation count, error rates, cold start frequency |
+| **Database** | Neon Console | Connection pool usage, query latency, storage utilization |
+| **Media CDN** | Cloudinary Dashboard | Upload success rate, bandwidth usage, transformation errors |
+| **Payments** | Razorpay Dashboard | Transaction success/failure rates, refund requests, settlement status |
+| **Error logging** | `console.error` + Vercel Function Logs | Unhandled exceptions, Prisma errors, AI API failures |
+| **AI API** | Google AI Studio | Per-key quota usage, request volumes, error rates |
+
+### Structured Logging
+
+All significant events are logged with context for post-hoc debugging:
+
+```typescript
+// Example: AI diagnosis attempt logging
+console.log(`[AI] Attempting diagnosis — key: ${keyIndex + 1}/${keyPool.length}, model: ${model}`);
+console.error(`[AI] Model ${model} failed (key ${keyIndex + 1}): ${error.message}`);
+console.log(`[AI] Fallback used: rule-based engine returned diagnosis`);
+
+// Example: Payment verification logging
+console.log(`[PAYMENT] Verifying Razorpay order: ${razorpayOrderId}`);
+console.error(`[PAYMENT] Signature mismatch — possible tampering. OrderId: ${razorpayOrderId}`);
+```
+
+### Future Observability (Roadmap)
+
+| Tool | Purpose |
+|---|---|
+| **Sentry** | Real-time error tracking with stack traces and user context |
+| **Datadog / Grafana** | Metric dashboards — request rates, latency percentiles, error budgets |
+| **Vercel Analytics** | Web Vitals (LCP, FID, CLS) per page for performance monitoring |
+| **Uptime Robot** | External uptime monitoring — alerts if the live URL goes down |
+
+---
+
+## 🚀 Scalability Considerations
+
+The architecture is designed to scale horizontally with minimal changes:
+
+### Current Limits (Free Tier)
+
+| Bottleneck | Current Limit | Mitigation |
+|---|---|---|
+| Vercel Serverless | 100K invocations/day | Scale to Pro plan ($20/mo) |
+| Neon PostgreSQL | 0.5 GB storage, 191.9 compute hours/mo | Scale to paid Neon plan (~$19/mo) |
+| Cloudinary | 25 GB storage / 25 GB bandwidth | Pay-as-you-go beyond free tier |
+| Gemini API | 1,500 req/day per key (free tier) | Add more keys; paid tier removes limit |
+| Gmail SMTP | ~500 emails/day | Switch to SendGrid/Resend for scale |
+
+### Scaling Paths
+
+```
+Current Architecture (Free Tier — 0 fixed cost)
+         │
+         ▼ ~500 daily users
+Neon Paid Plan ($19/mo) + Vercel Pro ($20/mo)
+         │
+         ▼ ~5,000 daily users
+Add Redis cache layer (Upstash — serverless Redis)
+for session caching and rate limiting
+         │
+         ▼ ~50,000 daily users
+Migrate to dedicated PostgreSQL + connection pooler
+Add Vercel Edge Middleware for global auth checks
+         │
+         ▼ Multi-city / SaaS
+Multi-tenant schema (tenantId on all models)
+Separate Cloudinary environments per tenant
+Custom domain routing per franchise client
+```
+
+### Database Scaling Strategy
+
+- **Read replicas**: Neon supports read replicas — direct heavy analytics queries to a replica to avoid blocking transactional writes
+- **Indexing**: Critical query paths (booking lookup by userId, service status filter, pincode matching) should have indexed columns
+- **Connection pooling**: Already using Neon pgBouncer — handles burst traffic from serverless function cold starts without exhausting the connection pool
+
+---
+
+## 🔒 Rate Limiting Strategy
+
+While rate limiting is currently not explicitly enforced in middleware (relying on Vercel's function-level limits and Gemini's own quotas), the recommended approach for production hardening:
+
+### Recommended `express-rate-limit` Setup
+
+```typescript
+import rateLimit from 'express-rate-limit';
+
+// Global API rate limit
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200,                  // 200 requests per window per IP
+  message: { success: false, message: 'Too many requests. Please try again later.' },
+});
+
+// Auth-specific limit (prevent brute-force)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,    // 20 auth attempts per 15 minutes
+  message: { success: false, message: 'Too many auth attempts. Please wait 15 minutes.' },
+});
+
+// AI diagnosis limit (expensive operation)
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 30,   // 30 diagnoses per hour per IP
+  message: { success: false, message: 'AI diagnosis limit reached. Please try again in an hour.' },
+});
+
+app.use('/api', globalLimiter);
+app.use('/api/auth', authLimiter);
+app.use('/api/ai', aiLimiter);
+```
+
+> 💡 Add `express-rate-limit` to `backend/package.json` and the above configuration to `src/index.ts` before the route declarations.
+
+---
+
 ## 📊 Project Stats
 
 ```
@@ -2637,6 +2945,10 @@ Since deploying RefriSmart-AI for **Golden Refrigeration**, Bhagalpur, measurabl
 🔐 Auth Methods         : 5 login paths (password, OTP, email OTP, phone OTP, guest)
 ⏱️ Development Time     : Solo developer, built and deployed to production
 🌐 Deployment           : Vercel (frontend + backend), Neon PostgreSQL, Cloudinary CDN
+🔄 Middleware Layers    : 9-step request pipeline (CORS → Auth → Role Guard → Controller)
+📈 Scalability          : Designed to scale from free tier to multi-city SaaS
+🌍 Bilingual            : Auto-detects English / Hinglish; responds accordingly
+♿ Accessibility        : WCAG 2.1 AA compliant (semantic HTML, ARIA, keyboard nav)
 ```
 
 ---
