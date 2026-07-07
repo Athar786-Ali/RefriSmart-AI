@@ -7,7 +7,16 @@ export const getApiBase = () => {
     return rawApi;
   }
 
-  const fallbackApi = `${window.location.protocol}//${window.location.hostname}:5001/api`;
+  const isLocalhost =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
+
+  // Only use the port-5001 fallback in local dev.
+  // In production the NEXT_PUBLIC_API_URL env var MUST be set via Vercel dashboard.
+  const fallbackApi = isLocalhost
+    ? `${window.location.protocol}//${window.location.hostname}:5001/api`
+    : "";
+
   const resolvedApi = rawApi || fallbackApi;
 
   if (window.location.hostname === "127.0.0.1" && resolvedApi.includes("localhost")) {

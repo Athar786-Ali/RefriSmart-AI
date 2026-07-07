@@ -43,6 +43,14 @@ export const cloudinaryOptimizeUrl = (rawUrl: string) => {
   if (!rawUrl || !rawUrl.includes("res.cloudinary.com") || !rawUrl.includes("/upload/")) {
     return rawUrl;
   }
+  // Idempotency guard: if transforms are already embedded in the URL, return as-is.
+  // Without this, calling cloudinaryOptimizeUrl twice produces a broken double-transform URL
+  // like: /upload/f_webp,.../upload/f_webp,.../image.jpg
+  const uploadSegment = rawUrl.slice(rawUrl.indexOf("/upload/") + "/upload/".length);
+  const firstSegment = uploadSegment.split("/")[0] || "";
+  if (firstSegment.includes("f_") || firstSegment.includes("q_") || firstSegment.includes("w_") || firstSegment.includes("c_")) {
+    return rawUrl;
+  }
   return rawUrl.replace("/upload/", "/upload/f_webp,q_auto:good,c_limit,w_1400/");
 };
 

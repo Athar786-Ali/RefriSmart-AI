@@ -76,6 +76,18 @@ export default function GalleryShowcase() {
                   alt={item.caption || "Appliance repair snapshot"} 
                   className="w-full h-auto object-cover transform transition-transform duration-700 group-hover:scale-110"
                   loading="lazy"
+                  onError={(e) => {
+                    // Hide broken image and show placeholder tile
+                    const target = e.currentTarget;
+                    target.style.display = "none";
+                    const parent = target.parentElement;
+                    if (parent) {
+                      const placeholder = document.createElement("div");
+                      placeholder.className = "flex items-center justify-center h-40 text-4xl text-slate-400 bg-slate-100";
+                      placeholder.textContent = "📷";
+                      parent.prepend(placeholder);
+                    }
+                  }}
                 />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end">
                 <div className="p-4 transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">

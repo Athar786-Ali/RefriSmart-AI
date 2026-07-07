@@ -39,6 +39,12 @@ const transformCloudinaryImage = (url: string | null) => {
   if (!url || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) {
     return url;
   }
+  // Idempotency guard: skip if transforms already present (backend pre-optimizes URLs)
+  const uploadSegment = url.slice(url.indexOf("/upload/") + "/upload/".length);
+  const firstSegment = uploadSegment.split("/")[0] || "";
+  if (firstSegment.includes("f_") || firstSegment.includes("q_") || firstSegment.includes("w_") || firstSegment.includes("c_")) {
+    return url;
+  }
   return url.replace("/upload/", "/upload/f_webp,q_auto:good,c_limit,w_900/");
 };
 
