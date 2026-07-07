@@ -1,7 +1,7 @@
 // frontend/src/app/robots.ts
 import type { MetadataRoute } from "next";
 
-const SITE_URL = "https://refrismart-ai.vercel.app";
+const SITE_URL = "https://www.goldenrefrigeration.in";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -9,7 +9,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: ["/", "/service", "/products", "/ai-diagnosis", "/sell", "/gallery"],
-        disallow: ["/admin", "/admin/", "/orders", "/verify-otp"],
+        disallow: ["/admin", "/admin/", "/orders", "/verify-otp", "/technician"],
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,
