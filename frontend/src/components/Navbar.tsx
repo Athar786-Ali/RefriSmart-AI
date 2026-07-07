@@ -11,10 +11,11 @@ type NavLink = { href: string; label: string };
 
 const NAV_LINKS: NavLink[] = [
   { href: "/",            label: "Home" },
-  { href: "/service",     label: "Service" },
+  { href: "/service",     label: "Book Repair" },
+  { href: "/services/ac-repair", label: "AC Repair" },
+  { href: "/services/refrigerator-repair", label: "Fridge Repair" },
+  { href: "/blog",        label: "Blog" },
   { href: "/products",    label: "Products" },
-  { href: "/sell",        label: "Sell Appliance" },
-  { href: "/orders",      label: "My Orders" },
   { href: "/ai-diagnosis",label: "AI Diagnosis" },
 ];
 
