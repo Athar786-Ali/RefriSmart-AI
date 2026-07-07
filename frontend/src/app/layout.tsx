@@ -102,8 +102,7 @@ export const metadata: Metadata = {
     canonical: SITE_URL,
   },
   verification: {
-    // Paste your Google Search Console verification code here:
-    // google: "YOUR_GOOGLE_VERIFICATION_CODE",
+    google: "5DtJJXht_ubwLc1k6KfI_VUsWaU38OAXxjoGP2ostiM",
   },
   category: "Home Appliance Repair Service",
 };
