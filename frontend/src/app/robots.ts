@@ -1,28 +1,15 @@
 // frontend/src/app/robots.ts
 import type { MetadataRoute } from "next";
-import { SITE_URL } from "@/lib/seo-config";
+
+const SITE_URL = "https://refrismart-ai.vercel.app";
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       {
         userAgent: "*",
-        allow: [
-          "/",
-          "/service",
-          "/products",
-          "/ai-diagnosis",
-          "/sell",
-          "/gallery",
-          "/blog",
-          "/blog/",
-          "/services/",
-          "/refrigerator-repair/",
-          "/ac-repair/",
-          "/washing-machine-repair/",
-          "/brands/",
-        ],
-        disallow: ["/admin", "/admin/", "/orders", "/verify-otp", "/technician"],
+        allow: ["/", "/service", "/products", "/ai-diagnosis", "/sell", "/gallery"],
+        disallow: ["/admin", "/admin/", "/orders", "/verify-otp"],
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,
