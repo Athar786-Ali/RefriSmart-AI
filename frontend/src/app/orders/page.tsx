@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { toast as hotToast } from "react-hot-toast";
 import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/razorpay";
 import { useAuth } from "@/context/AuthContext";
-import { getApiBase } from "@/lib/api";
+import { getApiBase, authFetch } from "@/lib/api";
 import {
   getOrderStepIndex,
   normalizeOrderApiPayload,
@@ -61,7 +61,7 @@ export default function OrdersPage() {
     }
     if (showLoader) setLoading(true);
     try {
-      const res = await fetch(`${API}/orders/my`, { credentials: "include" });
+      const res = await authFetch(`${API}/orders/my`);
       const payload = await res.json().catch(() => []);
       const nextOrders = (Array.isArray(payload) ? payload : []).filter(Boolean).map((item) =>
         normalizeOrderApiPayload(item as ProductOrder & { orderStatus?: string }),
@@ -107,9 +107,8 @@ export default function OrdersPage() {
         return;
       }
 
-      const orderRes = await fetch(`${API}/orders/${order.id}/razorpay`, {
+      const orderRes = await authFetch(`${API}/orders/${order.id}/razorpay`, {
         method: "POST",
-        credentials: "include",
       });
       const orderPayload = await orderRes.json().catch(() => ({}));
       if (!orderRes.ok) {
@@ -137,10 +136,9 @@ export default function OrdersPage() {
         order_id: razorpayOrder.id,
       });
 
-      const verifyRes = await fetch(`${API}/orders/${order.id}/razorpay/verify`, {
+      const verifyRes = await authFetch(`${API}/orders/${order.id}/razorpay/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify(paymentResponse),
       });
       const verifyPayload = await verifyRes.json().catch(() => ({}));

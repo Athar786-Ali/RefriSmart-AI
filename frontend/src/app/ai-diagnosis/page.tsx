@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import DiagnosisSkeleton from "@/components/DiagnosisSkeleton";
 import EstimateCard from "@/components/EstimateCard";
 import { useAuth } from "@/context/AuthContext";
-import { getApiBase } from "@/lib/api";
+import { getApiBase, authFetch } from "@/lib/api";
 import type { DiagnosisItem } from "@/types";
 
 type ContactInfo = {
@@ -89,8 +89,7 @@ export default function AIDiagnosis() {
     let cancelled = false;
     const loadHistory = async () => {
       try {
-        const res = await fetch(`${API}/ai/history`, {
-          credentials: "include",
+        const res = await authFetch(`${API}/ai/history`, {
           cache: "no-store",
         });
         const payload = await res.json().catch(() => []);
@@ -156,9 +155,8 @@ export default function AIDiagnosis() {
         formData.append("media", mediaFile);
       }
 
-      const res = await fetch(`${API}/ai/diagnose`, {
+      const res = await authFetch(`${API}/ai/diagnose`, {
         method: "POST",
-        credentials: "include",
         body: formData,
       });
 
@@ -235,10 +233,9 @@ export default function AIDiagnosis() {
       const diagnosisSummary = result
         ? `${result}${estimatedCostRange ? `\nEstimated cost range: ${estimatedCostRange}` : ""}`
         : "";
-      const res = await fetch(`${API}/service/book`, {
+      const res = await authFetch(`${API}/service/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           userId: user?.id,
           guestName: user?.id ? undefined : bookingFullName.trim(),

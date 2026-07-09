@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import ServiceActiveTrackerCard, { type ServiceBooking } from "@/components/ServiceActiveTrackerCard";
 import ServiceHistoryCard from "@/components/ServiceHistoryCard";
-import { getApiBase } from "@/lib/api";
+import { getApiBase, authFetch } from "@/lib/api";
 import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/razorpay";
 import { getServiceStatusLabel, isAwaitingServicePayment, isClosedDisplayStatus } from "@/lib/service-status";
 
@@ -217,8 +217,7 @@ export default function ServicePage() {
 
       if (userId) {
         const [bookingsRes, galleryPayload] = await Promise.all([
-          fetch(`${API}/service/my-bookings`, {
-            credentials: "include",
+          authFetch(`${API}/service/my-bookings`, {
             cache: "no-store",
           }),
           galleryPromise,
@@ -293,8 +292,8 @@ export default function ServicePage() {
       const uid = userIdRef.current;
       if (!uid) return;
       try {
-        const res = await fetch(`${API}/service/my-bookings`, {
-          credentials: "include", cache: "no-store",
+        const res = await authFetch(`${API}/service/my-bookings`, {
+          cache: "no-store",
         });
         if (!res.ok) {
           const errorPayload = await res.json().catch(() => null);
@@ -378,10 +377,9 @@ export default function ServicePage() {
 
     setBookingSubmitting(true);
     try {
-      const res = await fetch(`${API}/service/book`, {
+      const res = await authFetch(`${API}/service/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           userId: currentUser?.id,
           guestName: currentUser?.id ? undefined : form.fullName.trim(),
@@ -514,9 +512,8 @@ export default function ServicePage() {
         return;
       }
 
-      const orderRes = await fetch(`${API}/booking/${activeBooking.id}/razorpay`, {
+      const orderRes = await authFetch(`${API}/booking/${activeBooking.id}/razorpay`, {
         method: "POST",
-        credentials: "include",
       });
       const orderPayload = await orderRes.json().catch(() => ({}));
       if (!orderRes.ok) {
@@ -544,10 +541,9 @@ export default function ServicePage() {
         },
       });
 
-      const verifyRes = await fetch(`${API}/booking/${activeBooking.id}/razorpay/verify`, {
+      const verifyRes = await authFetch(`${API}/booking/${activeBooking.id}/razorpay/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify(paymentResponse),
       });
       const verifyPayload = await verifyRes.json().catch(() => ({}));

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
+import { authFetch } from "@/lib/api";
 import {
   AlertCircle,
   CheckCircle2,
@@ -71,10 +72,9 @@ export function SellSection({ sells, setSells, API }: SectionProps) {
       const body: Record<string, unknown> = { offerPrice: Number(price) };
       if (pickupSlot[request.id]) body.pickupSlot = pickupSlot[request.id];
 
-      const response = await fetch(`${API}/sell/requests/${request.id}/offer`, {
+      const response = await authFetch(`${API}/sell/requests/${request.id}/offer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify(body),
       });
       const payload = await response.json().catch(() => null);
@@ -104,9 +104,8 @@ export function SellSection({ sells, setSells, API }: SectionProps) {
   const moveRefurb = async (request: SellReq) => {
     setConfirming((prev) => ({ ...prev, [request.id]: true }));
     try {
-      const response = await fetch(`${API}/sell/requests/${request.id}/move-to-refurbished`, {
+      const response = await authFetch(`${API}/sell/requests/${request.id}/move-to-refurbished`, {
         method: "POST",
-        credentials: "include",
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {

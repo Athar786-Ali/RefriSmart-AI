@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { toast } from "sonner";
+import { authFetch } from "@/lib/api";
 import { Loader2, Trash2, Package } from "lucide-react";
 import { imgSrc, expiryDate, toDataUrl, inp, btn } from "./_types";
 import type { SectionProps, NewProd } from "./_types";
@@ -21,7 +22,7 @@ export function ProductsSection({ stats, setStats, API }: SectionProps) {
 
   const uploadImg = async (f: File) => {
     const fileData = await toDataUrl(f);
-    const r = await fetch(`${API}/admin/upload-image`, { method:"POST", headers:{"Content-Type":"application/json"}, credentials:"include", body:JSON.stringify({ fileData, fileName:f.name }) });
+    const r = await authFetch(`${API}/admin/upload-image`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ fileData, fileName:f.name }) });
     const p = await r.json().catch(() => ({}));
     if (!r.ok || !p?.imageUrl) throw new Error(p?.error || "Upload failed.");
     return p.imageUrl as string;
@@ -42,7 +43,7 @@ export function ProductsSection({ stats, setStats, API }: SectionProps) {
     const am = (Number(ageY||0)*12) + Number(ageM||0);
     setPriceAI(true);
     try {
-      const r = await fetch(`${API}/admin/suggest-price`, { method:"POST", headers:{"Content-Type":"application/json"}, credentials:"include", body:JSON.stringify({ basePrice:prod.price, conditionScore:prod.conditionScore, ageMonths:am, productType:prod.productType, title:prod.title }) });
+      const r = await authFetch(`${API}/admin/suggest-price`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ basePrice:prod.price, conditionScore:prod.conditionScore, ageMonths:am, productType:prod.productType, title:prod.title }) });
       const p = await r.json();
       if (!r.ok) return toast.error(p?.error || "AI price failed.");
       setProd(x => ({ ...x, price: String(p.suggestedPrice || x.price) }));
@@ -59,7 +60,7 @@ export function ProductsSection({ stats, setStats, API }: SectionProps) {
       const R  = prod.productType === "REFURBISHED";
       const am = (Number(ageY||0)*12) + Number(ageM||0);
       const payload = { ...prod, conditionScore:R?(prod.conditionScore||"9"):"", ageMonths:R?String(am):"", warrantyType:R?(prod.warrantyType||"SHOP"):prod.warrantyType, warrantyExpiry:expiryDate(wDur, wUnit), warrantyCertificateUrl:R?(prod.warrantyCertificateUrl.trim()||CERT):prod.warrantyCertificateUrl, stockQty:R?"1":prod.stockQty };
-      const r  = await fetch(`${API}/admin/add-product`, { method:"POST", headers:{"Content-Type":"application/json"}, credentials:"include", body:JSON.stringify(payload) });
+      const r  = await authFetch(`${API}/admin/add-product`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
       const p  = await r.json().catch(() => null);
       if (!r.ok) return toast.error(p?.error || "Failed to add product.");
       toast.success("Product listed!");
@@ -73,7 +74,7 @@ export function ProductsSection({ stats, setStats, API }: SectionProps) {
     const ok = await new Promise<boolean>(res => { toast("Remove this product?", { duration:8000, action:{ label:"Yes, remove", onClick:()=>res(true) }, cancel:{ label:"Cancel", onClick:()=>res(false) }, onDismiss:()=>res(false) }); });
     if (!ok) return;
     try {
-      const r = await fetch(`${API}/admin/delete-product/${id}`, { method:"DELETE", credentials:"include" });
+      const r = await authFetch(`${API}/admin/delete-product/${id}`, { method:"DELETE" });
       if (!r.ok) { const p = await r.json().catch(()=>({})); return toast.error(p?.error||"Delete failed."); }
       toast.success("Product removed.");
       setStats(s => s ? { ...s, latestProducts:s.latestProducts.filter(p => p.id!==id), totalProducts:Math.max(0,(s.totalProducts||1)-1) } : s);

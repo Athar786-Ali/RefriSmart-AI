@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { toast } from "sonner";
+import { authFetch } from "@/lib/api";
 import { Loader2, Trash2, Upload } from "lucide-react";
 import { btn } from "./_types";
 import type { SectionProps } from "./_types";
@@ -26,9 +27,8 @@ export function GallerySection({ gallery, setGallery, API }: SectionProps) {
         formData.append("caption", caption.trim());
       }
 
-      const r = await fetch(`${API}/admin/gallery`, {
+      const r = await authFetch(`${API}/admin/gallery`, {
         method: "POST",
-        credentials: "include",
         body: formData,
       });
       const p = await r.json().catch(() => null);
@@ -56,7 +56,7 @@ export function GallerySection({ gallery, setGallery, API }: SectionProps) {
     setDeleting(d => ({ ...d, [id]: true }));
     setGallery(g => g.filter(x => x.id !== id));
     try {
-      const r = await fetch(`${API}/admin/gallery/${id}`, { method: "DELETE", credentials: "include" });
+      const r = await authFetch(`${API}/admin/gallery/${id}`, { method: "DELETE" });
       if (!r.ok) { setGallery(prev); toast.error("Delete failed."); }
     } catch { setGallery(prev); toast.error("Delete failed."); }
     finally { setDeleting(d => { const n = { ...d }; delete n[id]; return n; }); }

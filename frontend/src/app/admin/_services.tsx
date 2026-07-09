@@ -1,6 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
+import { authFetch } from "@/lib/api";
 import { Search, Download, X } from "lucide-react";
 import {
   DISPLAY_SERVICE_STATUSES,
@@ -82,8 +83,8 @@ export function ServicesSection({ bookings, setBookings, technicians, API }: Sec
       ),
     );
     try {
-      const r = await fetch(`${API}/admin/service/${id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include",
+      const r = await authFetch(`${API}/admin/service/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, finalCost: Number.isFinite(pc) ? pc : undefined }),
       });
       const p = await r.json().catch(() => null);
@@ -110,8 +111,8 @@ export function ServicesSection({ bookings, setBookings, technicians, API }: Sec
       ),
     );
     try {
-      const response = await fetch(`${API}/admin/assign-technician/${booking.id}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include",
+      const response = await authFetch(`${API}/admin/assign-technician/${booking.id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ technicianId: technicians.length ? selectedTechnician.id : undefined, technicianName: selectedTechnician.name }),
       });
       const payload = await response.json().catch(() => null);

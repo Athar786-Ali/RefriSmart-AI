@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { MailCheck, Phone, ShieldCheck } from "lucide-react";
-import { getApiBase } from "@/lib/api";
+import { getApiBase, authFetch } from "@/lib/api";
 
 type VerifyResponse = {
   message?: string;
@@ -52,12 +52,11 @@ export default function VerifyOtpPage() {
     setWhatsappLink("");
     setSending(true);
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `${API}/${channel === "email" ? "auth/send-verify-otp" : "auth/send-whatsapp-otp"}`,
         {
           method: "POST",
           headers: channel === "phone" ? { "Content-Type": "application/json" } : undefined,
-          credentials: "include",
           body: channel === "phone" ? JSON.stringify({ phone: phone.trim() }) : undefined,
         },
       );
@@ -87,12 +86,11 @@ export default function VerifyOtpPage() {
     setMessage("");
     setVerifying(true);
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `${API}/${channel === "email" ? "auth/verify-otp" : "auth/verify-phone-otp"}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
           body: JSON.stringify({ otp: otp.trim() }),
         },
       );

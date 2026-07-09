@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import { ALL_ORDER_STATUSES, ORDER_STATUS_LABELS, isFinalOrderStatus, normalizeOrderApiPayload } from "@/lib/order-status";
 import { toast } from "sonner";
+import { authFetch } from "@/lib/api";
 import { Search, Download, X } from "lucide-react";
 import { INR, sc, btn } from "./_types";
 import type { SectionProps, Order } from "./_types";
@@ -56,8 +57,8 @@ export function OrdersSection({ orders, setOrders, API }: SectionProps) {
     const prev = [...orders];
     setOrders(o => o.map(x => x.id === id ? { ...x, status } : x));
     try {
-      const r = await fetch(`${API}/admin/orders/${id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include",
+      const r = await authFetch(`${API}/admin/orders/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
       const p = await r.json().catch(() => null);
@@ -72,7 +73,7 @@ export function OrdersSection({ orders, setOrders, API }: SectionProps) {
   const confirmPay = async (id: string) => {
     setConfPay(p => ({ ...p, [id]: true }));
     try {
-      const r = await fetch(`${API}/admin/orders/${id}/confirm-payment`, { method: "PATCH", credentials: "include" });
+      const r = await authFetch(`${API}/admin/orders/${id}/confirm-payment`, { method: "PATCH" });
       const p = await r.json().catch(() => null);
       if (!r.ok) { toast.error(p?.message || p?.error || "Failed."); return; }
       if (p?.order) {
@@ -87,7 +88,7 @@ export function OrdersSection({ orders, setOrders, API }: SectionProps) {
   const genBill = async (id: string) => {
     setGenInv(p => ({ ...p, [id]: true }));
     try {
-      const r = await fetch(`${API}/admin/orders/${id}/generate-invoice`, { method: "POST", credentials: "include" });
+      const r = await authFetch(`${API}/admin/orders/${id}/generate-invoice`, { method: "POST" });
       const p = await r.json().catch(() => null);
       if (!r.ok) { toast.error(p?.message || p?.error || "Failed."); return; }
       if (p?.order) {
@@ -114,8 +115,8 @@ export function OrdersSection({ orders, setOrders, API }: SectionProps) {
     if (!payload) { toast.error("Use a customer email, 10-digit phone number, or user id."); return; }
     setReassigning(prev => ({ ...prev, [id]: true }));
     try {
-      const r = await fetch(`${API}/admin/orders/${id}/reassign-customer`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include",
+      const r = await authFetch(`${API}/admin/orders/${id}/reassign-customer`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const p = await r.json().catch(() => null);
