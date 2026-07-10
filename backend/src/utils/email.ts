@@ -1,9 +1,11 @@
 import nodemailer from "nodemailer";
 
 export const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp-relay.brevo.com",
+  port: 587,
+  secure: false,
   auth: {
-    user: process.env.GMAIL_USER || "your-email@gmail.com",
-    pass: process.env.GMAIL_PASS || "your-app-password",
+    user: process.env.SMTP_USER || "your-email@example.com",
+    pass: process.env.SMTP_PASS || "your-app-password",
   },
 });

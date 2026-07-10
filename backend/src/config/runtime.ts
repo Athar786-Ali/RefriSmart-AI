@@ -9,7 +9,9 @@ export const SMTP_USER = process.env.SMTP_USER || "";
 export const SMTP_PASS = process.env.SMTP_PASS || "";
 
 const mailTransporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp-relay.brevo.com",
+  port: 587,
+  secure: false,
   auth: {
     user: SMTP_USER,
     pass: SMTP_PASS,
@@ -230,7 +232,7 @@ export const sendEmail = async (to: string, subject: string, html: string, text?
     throw new Error("SMTP credentials are missing. Set SMTP_USER and SMTP_PASS.");
   }
   await mailTransporter.sendMail({
-    from: `"Golden Refrigeration" <${SMTP_USER}>`,
+    from: '"Golden Refrigeration" <mdatharsbr@gmail.com>',
     to,
     subject,
     text: text || "Golden Refrigeration notification",

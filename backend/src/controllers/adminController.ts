@@ -884,6 +884,7 @@ export const assignTechnician = async (req: Request, res: Response) => {
         });
         
         await transporter.sendMail({
+          from: '"Golden Refrigeration" <mdatharsbr@gmail.com>',
           to: technician.email,
           subject: "New Service Assignment",
           text: `
