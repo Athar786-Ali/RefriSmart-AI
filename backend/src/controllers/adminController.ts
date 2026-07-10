@@ -14,6 +14,7 @@ import {
   generateSuggestedSlots,
   inferMediaTypeFromUrl,
   makeSimplePdfBuffer,
+  makeProfessionalInvoicePdf,
 } from "../config/runtime.js";
 import { listDiagnosisLogs } from "../services/diagnosisService.js";
 import { removeStoredMedia, storeMediaFromDataUrl, storeMediaFromTempFile, toAbsoluteMediaUrl } from "../services/mediaStorageService.js";
@@ -2179,24 +2180,61 @@ export const generateInvoiceByBooking = async (req: AuthenticatedRequest, res: R
     const requester = await prisma.user.findUnique({ where: { id: requesterId } });
     if (!requester) return res.status(403).json({ error: "Forbidden." });
 
-    const booking = (await prisma.serviceBooking.findUnique({ where: { id: bookingId } })) as any;
+    const booking = await prisma.serviceBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        customer: { select: { name: true, email: true, phone: true } },
+      },
+    }) as any;
     if (!booking) return res.status(404).json({ error: "Booking not found." });
     if (requester.role !== "ADMIN" && booking.customerId !== requesterId) {
       return res.status(403).json({ error: "Forbidden." });
     }
 
+    // Fetch technician info via assignment
+    let techName = "";
+    let techPhone = TECHNICIAN_PHONE;
+    try {
+      const assignment = await prisma.serviceAssignment.findUnique({
+        where: { bookingId },
+        include: { technician: { select: { name: true, phone: true } } },
+      }) as any;
+      if (assignment?.technician) {
+        techName = assignment.technician.name || "";
+        techPhone = assignment.technician.phone || TECHNICIAN_PHONE;
+      }
+    } catch (_) { /* assignment may not exist */ }
+
     const amount = Number(booking.finalCost || 0);
-    const lines = [
-      `Booking ID: ${booking.id}`,
-      `Appliance: ${booking.appliance}`,
-      `Issue: ${booking.issue}`,
-      `Status: ${booking.status}`,
-      `Amount: Rs. ${amount.toLocaleString("en-IN")}`,
-      `Technician Contact: ${TECHNICIAN_PHONE}`,
-    ];
-    const pdfBuffer = makeSimplePdfBuffer("Golden Refrigeration - Invoice", lines);
+    const now = new Date();
+    const invoiceDate = now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    const scheduledDate = booking.scheduledAt
+      ? new Date(booking.scheduledAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+      : invoiceDate;
+
+    // Generate a short invoice number from booking ID
+    const invoiceNumber = `GR-${bookingId.substring(0, 8).toUpperCase()}`;
+
+    const pdfBuffer = makeProfessionalInvoicePdf({
+      invoiceNumber,
+      invoiceDate,
+      bookingId: booking.id,
+      customerName: booking.customer?.name || booking.guestName || booking.contactName || "Customer",
+      customerPhone: booking.customer?.phone || booking.guestPhone || booking.contactPhone || "",
+      customerEmail: booking.customer?.email || "",
+      customerAddress: booking.address || "",
+      appliance: booking.appliance,
+      issue: booking.issue,
+      status: booking.status,
+      scheduledDate,
+      technicianName: techName,
+      technicianPhone: techPhone,
+      serviceCharge: amount,
+      gstPercent: 18,
+    });
+
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="invoice-${bookingId}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="invoice-${bookingId}.pdf"`);
     res.send(pdfBuffer);
   } catch (error: any) {
     res.status(500).json({ error: "Failed to generate invoice.", details: error?.message || "Unknown error" });

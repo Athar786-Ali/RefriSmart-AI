@@ -485,8 +485,27 @@ export default function ServicePage() {
   };
 
   const downloadInvoice = async (booking: ServiceBooking) => {
-    const invoiceUrl = booking.invoiceUrl || `${API}/docs/invoice/${booking.id}`;
-    window.open(invoiceUrl, "_blank", "noopener,noreferrer");
+    try {
+      const invoiceApiUrl = `${API}/docs/invoice/${booking.id}`;
+      const response = await authFetch(invoiceApiUrl);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        toast.error(errorData?.error || "Failed to download invoice.");
+        return;
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `invoice-${booking.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success("Invoice downloaded successfully!");
+    } catch {
+      toast.error("Unable to download invoice. Please try again.");
+    }
   };
 
   const handleServicePayment = async () => {

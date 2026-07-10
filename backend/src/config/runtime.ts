@@ -416,6 +416,466 @@ export const makeSimplePdfBuffer = (title: string, lines: string[]) => {
   return Buffer.from(pdf, "utf8");
 };
 
+// ── Professional Invoice PDF Generator ──────────────────────────────────
+export type InvoiceData = {
+  invoiceNumber: string;
+  invoiceDate: string;
+  bookingId: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  customerAddress: string;
+  appliance: string;
+  issue: string;
+  status: string;
+  scheduledDate: string;
+  technicianName: string;
+  technicianPhone: string;
+  serviceCharge: number;
+  gstPercent: number;
+};
+
+export const makeProfessionalInvoicePdf = (data: InvoiceData): Buffer => {
+  const esc = (t: string) => t.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  const rupee = (n: number) => `Rs. ${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const gstAmount = Math.round(data.serviceCharge * data.gstPercent / 100 * 100) / 100;
+  const totalAmount = data.serviceCharge + gstAmount;
+
+  // Page dimensions (A4: 595 x 842)
+  const W = 595, H = 842;
+  const ML = 50, MR = 50; // margins
+  const CW = W - ML - MR; // content width = 495
+
+  // We'll build all the drawing commands for the page content stream
+  const cmds: string[] = [];
+
+  // ── 1. Header bar (dark blue-grey background) ──
+  cmds.push("q"); // save graphics state
+  cmds.push("0.129 0.145 0.192 rg"); // dark navy (#212538)
+  cmds.push(`${ML - 10} ${H - 120} ${CW + 20} 80 re f`); // filled rectangle
+  cmds.push("Q"); // restore
+
+  // Golden accent line below header
+  cmds.push("q");
+  cmds.push("0.855 0.647 0.243 RG"); // golden color (#DAA53E)
+  cmds.push("2 w"); // line width
+  cmds.push(`${ML - 10} ${H - 122} m ${ML + CW + 10} ${H - 122} l S`);
+  cmds.push("Q");
+
+  // Company name in header (white, large)
+  cmds.push("BT");
+  cmds.push("1 1 1 rg"); // white
+  cmds.push("/F2 22 Tf"); // bold, large
+  cmds.push(`${ML + 10} ${H - 85} Td`);
+  cmds.push(`(${esc("GOLDEN REFRIGERATION")}) Tj`);
+  cmds.push("ET");
+
+  // Tagline
+  cmds.push("BT");
+  cmds.push("0.855 0.647 0.243 rg"); // golden
+  cmds.push("/F1 9 Tf");
+  cmds.push(`${ML + 10} ${H - 102} Td`);
+  cmds.push(`(${esc("Expert Appliance Repair & Service | Since 2015")}) Tj`);
+  cmds.push("ET");
+
+  // INVOICE label (right side of header)
+  cmds.push("BT");
+  cmds.push("1 1 1 rg");
+  cmds.push("/F2 18 Tf");
+  cmds.push(`${W - MR - 120} ${H - 85} Td`);
+  cmds.push(`(${esc("INVOICE")}) Tj`);
+  cmds.push("ET");
+
+  // ── 2. Invoice meta info (below header) ──
+  let y = H - 155;
+  const labelX = ML + 10;
+  const valX = ML + 120;
+  const rightLabelX = ML + 280;
+  const rightValX = ML + 380;
+
+  // Left column
+  const metaLeft = [
+    ["Invoice No:", data.invoiceNumber],
+    ["Invoice Date:", data.invoiceDate],
+    ["Booking ID:", data.bookingId.substring(0, 18) + (data.bookingId.length > 18 ? "..." : "")],
+  ];
+  // Right column
+  const metaRight = [
+    ["Status:", data.status],
+    ["Service Date:", data.scheduledDate],
+  ];
+
+  cmds.push("BT");
+  cmds.push("0.3 0.3 0.3 rg");
+  cmds.push("/F1 9 Tf");
+  cmds.push(`${labelX} ${y} Td`);
+  for (let i = 0; i < metaLeft.length; i++) {
+    if (i > 0) cmds.push(`0 -16 Td`);
+    cmds.push(`(${esc(metaLeft[i][0])}) Tj`);
+  }
+  cmds.push("ET");
+
+  cmds.push("BT");
+  cmds.push("0.1 0.1 0.1 rg");
+  cmds.push("/F2 9 Tf");
+  cmds.push(`${valX} ${y} Td`);
+  for (let i = 0; i < metaLeft.length; i++) {
+    if (i > 0) cmds.push(`0 -16 Td`);
+    cmds.push(`(${esc(metaLeft[i][1])}) Tj`);
+  }
+  cmds.push("ET");
+
+  cmds.push("BT");
+  cmds.push("0.3 0.3 0.3 rg");
+  cmds.push("/F1 9 Tf");
+  cmds.push(`${rightLabelX} ${y} Td`);
+  for (let i = 0; i < metaRight.length; i++) {
+    if (i > 0) cmds.push(`0 -16 Td`);
+    cmds.push(`(${esc(metaRight[i][0])}) Tj`);
+  }
+  cmds.push("ET");
+
+  cmds.push("BT");
+  cmds.push("0.1 0.1 0.1 rg");
+  cmds.push("/F2 9 Tf");
+  cmds.push(`${rightValX} ${y} Td`);
+  for (let i = 0; i < metaRight.length; i++) {
+    if (i > 0) cmds.push(`0 -16 Td`);
+    cmds.push(`(${esc(metaRight[i][1])}) Tj`);
+  }
+  cmds.push("ET");
+
+  // ── 3. Divider line ──
+  y -= 60;
+  cmds.push("q");
+  cmds.push("0.85 0.85 0.85 RG");
+  cmds.push("0.5 w");
+  cmds.push(`${ML} ${y} m ${W - MR} ${y} l S`);
+  cmds.push("Q");
+
+  // ── 4. Bill To section ──
+  y -= 22;
+  cmds.push("BT");
+  cmds.push("0.129 0.145 0.192 rg");
+  cmds.push("/F2 11 Tf");
+  cmds.push(`${labelX} ${y} Td`);
+  cmds.push(`(${esc("BILL TO")}) Tj`);
+  cmds.push("ET");
+
+  y -= 18;
+  const customerLines = [
+    data.customerName || "N/A",
+    data.customerPhone ? `Phone: ${data.customerPhone}` : "",
+    data.customerEmail ? `Email: ${data.customerEmail}` : "",
+    data.customerAddress ? `Address: ${data.customerAddress}` : "",
+  ].filter(Boolean);
+
+  cmds.push("BT");
+  cmds.push("0.2 0.2 0.2 rg");
+  cmds.push("/F1 9 Tf");
+  cmds.push(`${labelX} ${y} Td`);
+  for (let i = 0; i < customerLines.length; i++) {
+    if (i > 0) cmds.push("0 -15 Td");
+    cmds.push(`(${esc(customerLines[i])}) Tj`);
+  }
+  cmds.push("ET");
+
+  y -= (customerLines.length - 1) * 15 + 25;
+
+  // ── 5. Service Details Table ──
+  // Table header background
+  const tableX = ML;
+  const tableW = CW;
+  const rowH = 28;
+  const headerY = y;
+
+  cmds.push("q");
+  cmds.push("0.929 0.941 0.965 rg"); // light blue-grey (#EDF0F6)
+  cmds.push(`${tableX} ${headerY - rowH} ${tableW} ${rowH} re f`);
+  cmds.push("Q");
+
+  // Table header text
+  const colPositions = [tableX + 10, tableX + 80, tableX + 210, tableX + 390];
+  const colHeaders = ["S.No.", "Description", "Details", "Amount"];
+
+  cmds.push("BT");
+  cmds.push("0.129 0.145 0.192 rg");
+  cmds.push("/F2 9 Tf");
+  for (let i = 0; i < colHeaders.length; i++) {
+    cmds.push(`${colPositions[i]} ${headerY - 18} Td`);
+    cmds.push(`(${esc(colHeaders[i])}) Tj`);
+    if (i < colHeaders.length - 1) {
+      // Move cursor for next absolute position
+      cmds.push(`${colPositions[i + 1] - colPositions[i]} 0 Td`);
+    }
+  }
+  cmds.push("ET");
+
+  // Table header border
+  cmds.push("q");
+  cmds.push("0.75 0.75 0.75 RG");
+  cmds.push("0.5 w");
+  cmds.push(`${tableX} ${headerY} ${tableW} ${-rowH} re S`);
+  cmds.push("Q");
+
+  // Table rows
+  const rows = [
+    ["1", "Appliance Type", data.appliance, ""],
+    ["2", "Issue Reported", data.issue.length > 40 ? data.issue.substring(0, 40) + "..." : data.issue, ""],
+    ["3", "Service / Repair Charge", "Professional service", rupee(data.serviceCharge)],
+  ];
+
+  let rowY = headerY - rowH;
+  for (const row of rows) {
+    // Row background (alternate)
+    const rowIndex = rows.indexOf(row);
+    if (rowIndex % 2 === 1) {
+      cmds.push("q");
+      cmds.push("0.973 0.976 0.984 rg"); // very light grey
+      cmds.push(`${tableX} ${rowY - rowH} ${tableW} ${rowH} re f`);
+      cmds.push("Q");
+    }
+
+    // Row text
+    cmds.push("BT");
+    cmds.push("0.2 0.2 0.2 rg");
+    cmds.push("/F1 9 Tf");
+    cmds.push(`${colPositions[0]} ${rowY - 18} Td`);
+    cmds.push(`(${esc(row[0])}) Tj`);
+    cmds.push("ET");
+
+    cmds.push("BT");
+    cmds.push("0.2 0.2 0.2 rg");
+    cmds.push("/F2 9 Tf");
+    cmds.push(`${colPositions[1]} ${rowY - 18} Td`);
+    cmds.push(`(${esc(row[1])}) Tj`);
+    cmds.push("ET");
+
+    cmds.push("BT");
+    cmds.push("0.3 0.3 0.3 rg");
+    cmds.push("/F1 9 Tf");
+    cmds.push(`${colPositions[2]} ${rowY - 18} Td`);
+    cmds.push(`(${esc(row[2])}) Tj`);
+    cmds.push("ET");
+
+    if (row[3]) {
+      cmds.push("BT");
+      cmds.push("0.1 0.1 0.1 rg");
+      cmds.push("/F2 9 Tf");
+      cmds.push(`${colPositions[3]} ${rowY - 18} Td`);
+      cmds.push(`(${esc(row[3])}) Tj`);
+      cmds.push("ET");
+    }
+
+    // Row border
+    cmds.push("q");
+    cmds.push("0.85 0.85 0.85 RG");
+    cmds.push("0.5 w");
+    cmds.push(`${tableX} ${rowY - rowH} ${tableW} ${rowH} re S`);
+    cmds.push("Q");
+
+    rowY -= rowH;
+  }
+
+  // ── 6. Cost breakdown (right-aligned summary box) ──
+  y = rowY - 20;
+  const summaryX = tableX + tableW - 220;
+  const summaryLabelX = summaryX + 10;
+  const summaryValX = summaryX + 160;
+  const summaryW = 220;
+
+  // Subtotal
+  cmds.push("q");
+  cmds.push("0.96 0.96 0.96 rg");
+  cmds.push(`${summaryX} ${y - 22} ${summaryW} 22 re f`);
+  cmds.push("Q");
+  cmds.push("BT");
+  cmds.push("0.3 0.3 0.3 rg");
+  cmds.push("/F1 9 Tf");
+  cmds.push(`${summaryLabelX} ${y - 15} Td`);
+  cmds.push(`(${esc("Subtotal")}) Tj`);
+  cmds.push("ET");
+  cmds.push("BT");
+  cmds.push("0.1 0.1 0.1 rg");
+  cmds.push("/F2 9 Tf");
+  cmds.push(`${summaryValX} ${y - 15} Td`);
+  cmds.push(`(${esc(rupee(data.serviceCharge))}) Tj`);
+  cmds.push("ET");
+
+  y -= 22;
+
+  // GST
+  cmds.push("BT");
+  cmds.push("0.3 0.3 0.3 rg");
+  cmds.push("/F1 9 Tf");
+  cmds.push(`${summaryLabelX} ${y - 15} Td`);
+  cmds.push(`(${esc(`GST (${data.gstPercent}%)`)}) Tj`);
+  cmds.push("ET");
+  cmds.push("BT");
+  cmds.push("0.1 0.1 0.1 rg");
+  cmds.push("/F1 9 Tf");
+  cmds.push(`${summaryValX} ${y - 15} Td`);
+  cmds.push(`(${esc(rupee(gstAmount))}) Tj`);
+  cmds.push("ET");
+
+  y -= 22;
+
+  // Divider above total
+  cmds.push("q");
+  cmds.push("0.129 0.145 0.192 RG");
+  cmds.push("1 w");
+  cmds.push(`${summaryX} ${y} m ${summaryX + summaryW} ${y} l S`);
+  cmds.push("Q");
+
+  // Total (highlighted)
+  cmds.push("q");
+  cmds.push("0.129 0.145 0.192 rg");
+  cmds.push(`${summaryX} ${y - 28} ${summaryW} 26 re f`);
+  cmds.push("Q");
+  cmds.push("BT");
+  cmds.push("1 1 1 rg"); // white text
+  cmds.push("/F2 11 Tf");
+  cmds.push(`${summaryLabelX} ${y - 20} Td`);
+  cmds.push(`(${esc("TOTAL")}) Tj`);
+  cmds.push("ET");
+  cmds.push("BT");
+  cmds.push("1 1 1 rg");
+  cmds.push("/F2 11 Tf");
+  cmds.push(`${summaryValX} ${y - 20} Td`);
+  cmds.push(`(${esc(rupee(totalAmount))}) Tj`);
+  cmds.push("ET");
+
+  y -= 50;
+
+  // ── 7. Technician info ──
+  if (data.technicianName || data.technicianPhone) {
+    cmds.push("BT");
+    cmds.push("0.129 0.145 0.192 rg");
+    cmds.push("/F2 10 Tf");
+    cmds.push(`${labelX} ${y} Td`);
+    cmds.push(`(${esc("SERVICE TECHNICIAN")}) Tj`);
+    cmds.push("ET");
+
+    y -= 16;
+    cmds.push("BT");
+    cmds.push("0.3 0.3 0.3 rg");
+    cmds.push("/F1 9 Tf");
+    cmds.push(`${labelX} ${y} Td`);
+    cmds.push(`(${esc(`${data.technicianName || "Assigned Technician"}  |  Phone: ${data.technicianPhone || TECHNICIAN_PHONE}`)}) Tj`);
+    cmds.push("ET");
+    y -= 25;
+  }
+
+  // ── 8. Terms & Conditions ──
+  cmds.push("q");
+  cmds.push("0.85 0.85 0.85 RG");
+  cmds.push("0.5 w");
+  cmds.push(`${ML} ${y} m ${W - MR} ${y} l S`);
+  cmds.push("Q");
+
+  y -= 18;
+  cmds.push("BT");
+  cmds.push("0.4 0.4 0.4 rg");
+  cmds.push("/F2 8 Tf");
+  cmds.push(`${labelX} ${y} Td`);
+  cmds.push(`(${esc("Terms & Conditions:")}) Tj`);
+  cmds.push("ET");
+
+  y -= 14;
+  const terms = [
+    "1. Service warranty valid for 30 days from the date of service.",
+    "2. Spare parts warranty as per manufacturer's policy.",
+    "3. Payment is non-refundable once the service is completed.",
+    "4. For complaints or feedback, contact us within 7 days.",
+  ];
+  cmds.push("BT");
+  cmds.push("0.5 0.5 0.5 rg");
+  cmds.push("/F1 7 Tf");
+  cmds.push(`${labelX} ${y} Td`);
+  for (let i = 0; i < terms.length; i++) {
+    if (i > 0) cmds.push("0 -12 Td");
+    cmds.push(`(${esc(terms[i])}) Tj`);
+  }
+  cmds.push("ET");
+
+  y -= terms.length * 12 + 10;
+
+  // ── 9. Footer bar ──
+  const footerH = 50;
+  const footerY = 30;
+
+  // Footer background
+  cmds.push("q");
+  cmds.push("0.129 0.145 0.192 rg");
+  cmds.push(`0 ${footerY} ${W} ${footerH} re f`);
+  cmds.push("Q");
+
+  // Golden line above footer
+  cmds.push("q");
+  cmds.push("0.855 0.647 0.243 RG");
+  cmds.push("2 w");
+  cmds.push(`0 ${footerY + footerH} m ${W} ${footerY + footerH} l S`);
+  cmds.push("Q");
+
+  // Footer text
+  cmds.push("BT");
+  cmds.push("0.855 0.647 0.243 rg");
+  cmds.push("/F2 8 Tf");
+  cmds.push(`${ML} ${footerY + 30} Td`);
+  cmds.push(`(${esc("Golden Refrigeration")}) Tj`);
+  cmds.push("ET");
+
+  cmds.push("BT");
+  cmds.push("0.8 0.8 0.8 rg");
+  cmds.push("/F1 7 Tf");
+  cmds.push(`${ML} ${footerY + 16} Td`);
+  cmds.push(`(${esc(`Phone: ${TECHNICIAN_PHONE}  |  Email: contact@goldenrefrigeration.in  |  www.goldenrefrigeration.in`)}) Tj`);
+  cmds.push("ET");
+
+  // Thank you text (right side)
+  cmds.push("BT");
+  cmds.push("0.855 0.647 0.243 rg");
+  cmds.push("/F3 10 Tf");
+  cmds.push(`${W - MR - 170} ${footerY + 25} Td`);
+  cmds.push(`(${esc("Thank you for choosing us!")}) Tj`);
+  cmds.push("ET");
+
+  // ── Build PDF structure ──
+  const contentStream = cmds.join("\n");
+
+  const objects = [
+    // 1 - Catalog
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    // 2 - Pages
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    // 3 - Page
+    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 4 0 R /F2 5 0 R /F3 6 0 R >> >> /Contents 7 0 R >>\nendobj\n`,
+    // 4 - Font: Helvetica (regular)
+    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n",
+    // 5 - Font: Helvetica-Bold
+    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj\n",
+    // 6 - Font: Helvetica-Oblique (italic for "thank you")
+    "6 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>\nendobj\n",
+    // 7 - Content stream
+    `7 0 obj\n<< /Length ${contentStream.length} >>\nstream\n${contentStream}\nendstream\nendobj\n`,
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (const obj of objects) {
+    offsets.push(pdf.length);
+    pdf += obj;
+  }
+  const xrefStart = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i <= objects.length; i++) {
+    pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  return Buffer.from(pdf, "utf8");
+};
+
 export const generateFallbackDiagnosis = (appliance: string, issue: string, language: InputLanguage) => {
   const normalized = issue.toLowerCase();
   let likelyCause = "power fluctuation ya internal component wear";
