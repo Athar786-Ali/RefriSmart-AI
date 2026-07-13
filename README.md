@@ -83,6 +83,20 @@ When a booking moves from `PENDING` ➔ `ASSIGNED` ➔ `COMPLETED`, simply overw
     *   **Cloudinary:** CDN for storing user-uploaded appliance photos and gallery assets.
     *   **Nodemailer:** For sending OTP authentication emails and invoice PDFs.
 
+### 🔒 Security Practices
+*   **Authentication:** Passwords are mathematically salted and hashed using `bcryptjs`. 
+*   **Token Security:** JWT tokens are issued via `HttpOnly` cookies, making them strictly inaccessible to client-side JavaScript, preventing XSS token theft.
+*   **Payment Verification:** Razorpay webhook signatures are cryptographically verified using crypto HMAC SHA256 before any booking status is updated to prevent spoofed payment confirmations.
+
+### ⚡ Performance & UX Optimizations
+*   **Media Delivery:** All user-uploaded diagnostic images and gallery photos are streamed directly to Cloudinary. The Node.js server never stores files locally, ensuring fast serverless cold starts.
+*   **Non-Blocking UI:** Used `Sonner` for toast notifications to ensure error states and success messages never block the user's interaction thread.
+*   **Mobile-First Design:** Built with Tailwind CSS v4, ensuring the app looks and feels like a native mobile application on phones, which is where 90% of local service bookings occur.
+
+### 🔄 CI/CD & Deployment Strategy
+*   **Automated Deployments:** Connected the GitHub repository to Vercel. Every push to the `main` branch triggers an automated build, type-check, and serverless deployment.
+*   **Database Migrations:** Prisma schema changes are version-controlled and applied via `npx prisma migrate deploy` in the CI pipeline, ensuring the database structure stays perfectly in sync with the codebase.
+
 ---
 
 ## 🌐 SEO & Growth Implementation
