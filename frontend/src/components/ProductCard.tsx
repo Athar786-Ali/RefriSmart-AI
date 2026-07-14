@@ -426,25 +426,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             <div className="p-6">
               {checkoutStep === 1 ? (
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-slate-700">
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Order Owner Account</p>
-                    <p className="mt-2 font-semibold text-slate-900">{verifiedCheckoutUser?.name || user?.name || "Customer"}</p>
-                    <p className="text-xs text-slate-600">{verifiedCheckoutUser?.email || user?.email || "No email on file"}</p>
-                    <p className="mt-2 text-xs text-slate-500">
-                      This order will appear only inside this signed-in account. The full name below is just the delivery contact.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await logout();
-                        closeCheckout();
-                        router.push("/login");
-                      }}
-                      className="mt-3 text-xs font-semibold text-blue-700 underline underline-offset-4"
-                    >
-                      Wrong account? Switch customer login
-                    </button>
-                  </div>
+                  <p className="text-sm text-slate-500">Ordering as <span className="font-semibold text-slate-800">{verifiedCheckoutUser?.name || user?.name || "Customer"}</span></p>
                   <label className="block text-sm font-semibold text-slate-700">
                     Full Name
                     <input
