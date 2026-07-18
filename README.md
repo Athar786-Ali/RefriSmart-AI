@@ -36,6 +36,18 @@ I built this end-to-end as a **Solo Full-Stack Developer**. I handled everything
 
 ---
 
+## ✨ Core Platform Modules
+
+This is not a simple CRUD app. It is a multi-sided marketplace and service dispatch system with 3 distinct user portals:
+
+*   **1. The Service Dispatch Engine:** Real-time booking system that routes repair jobs to technicians based on Pincode mapping, featuring live status tracking and OTP-based job completion.
+*   **2. The Refurbished Marketplace:** A robust buy/sell platform where users can purchase refurbished appliances or submit a "Sell Request" with dynamic offer negotiations.
+*   **3. Multimodal AI Diagnostics:** Integration with Gemini Vision API allowing users to upload a video/photo of their broken appliance for instant fault triage before the technician arrives.
+*   **4. The Admin CRM:** A unified dashboard providing the business owner with a birds-eye view of revenue, active service jobs, inventory management, and replayable event-sourced audit logs.
+*   **5. Secure Payment Gateway:** Razorpay integration for upfront booking fees and dynamic invoice generation sent via Nodemailer.
+
+---
+
 ## 🏢 The Business Problem & My Solution
 
 Local service businesses suffer from high operational friction. Here is how my software solved real-world problems for this business:
@@ -69,6 +81,13 @@ Because the Express backend runs on Vercel Serverless Functions, a sudden spike 
 ### 4. Event-Sourced Database Design (Audit Trails)
 When a booking moves from `PENDING` ➔ `ASSIGNED` ➔ `COMPLETED`, simply overwriting a `status` column deletes valuable historical data.
 *   **The Solution:** I designed the schema using an append-only audit trail concept. Every state transition writes a new row to a `ServiceEvent` table with a timestamp and the actor's ID. This gives the admin a fully replayable timeline of exactly when a technician was assigned and when the job was closed.
+
+### 5. System Architecture Data Flow
+To handle the varying traffic patterns of a local business, the architecture is entirely serverless:
+1.  **Client:** Next.js 16 (React 19) App Router handling SSR and Client components with Tailwind CSS v4.
+2.  **API Layer:** Vercel Serverless Functions running Express.js v5 (stateless, horizontally scalable).
+3.  **Connection Pooler:** Neon pgBouncer to multiplex PostgreSQL connections and prevent DB starvation during serverless cold-start spikes.
+4.  **Database:** PostgreSQL with Prisma ORM enforcing referential integrity (14+ relational models).
 
 ---
 
