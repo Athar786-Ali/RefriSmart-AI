@@ -304,14 +304,18 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
       "gemini-1.5-pro",           // High quality
     ];
 
-    const MAX_RETRIES_PER_MODEL = 3;
+    // Aggressive retry: cycle through ALL API keys multiple times per model.
+    // With 5 keys → MAX_RETRIES = 10, guaranteeing every key is tried 2× per model.
+    const keyCount = totalKeys();
+    const MAX_RETRIES_PER_MODEL = Math.max(6, keyCount * 2);
 
     for (const model of MODELS) {
       if (parsed) break;
+      let keysTriedThisModel = 0;
 
       for (let attempt = 1; attempt <= MAX_RETRIES_PER_MODEL; attempt++) {
         try {
-          console.log(`\n[AI] >> Model: ${model} | Attempt ${attempt}/${MAX_RETRIES_PER_MODEL}`);
+          console.log(`\n[AI] >> Model: ${model} | Attempt ${attempt}/${MAX_RETRIES_PER_MODEL} | Keys cycled: ${keysTriedThisModel}/${keyCount}`);
           console.log(`[AI]    ${resolvedAppliance} — "${resolvedIssue.slice(0, 100)}"`);
 
           const raw = await callGemini(model, prompt, uploadedFilePart);
@@ -329,7 +333,7 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
             geminiUsed = true;
             allQuotaExhausted = false;
             lastModelError = "";
-            console.log(`\n[AI] SUCCESS — Gemini model "${model}" gave a valid diagnosis!`);
+            console.log(`\n[AI] ✅ SUCCESS — Gemini model "${model}" gave a valid diagnosis! (Attempt ${attempt}/${MAX_RETRIES_PER_MODEL})`);
             break;
           }
 
@@ -351,8 +355,9 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
           if (isProjectError(lastModelError)) {
             // 403 = this project has API disabled — rotate key immediately
             console.warn(`[AI] Project error (403) — API disabled on this key. Rotating to next key...`);
-            if (totalKeys() > 1) {
+            if (keyCount > 1) {
               rotateKey();
+              keysTriedThisModel++;
               continue; // Retry with next key's project
             }
             allQuotaExhausted = false;
@@ -362,7 +367,7 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
 
           if (isOverloadError(lastModelError)) {
             // 503 = temporary server overload — retry with longer wait
-            const waitMs = Math.min(12000 * attempt, 45000); // 12s, 24s, 36s
+            const waitMs = Math.min(15_000 * attempt, 60_000); // 15s, 30s, 45s, 60s — give Gemini time to recover
             if (attempt < MAX_RETRIES_PER_MODEL) {
               console.warn(`[AI] ${model} overloaded (503). Waiting ${waitMs / 1000}s then retrying (${attempt + 1}/${MAX_RETRIES_PER_MODEL})...`);
               await new Promise((r) => setTimeout(r, waitMs));
@@ -375,25 +380,33 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
           }
 
           if (isQuotaError(lastModelError)) {
+            allQuotaExhausted = true;
             // Rotate to next API key first (different project = fresh quota)
-            if (totalKeys() > 1) {
+            if (keyCount > 1) {
               rotateKey();
-              console.warn(`[AI] Quota hit. Rotated to next key — retrying ${model} immediately...`);
+              keysTriedThisModel++;
+              console.warn(`[AI] Quota hit. Rotated to key ${(keysTriedThisModel % keyCount) + 1}/${keyCount} — retrying ${model}...`);
+
+              // After cycling through ALL keys once, wait 20s before cycling again
+              if (keysTriedThisModel > 0 && keysTriedThisModel % keyCount === 0 && attempt < MAX_RETRIES_PER_MODEL) {
+                const cooldownMs = 20_000;
+                console.warn(`[AI] All ${keyCount} keys exhausted for ${model}. Waiting ${cooldownMs / 1000}s before cycling keys again...`);
+                await new Promise((r) => setTimeout(r, cooldownMs));
+              }
               continue;
             }
-            // Only one key available — backoff wait
-            allQuotaExhausted = true;
+            // Only one key available — aggressive backoff wait
             const retryMatch = lastModelError.match(/retry[^0-9]*?(\d+)[\s.]/i)
               || lastModelError.match(/retryDelay.*?(\d+)/i);
             const waitMs = retryMatch
-              ? Math.min(Number(retryMatch[1]) * 1000 + 1000, 65000)
-              : Math.min(8000 * attempt, 32000);
+              ? Math.min(Number(retryMatch[1]) * 1000 + 2000, 90_000)
+              : Math.min(15_000 * attempt, 60_000);
             if (attempt < MAX_RETRIES_PER_MODEL) {
-              console.warn(`[AI] Quota hit on ${model}. Waiting ${waitMs / 1000}s then retrying...`);
+              console.warn(`[AI] Quota hit on ${model}. Waiting ${waitMs / 1000}s then retrying (${attempt + 1}/${MAX_RETRIES_PER_MODEL})...`);
               await new Promise((r) => setTimeout(r, waitMs));
               continue;
             } else {
-              console.warn(`[AI] ${model} quota exhausted on all keys. Trying next model.`);
+              console.warn(`[AI] ${model} quota exhausted after ${MAX_RETRIES_PER_MODEL} retries. Trying next model.`);
               break;
             }
           }
@@ -402,6 +415,53 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
           allQuotaExhausted = false;
           console.error(`[AI] Unexpected error from ${model}:`, lastModelError.slice(0, 300));
           break;
+        }
+      }
+    }
+
+    // ── RETRY PASSES: If first pass failed, wait for quota cooldown and retry all models ──
+    if (!parsed) {
+      const RETRY_PASSES = 2;
+      const PASS_COOLDOWN_MS = 30_000; // 30s between retry passes
+
+      for (let retryPass = 1; retryPass <= RETRY_PASSES; retryPass++) {
+        if (parsed) break;
+        console.log(`\n[AI] ═══ RETRY PASS ${retryPass}/${RETRY_PASSES} — waiting ${PASS_COOLDOWN_MS / 1000}s for quota cooldown ═══`);
+        await new Promise((r) => setTimeout(r, PASS_COOLDOWN_MS));
+
+        for (const retryModel of MODELS) {
+          if (parsed) break;
+          // Try each model with key rotation on quota errors
+          for (let keyAttempt = 0; keyAttempt < Math.max(3, keyCount); keyAttempt++) {
+            try {
+              console.log(`[AI] >> Retry pass ${retryPass} | Model: ${retryModel} | Key attempt: ${keyAttempt + 1}`);
+              const raw = await callGemini(retryModel, prompt, uploadedFilePart);
+              if (raw) {
+                const candidate = parseGeminiResponse(raw);
+                if (candidate) {
+                  parsed = candidate;
+                  geminiUsed = true;
+                  allQuotaExhausted = false;
+                  lastModelError = "";
+                  console.log(`[AI] ✅ SUCCESS on retry pass ${retryPass} with model "${retryModel}"!`);
+                  break;
+                }
+              }
+              break; // Got a response (even if unparseable) — move to next model
+            } catch (retryErr: any) {
+              const msg = String(retryErr?.message || "");
+              if (isQuotaError(msg) && keyCount > 1) {
+                rotateKey();
+                continue; // Try next key
+              }
+              if (isOverloadError(msg)) {
+                await new Promise((r) => setTimeout(r, 10_000)); // 10s wait on overload
+                continue;
+              }
+              console.warn(`[AI] Retry pass ${retryPass} failed for ${retryModel}: ${msg.slice(0, 150)}`);
+              break; // Non-retriable error — move to next model
+            }
+          }
         }
       }
     }
