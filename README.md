@@ -33,7 +33,7 @@
 
 ## What This Project Is
 
-RefriSmart AI is a full-stack SaaS platform I designed and built from scratch for a real appliance repair business in Bhagalpur, India. It handles the entire business lifecycle: customers book doorstep repairs, an AI engine diagnoses appliance faults from photos/videos before the technician arrives, the admin dispatches technicians by pincode, payments are processed through Razorpay, and the business owner tracks everything from a CRM dashboard.
+RefriSmart AI is a full-stack SaaS platform I designed and built from scratch for a real appliance repair business in Bhagalpur, India. It handles the entire business lifecycle: customers book doorstep repairs, an AI engine diagnoses appliance faults from photos and videos before the technician arrives, the admin dispatches technicians by pincode, payments are processed through Razorpay, and the business owner tracks everything from a CRM dashboard.
 
 This is not a tutorial or bootcamp project. It processes real customers, handles live INR payments, and ranks on Page 1 of Google for local search terms — competing directly with JustDial and IndiaMART.
 
@@ -74,8 +74,7 @@ The business owner was running operations entirely on paper and JustDial listing
 ### Screenshots
 
 <!-- Replace these with actual screenshots of your deployed app -->
-
-> **Note:** Add screenshots of the landing page, AI diagnosis interface, admin dashboard, and service booking flow here. Use the format: `![Description](path/to/screenshot.png)`
+> Add screenshots of the landing page, AI diagnosis interface, admin dashboard, and service booking flow here.
 
 ---
 
@@ -94,16 +93,30 @@ A buy/sell platform for appliances. Products have `NEW` and `REFURBISHED` types,
 A back-office suite with 8 dedicated views: Dashboard (live revenue and stats), Services (booking management and technician assignment), Orders (e-commerce fulfillment with delivery tracking), Products (inventory CRUD with image uploads), Sell Requests (offer negotiation pipeline), Diagnoses (AI diagnosis history viewer), Gallery (media management), and Profile settings.
 
 ### 5. Payment and Invoice System
-Razorpay integration with cryptographic HMAC-SHA256 signature verification. Supports both service booking payments and product order payments. Handles Cash, UPI QR, and online payment modes. Auto-generates PDF invoices via Nodemailer.
+Razorpay integration with cryptographic HMAC-SHA256 signature verification using `crypto.timingSafeEqual` to prevent timing attacks. Supports both service booking payments and product order payments. Handles Cash, UPI QR code generation, and online payment modes. Auto-generates PDF invoices via Nodemailer.
+
+---
+
+## Three User Portals
+
+The platform serves three distinct user roles, each with a tailored interface:
+
+| Portal | Role | Key Capabilities |
+|:---|:---|:---|
+| **Customer Portal** | `CUSTOMER` | Book repairs, use AI diagnosis (text/voice/photo/video), track service status in real-time, browse and buy products, submit sell requests for old appliances, manage orders, download invoices |
+| **Technician Portal** | `TECHNICIAN` | View assigned jobs with customer details and AI diagnosis reports, receive real-time notifications, update job status |
+| **Admin CRM** | `ADMIN` | Full operational control — dispatch technicians by pincode, manage bookings through 9-state FSM, process sell request offers, manage product inventory, view AI diagnosis history, upload gallery media, track revenue analytics |
+
+> Auto-promotion logic: The system automatically elevates designated admin credentials (email or phone) to `ADMIN` role during login — no manual database edits needed.
 
 ---
 
 ## AI Features
 
-The AI system is designed to **never fail silently**, even with zero API availability. Here's how the fault diagnosis workflow operates:
+The AI system is designed to **never fail silently**, even with zero API availability. Here's the fault diagnosis workflow:
 
 ```
-User uploads photo/video + describes issue
+User uploads photo/video + describes issue (text or voice via Web Speech API)
                 │
                 ▼
 ┌──────────────────────────────┐
@@ -128,18 +141,44 @@ User uploads photo/video + describes issue
            │
            ▼ (all keys + models exhausted)
 ┌──────────────────────────────┐
-│  Offline Rule-Based Engine   │  Handwritten domain-expert diagnostic rules
-│                              │  for fridges, ACs, washing machines, noise
-│                              │  issues, and power failures — with bilingual
-│                              │  English/Hinglish responses and local pricing.
+│  Offline Rule-Based Engine   │  5 specialized diagnostic rulesets:
+│                              │  • Fridge not cooling (R-600a/R-134a diagnosis)
+│                              │  • AC not cooling (R-22/R-32/R-410A diagnosis)
+│                              │  • Washing machine drain/leak issues
+│                              │  • Noise/vibration diagnostics
+│                              │  • Power failure diagnostics
+│                              │
+│                              │  Each rule outputs bilingual (English + Hinglish)
+│                              │  responses with Bhagalpur-local pricing.
 └──────────────────────────────┘
 ```
 
 **Key design decisions:**
 - **5 API keys across separate GCP projects** instead of a single key, to multiply free-tier quota from 1,500 to 7,500 requests/day.
 - **Exponential backoff** per model with progressive delays (12s &rarr; 24s &rarr; 36s) to avoid hammering overloaded endpoints.
-- **Structured JSON prompting** with explicit format requirements so Gemini responses can be reliably parsed without brittle regex.
-- **Language detection** — responses are automatically adapted to English or Hinglish based on the user's input language.
+- **Structured JSON prompting** with explicit format requirements so Gemini responses can be reliably parsed without brittle regex. Responses are extracted via `extractJsonObject()` which strips markdown fences and handles malformed output.
+- **Language detection** — the `detectInputLanguage()` function analyzes user input for Hindi/Hinglish patterns and adapts the response language automatically.
+- **Media persistence** — uploaded photos/videos are stored on Cloudinary (with local `/tmp` fallback) and linked to the `DiagnosisLog` for future reference.
+
+<details>
+<summary><strong>Example: Offline rule-based diagnosis output</strong></summary>
+
+When all API keys and models are exhausted, the system generates domain-specific diagnoses. For example, a fridge cooling issue produces:
+
+```json
+{
+  "isRelevant": true,
+  "problem": "Low refrigerant gas (R-600a/R-134a) or faulty compressor start relay",
+  "technicalExplanation": "Step 1: Technician checks gas pressure with manifold gauge. Step 2: If gas is low, evaporator coil inspected for leaks. Step 3: Leak sealed with brazing/welding. Step 4: Vacuum pulled and fresh refrigerant recharged. Step 5: If gas OK, PTC relay tested and replaced. Step 6: Condenser coils cleaned.",
+  "safetyAlert": "Refrigerant gas under pressure — do not attempt DIY.",
+  "conclusion": "Book Golden Refrigeration for same-day service in Sabour/Bhagalpur.",
+  "estimatedCostRange": "Rs.1,200 - Rs.3,500 total"
+}
+```
+
+The same output is available in Hinglish for Hindi-speaking customers — automatically selected based on the input language.
+
+</details>
 
 ---
 
@@ -213,6 +252,8 @@ RefriSmart-AI/
 │       ├── app/                       # 10 route groups
 │       │   ├── page.tsx               # Landing page (hero, services, reviews, FAQ, service areas)
 │       │   ├── layout.tsx             # Root layout (metadata, 4x JSON-LD, AuthProvider, nav, footer)
+│       │   ├── robots.ts             # Dynamic robots.txt generation
+│       │   ├── sitemap.ts            # Programmatic XML sitemap
 │       │   ├── service/page.tsx       # Service booking flow + real-time tracker
 │       │   ├── ai-diagnosis/page.tsx  # Multimodal AI diagnosis (text/voice/photo/video)
 │       │   ├── products/page.tsx      # Product marketplace (new + refurbished)
@@ -220,13 +261,41 @@ RefriSmart-AI/
 │       │   ├── orders/page.tsx        # Order tracking + Razorpay checkout
 │       │   ├── gallery/page.tsx       # Photo/video gallery of completed repairs
 │       │   ├── admin/                 # Admin CRM (8 tab views, ~3,200 lines)
+│       │   │   ├── page.tsx           # Admin layout container + sidebar navigation
+│       │   │   ├── _dashboard.tsx     # Executive KPIs, revenue, quick actions
+│       │   │   ├── _services.tsx      # Service dispatch board + technician assignment
+│       │   │   ├── _orders.tsx        # Order fulfillment pipeline
+│       │   │   ├── _products.tsx      # Inventory CRUD + Cloudinary uploads
+│       │   │   ├── _gallery.tsx       # Gallery media manager
+│       │   │   ├── _diagnoses.tsx     # AI diagnosis logs viewer
+│       │   │   ├── _sell.tsx          # Trade-in request + offer pipeline
+│       │   │   ├── _profile.tsx       # Admin profile settings
+│       │   │   └── _types.ts          # Admin TypeScript interfaces
 │       │   ├── technician/page.tsx    # Technician job portal
 │       │   ├── login/page.tsx         # Passwordless OTP login (email + phone)
 │       │   └── verify-otp/page.tsx    # OTP verification
 │       ├── components/                # 11 reusable components
+│       │   ├── Navbar.tsx             # Floating glassmorphic nav + mobile drawer
+│       │   ├── Footer.tsx             # Trust banner (address, GSTIN, hours, JustDial link)
+│       │   ├── BrandLogo.tsx          # Responsive brand identity component
+│       │   ├── ProductCard.tsx        # Cloudinary-optimized card + Razorpay checkout modal
+│       │   ├── ServiceActiveTrackerCard.tsx  # Real-time 9-step progress tracker
+│       │   ├── ServiceHistoryCard.tsx # Historical service records
+│       │   ├── EstimateCard.tsx       # AI cost estimate display + booking CTA
+│       │   ├── GalleryShowcase.tsx    # Homepage photo grid with auto-validation
+│       │   ├── SafeVideo.tsx          # Memory-leak safe video component
+│       │   ├── DiagnosisSkeleton.tsx  # Loading skeleton for AI cards
+│       │   └── ProductSkeleton.tsx    # Loading skeleton for product grid
 │       ├── context/                   # AuthContext (session management + keepalive)
 │       ├── lib/                       # API client, Razorpay loader, status utils
+│       │   ├── api.ts                 # authFetch wrapper + Bearer token injection
+│       │   ├── razorpay.ts            # Script loader + checkout modal promise wrapper
+│       │   ├── service-status.ts      # Service FSM status constants + step mapping
+│       │   ├── order-status.ts        # Order status constants + step mapping
+│       │   └── utils.ts              # cn() className helper + formatInr() currency
 │       └── types/                     # Shared TypeScript interfaces
+│           ├── index.ts              # Product, NormalizedProduct, DiagnosisItem
+│           └── razorpay.d.ts         # Global type augmentation for window.Razorpay
 │
 ├── backend/                           # Express.js v5 (Vercel Serverless)
 │   ├── prisma/
@@ -241,12 +310,31 @@ RefriSmart-AI/
 │       │   ├── authController.ts     # 814 lines — register, login, OTP, password reset
 │       │   └── aiController.ts       # 596 lines — Gemini integration, model cascade, fallback engine
 │       ├── routes/                   # 4 route files (74 endpoints)
-│       ├── middlewares/              # Dual-mode auth (cookie + bearer)
-│       ├── services/                 # diagnosisService, mediaStorage, OTP delivery
-│       ├── config/                   # Gemini key pool, Prisma, Razorpay, Cloudinary
-│       └── utils/                    # Service status FSM, email helpers
+│       │   ├── authRoutes.ts         # 14 auth endpoints
+│       │   ├── aiRoutes.ts           # 2 AI endpoints
+│       │   ├── adminRoutes.ts        # 41 service/admin endpoints
+│       │   └── productRoutes.ts      # 17 product/order endpoints
+│       ├── middlewares/
+│       │   └── authMiddleware.ts     # Dual-mode auth (cookie + bearer) + adminAuth
+│       ├── services/
+│       │   ├── diagnosisService.ts   # AI diagnosis CRUD + history queries
+│       │   ├── mediaStorageService.ts # Cloudinary upload + local fallback
+│       │   └── otpService.ts         # 3-tier OTP delivery (WhatsApp → SMS → Dev)
+│       ├── config/
+│       │   ├── gemini.ts             # 5-key rotation pool + round-robin client
+│       │   ├── prisma.ts             # Prisma client with pgBouncer adapter
+│       │   ├── razorpay.ts           # Razorpay SDK initialization
+│       │   ├── cloudinary.ts         # Cloudinary SDK configuration
+│       │   └── runtime.ts            # Constants, language detection, startup migrations
+│       └── utils/
+│           ├── serviceStatus.ts      # Service FSM transition logic
+│           └── email.ts              # SMTP transporter + email templates
 │
-└── docs/                             # Architecture docs and interview prep materials
+├── docs/                             # Architecture docs and interview prep materials
+│   └── FOLDER_STRUCTURE.md           # Annotated project structure reference
+│
+├── .gitignore
+└── README.md
 ```
 
 ---
@@ -283,7 +371,7 @@ cd ../frontend && npm install
 ### Backend (`backend/.env`)
 
 ```env
-# Database
+# Database (Neon PostgreSQL with pgBouncer pooling)
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB?sslmode=require
 
 # Authentication
@@ -292,15 +380,17 @@ ADMIN_EMAIL=your_admin_email@example.com
 
 # Google Gemini AI (up to 5 keys for quota rotation)
 GEMINI_API_KEY=your_primary_key
-GEMINI_API_KEY_2=your_second_key         # Optional
-GEMINI_API_KEY_3=your_third_key          # Optional
+GEMINI_API_KEY_2=your_second_key         # Optional — separate GCP project
+GEMINI_API_KEY_3=your_third_key          # Optional — separate GCP project
+GEMINI_API_KEY_4=your_fourth_key         # Optional
+GEMINI_API_KEY_5=your_fifth_key          # Optional
 
-# Cloudinary (media storage)
+# Cloudinary (media storage + CDN)
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_key
 CLOUDINARY_API_SECRET=your_secret
 
-# Razorpay (payments)
+# Razorpay (INR payment processing)
 RAZORPAY_KEY_ID=rzp_live_xxxxx
 RAZORPAY_KEY_SECRET=your_secret
 
@@ -311,8 +401,8 @@ SMTP_PASS=your_smtp_password
 # MSG91 (OTP delivery — optional)
 MSG91_AUTH_KEY=your_auth_key
 MSG91_TEMPLATE_ID=your_template_id
-MSG91_SENDER_ID=GOLDRG
-MSG91_WA_FLOW_ID=your_whatsapp_flow_id   # Optional
+MSG91_SENDER_ID=GOLDRG                   # 6-char sender ID
+MSG91_WA_FLOW_ID=your_whatsapp_flow_id   # Optional — WhatsApp OTP
 
 # Server
 HOST=0.0.0.0
@@ -345,11 +435,19 @@ npm run dev                  # Next.js → http://localhost:3000
 
 > **Tip:** The backend dev script automatically kills any process on port 5001 before starting, so you won't run into port conflicts.
 
+### Seeding Sample Data
+
+```bash
+# Populate the database with sample products
+cd backend
+npx tsx scripts/add-demo-products.ts
+```
+
 ---
 
 ## API Overview
 
-The backend exposes 74 REST endpoints across 4 route modules. All authenticated endpoints use JWT verification via the `userAuth` middleware, with an additional `adminAuth` layer for administrative operations.
+The backend exposes 74 REST endpoints across 4 route modules. All authenticated endpoints use JWT verification via the `userAuth` middleware, with an additional `adminAuth` layer that queries the database to confirm the user has `role === 'ADMIN'`.
 
 | Module | Endpoints | Auth | Key Operations |
 |:---|:---:|:---|:---|
@@ -359,82 +457,99 @@ The backend exposes 74 REST endpoints across 4 route modules. All authenticated 
 | **Products & Orders** | 17 | User/Admin | Product CRUD, Order placement, Razorpay checkout, Invoice generation |
 
 <details>
-<summary><strong>Full endpoint reference</strong></summary>
+<summary><strong>Full endpoint reference (74 routes)</strong></summary>
 
 ### Authentication (`/api/auth`)
 
 | Method | Endpoint | Auth | Purpose |
 |:---|:---|:---:|:---|
-| `POST` | `/register` | — | Register with name, email, password |
-| `POST` | `/login` | — | Email/password login, sets HttpOnly cookie |
-| `POST` | `/logout` | — | Clears auth cookie |
-| `POST` | `/request-login-otp` | — | Send phone OTP via MSG91 (WhatsApp &rarr; SMS &rarr; dev fallback) |
-| `POST` | `/verify-login` | — | Verify phone OTP, return JWT |
-| `POST` | `/request-email-login-otp` | — | Send email OTP |
-| `POST` | `/verify-email-login` | — | Verify email OTP, return JWT |
-| `GET` | `/me` | User | Get current user profile |
-| `POST` | `/send-verify-otp` | User | Email verification OTP |
-| `POST` | `/verify-otp` | User | Verify account email |
-| `POST` | `/send-whatsapp-otp` | User | WhatsApp phone verification |
-| `POST` | `/verify-phone-otp` | User | Verify phone number |
-| `POST` | `/send-reset-otp` | — | Password reset OTP |
-| `POST` | `/reset-password` | — | Reset password with valid OTP |
+| `POST` | `/register` | — | Register with name, email, password. Password hashed via bcryptjs. |
+| `POST` | `/login` | — | Email/password login. Sets HttpOnly cookie + returns Bearer token. |
+| `POST` | `/logout` | — | Clears `token` HttpOnly cookie. |
+| `POST` | `/request-login-otp` | — | Send phone OTP via MSG91 (WhatsApp &rarr; SMS &rarr; dev fallback). Auto-creates user if not found. |
+| `POST` | `/verify-login` | — | Verify phone OTP, return JWT. Auto-promotes master admin phone. |
+| `POST` | `/request-email-login-otp` | — | Send 6-digit email OTP (10-minute validity). |
+| `POST` | `/verify-email-login` | — | Verify email OTP, return JWT. |
+| `GET` | `/me` | User | Get current user profile with auto admin role enforcement. |
+| `POST` | `/send-verify-otp` | User | Send email verification OTP. |
+| `POST` | `/verify-otp` | User | Verify account email, set `isAccountVerified: true`. |
+| `POST` | `/send-whatsapp-otp` | User | Generate WhatsApp OTP for phone verification. |
+| `POST` | `/verify-phone-otp` | User | Verify phone number, set `isPhoneVerified: true`. |
+| `POST` | `/send-reset-otp` | — | Password reset OTP via email. |
+| `POST` | `/reset-password` | — | Reset password with valid OTP. |
 
 ### AI Diagnosis (`/api/ai`)
 
 | Method | Endpoint | Auth | Purpose |
 |:---|:---|:---:|:---|
-| `POST` | `/diagnose` | — | Multimodal diagnosis (text + photo/video upload) |
-| `GET` | `/history` | User | Fetch user's diagnosis history |
+| `POST` | `/diagnose` | — | Multimodal diagnosis — accepts text + photo/video via Multer. Runs through 5-key × 7-model cascade with offline fallback. |
+| `GET` | `/history` | User | Fetch user's diagnosis history from `DiagnosisLog` (indexed on `[customerId, createdAt]`). |
 
 ### Service Bookings & Admin Operations (`/api`)
 
 | Method | Endpoint | Auth | Purpose |
 |:---|:---|:---:|:---|
 | `GET` | `/booking/slots` | — | Available time slots |
-| `POST` | `/booking/create` | User | Create repair booking |
+| `POST` | `/booking/create` | User | Create repair booking (authenticated or guest) |
+| `POST` | `/service/book` | — | Alias endpoint for service booking |
 | `PATCH` | `/booking/:id/status` | Admin | Update booking FSM state |
 | `PATCH` | `/booking/:id/reschedule` | Admin | Reschedule booking |
 | `PATCH` | `/booking/:id/cancel` | Admin | Cancel booking |
-| `GET` | `/booking/timeline/:bookingId` | User | Status event timeline |
-| `POST` | `/booking/:id/send-otp` | Admin | Send completion OTP |
+| `GET` | `/booking/timeline/:bookingId` | User | Append-only event timeline |
+| `POST` | `/booking/:id/send-otp` | Admin | Send completion OTP to customer |
 | `POST` | `/booking/:id/verify-otp` | Admin | Verify on-site OTP |
 | `POST` | `/booking/:id/razorpay` | User | Create Razorpay order for service |
-| `POST` | `/booking/:id/razorpay/verify` | User | Verify Razorpay payment |
+| `POST` | `/booking/:id/razorpay/verify` | User | Verify Razorpay payment signature |
 | `POST` | `/bookings/:id/confirm-payment` | User | Confirm manual payment (Cash/UPI) |
 | `POST` | `/bookings/:id/cancel` | User | Customer cancels booking |
-| `GET` | `/service/my-bookings` | User | Customer's bookings |
-| `GET` | `/service/guest-booking` | — | Guest booking lookup |
-| `PUT` | `/admin/assign-technician/:id` | Admin | Assign technician to booking |
-| `POST` | `/service/:id/rating` | — | Submit repair rating |
-| `POST` | `/admin/gallery` | Admin | Upload gallery media |
+| `GET` | `/booking/:id/reminders` | Admin | Booking reminders |
+| `GET` | `/service/my-bookings/:userId` | User | Customer's bookings (path param) |
+| `GET` | `/service/my-bookings` | User | Customer's bookings (query param) |
+| `GET` | `/service/guest-booking` | — | Guest booking lookup by phone/ID |
+| `PUT` | `/admin/assign-technician/:id` | Admin | Assign technician by pincode |
+| `PATCH` | `/admin/service/:id` | Admin | Update service cost/notes |
+| `POST` | `/service/:id/rating` | — | Submit repair rating and review |
+| `POST` | `/admin/gallery` | Admin | Upload gallery media (100MB limit) |
 | `GET` | `/gallery` | — | List gallery items |
 | `DELETE` | `/admin/gallery/:id` | Admin | Delete gallery item |
 | `GET` | `/technician/jobs` | Admin | Technician job list |
+| `PATCH` | `/technician/jobs/:bookingId/status` | Admin | Update technician job status |
+| `GET` | `/technician/notifications` | User | Fetch notifications |
+| `PUT` | `/technician/notifications/:id/read` | User | Mark notification as read |
+| `POST` | `/sell/upload-image` | User | Upload photo for sell request |
 | `POST` | `/sell/request` | User | Submit sell request |
-| `GET` | `/sell/requests` | User | List sell requests |
-| `POST` | `/sell/requests/:id/offer` | Admin | Send buyback offer |
+| `GET` | `/sell/requests` | User | List sell requests (own or all for admin) |
+| `POST` | `/sell/requests/:id/offer` | Admin | Send buyback offer with pickup slot |
 | `POST` | `/sell/offers/:id/respond` | User | Accept/reject offer |
-| `POST` | `/sell/requests/:id/move-to-refurbished` | Admin | Convert to refurbished product |
-| `GET` | `/admin/stats` | Admin | Dashboard analytics |
+| `POST` | `/sell/requests/:id/move-to-refurbished` | Admin | Convert accepted sell to refurbished product |
 | `GET` | `/ops/analytics` | Admin | Operational analytics |
+| `GET` | `/admin/service-overview` | Admin | Service dashboard aggregate data |
+| `GET` | `/admin/all-diagnoses` | Admin | All customer AI diagnosis logs |
+| `GET` | `/admin/stats-basic` | Admin | Summary statistics |
+| `GET` | `/admin/stats` | Admin | Comprehensive dashboard analytics |
+| `GET` | `/history/:userId` | User | User history |
 
 ### Products & Orders (`/api`)
 
 | Method | Endpoint | Auth | Purpose |
 |:---|:---|:---:|:---|
-| `GET` | `/products` | — | List available products |
+| `GET` | `/products` | — | List available products (in stock, not deleted) |
 | `POST` | `/admin/add-product` | Admin | Create product listing |
-| `DELETE` | `/admin/delete-product/:id` | Admin | Remove product |
+| `DELETE` | `/admin/delete-product/:id` | Admin | Soft-delete product |
 | `POST` | `/admin/upload-image` | Admin | Upload product image to Cloudinary |
-| `POST` | `/admin/suggest-price` | Admin | AI/heuristic pricing suggestion |
-| `POST` | `/orders` | User | Place product order |
+| `POST` | `/admin/suggest-price` | Admin | AI/heuristic pricing suggestion for refurbished |
+| `POST` | `/admin/seed-demo-products` | Admin | Seed demo inventory |
+| `POST` | `/orders` | User | Place product order (price validated from DB) |
 | `GET` | `/orders/my` | User | Customer's orders |
+| `GET` | `/orders/my/invoice/:orderId` | User | Download order PDF invoice |
 | `POST` | `/orders/:id/razorpay` | User | Create Razorpay order |
 | `POST` | `/orders/:id/razorpay/verify` | User | Verify payment signature |
 | `GET` | `/admin/orders` | Admin | All orders |
-| `PATCH` | `/admin/orders/:id` | Admin | Update order status |
+| `PATCH` | `/admin/orders/:id` | Admin | Update order status (5-state) |
+| `PATCH` | `/admin/orders/:id/reassign-customer` | Admin | Reassign order customer |
+| `PATCH` | `/admin/orders/:id/confirm-payment` | Admin | Manually confirm Cash/UPI payment |
 | `POST` | `/admin/orders/:id/generate-invoice` | Admin | Generate PDF invoice |
+| `GET` | `/docs/order-invoice/:orderId` | Admin | Download generated invoice |
 
 </details>
 
@@ -442,20 +557,64 @@ The backend exposes 74 REST endpoints across 4 route modules. All authenticated 
 
 ## Database Schema Overview
 
-```
-User ──────────┬──── ServiceBooking ──── ServiceAssignment ──── Technician
-               │          │
-               │          ├──── ServiceEvent (append-only audit trail)
-               │          ├──── ServiceOtp
-               │          └──── DocumentLog
-               │
-               ├──── Product ──── ProductOrder
-               │
-               ├──── DiagnosisLog (AI diagnosis history)
-               │
-               └──── SellRequest ──── SellOffer
+```mermaid
+erDiagram
+    User ||--o{ ServiceBooking : "books"
+    User ||--o{ Product : "sells"
+    User ||--o{ ProductOrder : "places"
+    User ||--o{ DiagnosisLog : "diagnoses"
+    User ||--o{ SellRequest : "submits"
 
-Gallery (standalone)       Notification (standalone)
+    ServiceBooking ||--o| ServiceAssignment : "assigned to"
+    ServiceBooking ||--o{ ServiceEvent : "state transitions"
+    ServiceBooking ||--o{ ServiceOtp : "verification"
+    ServiceBooking ||--o{ DocumentLog : "documents"
+
+    Technician ||--o{ ServiceAssignment : "handles"
+
+    Product ||--o{ ProductOrder : "ordered"
+
+    SellRequest ||--o{ SellOffer : "receives"
+
+    User {
+        string id PK
+        string email UK
+        string phone UK
+        string password "bcrypt hashed"
+        Role role "ADMIN | CUSTOMER | TECHNICIAN"
+        boolean isAccountVerified
+        boolean isPhoneVerified
+    }
+
+    ServiceBooking {
+        string id PK
+        string appliance
+        string issue
+        string aiDiagnosis
+        Status status "9-state FSM"
+        datetime scheduledAt
+        float finalCost
+        int rating
+    }
+
+    Product {
+        string id PK
+        string title
+        float price
+        ProductType productType "NEW | REFURBISHED"
+        int conditionScore
+        string serialNumber UK
+        int stockQty
+        WarrantyType warrantyType
+    }
+
+    DiagnosisLog {
+        string id PK
+        string appliance
+        string diagnosis
+        string estimatedCostRange
+        string mediaUrl
+    }
 ```
 
 **14 models** with the following key relationships:
@@ -464,21 +623,46 @@ Gallery (standalone)       Notification (standalone)
 |:---|:---|:---|
 | `User` | email, phone, password (bcrypt), role (ADMIN/CUSTOMER/TECHNICIAN), OTP fields | Central identity, linked to all user-owned entities |
 | `ServiceBooking` | appliance, issue, aiDiagnosis, status (9-state FSM), scheduledAt, finalCost | Repair job lifecycle container |
-| `ServiceEvent` | bookingId, status, note, createdAt | Append-only audit log for state transitions |
+| `ServiceEvent` | bookingId, status, note, createdAt | Append-only audit log — every state transition is permanently recorded |
+| `ServiceAssignment` | bookingId (PK), technicianId, pincode, routeNote | Links booking to technician by service area |
 | `Technician` | name, phone, pincode, active | Field workforce, matched to bookings by area |
-| `Product` | title, price, productType (NEW/REFURBISHED), conditionScore, stockQty, serialNumber | Marketplace inventory |
+| `ServiceOtp` | bookingId, otp, expiresAt, verified | On-site job completion verification |
+| `Product` | title, price, productType (NEW/REFURBISHED), conditionScore, stockQty, serialNumber | Marketplace inventory with condition tracking |
 | `ProductOrder` | productId, customerId, status (5-state), paymentStatus, deliveryAddress | E-commerce order tracking |
 | `DiagnosisLog` | appliance, issue, diagnosis, estimatedCostRange, mediaUrl | AI diagnosis history with indexed queries |
 | `SellRequest` | applianceType, conditionNote, expectedPrice, status (5-state lifecycle) | Customer-to-business trade-in pipeline |
-| `Subscription` | — (not implemented in current schema, planned) | Future SaaS tier management |
+| `SellOffer` | requestId, offerPrice, pickupSlot, status | Admin's buyback price offer |
+| `Gallery` | imageUrl, mediaType, caption | Repair photo/video showcase |
+| `DocumentLog` | docType, bookingId, meta | Generated document tracking |
+| `Notification` | userEmail, message, bookingId, read | System notification delivery |
 
-**7 enums:** `Role` &middot; `Status` (9-state service FSM) &middot; `OrderStatus` (5-state) &middot; `PaymentStatus` &middot; `ProductType` &middot; `WarrantyType` &middot; `SellRequestStatus`
+**7 enums:** `Role` &middot; `Status` (9-state service FSM) &middot; `OrderStatus` (5-state) &middot; `PaymentStatus` &middot; `ProductType` (NEW/REFURBISHED) &middot; `WarrantyType` (BRAND/SHOP) &middot; `SellRequestStatus` (5-state lifecycle)
 
 ---
 
 ## Project Workflow
 
-**Customer Journey:**
+### Service Booking Lifecycle (9-State FSM)
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: Customer books service
+    PENDING --> ASSIGNED: Admin assigns technician
+    ASSIGNED --> OUT_FOR_REPAIR: Technician dispatched
+    OUT_FOR_REPAIR --> REPAIRING: Technician on-site
+    REPAIRING --> FIXED: Repair complete
+    FIXED --> ESTIMATE_APPROVED: Customer approves cost
+    ESTIMATE_APPROVED --> PAYMENT_PENDING: Awaiting payment
+    PAYMENT_PENDING --> COMPLETED: Payment confirmed (Razorpay/Cash/UPI)
+    COMPLETED --> [*]
+
+    PENDING --> CANCELLED: Customer/Admin cancels
+    ASSIGNED --> CANCELLED: Customer/Admin cancels
+```
+
+> Every state transition writes an append-only row to the `ServiceEvent` table with a timestamp and optional note. The admin dashboard renders this as a replayable timeline per booking — no historical data is ever overwritten.
+
+### Customer Journey
 
 ```
 1. Customer visits site
@@ -489,18 +673,76 @@ Gallery (standalone)       Notification (standalone)
    │
    ├─► Admin assigns technician by pincode
    │   └─► Technician receives notification
-   │       └─► Status moves through 9-state FSM
+   │       └─► Status moves through 9-state FSM (each transition logged)
    │           └─► OTP verifies job completion on-site
-   │               └─► Payment collected (Razorpay / Cash / UPI)
+   │               └─► Payment collected (Razorpay / Cash / UPI QR)
    │                   └─► PDF invoice generated and emailed
    │
    ├─► Browses refurbished marketplace
-   │   └─► Places order → Pays via Razorpay → Tracks delivery
+   │   └─► Places order → Pays via Razorpay → Tracks delivery (5-state)
    │
    └─► Submits sell request for old appliance
        └─► Admin sends offer → Customer accepts/rejects
-           └─► Accepted items are auto-listed as refurbished products
+           └─► Accepted items auto-listed as refurbished products
 ```
+
+### Sell Request Pipeline
+
+```
+REQUESTED → OFFER_SENT → ACCEPTED → REFURBISHED_LISTED
+                       └→ REJECTED
+```
+
+The admin reviews the appliance photos, sends a price offer with a pickup time slot, and the customer accepts or rejects. Accepted items are automatically converted into refurbished `Product` listings with condition scores and shop warranty.
+
+---
+
+## Frontend Architecture
+
+### Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend (Next.js)
+    participant B as Backend (Express)
+    participant DB as PostgreSQL
+
+    U->>F: Enter email/phone
+    F->>B: POST /auth/request-login-otp
+    B->>DB: Upsert user + generate 6-digit OTP (10-min expiry)
+    B-->>U: OTP via WhatsApp → SMS → Email (3-tier fallback)
+    U->>F: Enter OTP
+    F->>B: POST /auth/verify-login
+    B->>DB: Validate OTP + check expiry
+    B-->>F: JWT token + Set HttpOnly cookie
+    F->>F: Store token in localStorage (Safari ITP fallback)
+    F->>F: Cache user in localStorage (instant hydration)
+
+    loop Every 10 minutes
+        F->>B: GET /auth/me (silent keepalive)
+        B-->>F: User profile (refreshes session)
+    end
+```
+
+### State Management
+
+The frontend uses **React Context API** with a custom `AuthProvider` that implements:
+
+- **Dual storage**: JWT stored in both HttpOnly cookie (primary) and `localStorage` (Safari fallback)
+- **Instant hydration**: User state is loaded from `localStorage` immediately on mount, preventing flash-of-unauthenticated-content
+- **Silent keepalive**: A background interval re-verifies the session against `/auth/me` every 10 minutes with max 3 network failure retries before invalidation
+- **Custom `authFetch` wrapper**: Every API call automatically injects `Authorization: Bearer <token>` from localStorage while also sending `credentials: "include"` for cookie-based auth
+
+### Component Patterns
+
+| Component | Pattern | Purpose |
+|:---|:---|:---|
+| `SafeVideo` | Catches `AbortError`/`NotAllowedError` on unmount | Prevents memory leaks and console noise from browser autoplay promise rejections during rapid DOM unmounts |
+| `ProductCard` | Dynamic Cloudinary URL injection | Intercepts Cloudinary URLs and injects `f_webp,q_auto:good,c_limit,w_900` transforms client-side — zero server processing |
+| `ServiceActiveTrackerCard` | 5-second polling loop | Real-time service progress tracker without WebSocket complexity |
+| `EstimateCard` | Pre-filled booking CTA | AI diagnosis result feeds directly into the booking form |
+| `GalleryShowcase` | Image validation + error boundary | Auto-detects and filters broken image URLs before rendering |
 
 ---
 
@@ -512,15 +754,29 @@ The data in this application is inherently relational: users have bookings, book
 
 ### Why Express v5 on Vercel Serverless instead of Next.js API Routes?
 
-The backend has 74 endpoints with complex middleware chains (auth verification, role checking, file upload handling, Razorpay webhook signature verification). Next.js API routes would work for simpler APIs, but Express gives me middleware composition, route grouping, and raw body parsing for webhooks — patterns that are awkward to implement in the App Router's route handler format.
+The backend has 74 endpoints with complex middleware chains (auth verification, role checking, file upload handling via Multer, raw body parsing for payment verification). Next.js API routes would work for simpler APIs, but Express gives me middleware composition, route grouping, and the `userAuth` → `adminAuth` middleware chain pattern — which would be awkward to replicate in the App Router's route handler format. Express v5 specifically adds native async error handling and Promise support, eliminating the need for `express-async-errors`.
 
 ### Why Dual-Mode Authentication?
 
-Safari's Intelligent Tracking Prevention (ITP) silently drops HttpOnly cookies when the frontend and backend are on different origins (which they are on Vercel). This caused 100% auth failure on iOS Safari — the majority of mobile users in India. The solution: the backend checks for cookies first, then falls back to Bearer token from the Authorization header. The frontend stores the JWT in localStorage and sends it as a Bearer token on every request while still sending `credentials: "include"` for cookie-based auth.
+Safari's Intelligent Tracking Prevention (ITP) silently drops HttpOnly cookies when the frontend and backend are on different origins (which they are on Vercel). This caused 100% auth failure on iOS Safari — the majority of mobile users in India. The `extractUserIdFromRequest` function in `authMiddleware.ts` checks cookies first, then falls back to Bearer token:
+
+```typescript
+const cookieToken = req.cookies?.token;
+const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+const token = cookieToken || bearerToken;  // Cookie-first, Bearer fallback
+```
 
 ### Why React Context over Redux/Zustand?
 
-The only global state is the authenticated user session. React Context handles this cleanly without adding a dependency. The 10-minute silent session refresh and localStorage hydration are implemented directly in the context provider.
+The only global state is the authenticated user session. React Context handles this cleanly without adding a dependency. The 10-minute silent session refresh and localStorage hydration are implemented directly in the `AuthProvider` context.
+
+### Why Polling over WebSockets?
+
+Active service trackers and admin dashboards use 5-second polling intervals instead of WebSockets. In a serverless environment (Vercel), maintaining persistent WebSocket connections adds significant complexity — each serverless function instance is ephemeral. Polling is a pragmatic choice that provides near-real-time updates with zero infrastructure overhead. WebSocket support is planned for when the backend moves to a persistent hosting model.
+
+### Why Passwordless OTP Login?
+
+The target users are local customers in Bhagalpur who may not remember complex passwords. Phone-based OTP login (via WhatsApp/SMS) is the most accessible authentication method for this demographic. Email OTP is offered as an alternative. Traditional email + password registration is also supported for users who prefer it.
 
 ---
 
@@ -530,36 +786,56 @@ The only global state is the authenticated user session. React Context handles t
 
 **Problem:** A traffic spike spins up dozens of isolated serverless functions, each opening a direct PostgreSQL connection. This instantly exhausts Neon's connection limit and crashes the database.
 
-**Solution:** Configured Prisma with `@prisma/adapter-pg` connected through Neon's pgBouncer connection pooler. Serverless functions connect to the pooler (which multiplexes connections) instead of directly to the database.
+**Solution:** Configured Prisma with `@prisma/adapter-pg` connected through Neon's pgBouncer connection pooler. Serverless functions connect to the pooler (which multiplexes connections) instead of directly to the database. The Prisma client is instantiated once per cold start and reused across requests within the same function instance.
 
 ### 2. Safari Cross-Origin Cookie Drop
 
-**Problem:** 100% auth failure on iOS Safari. The `HttpOnly` cookie was silently dropped because the frontend (Vercel) and backend (separate Vercel deployment) live on different origins.
+**Problem:** 100% auth failure on iOS Safari. The `HttpOnly` cookie was silently dropped because the frontend (Vercel) and backend (separate Vercel deployment) live on different origins. This affected the majority of mobile users since iOS Safari dominates the Indian mobile browser market.
 
-**Solution:** Implemented dual-mode auth — backend middleware checks cookie first, falls back to Bearer header. Frontend `authFetch` wrapper stores JWT in localStorage and injects it on every request.
+**Solution:** Implemented dual-mode auth — backend middleware checks cookie first, falls back to Bearer header. Frontend `authFetch` wrapper stores JWT in localStorage and injects it on every request while still sending `credentials: "include"`.
 
 ### 3. AI API Quota Management
 
-**Problem:** A single free-tier Gemini API key gives 1,500 requests/day. In production, a rate limit means the core diagnosis feature silently breaks.
+**Problem:** A single free-tier Gemini API key gives 1,500 requests/day. In production, hitting the rate limit means the core diagnosis feature silently breaks with no user feedback.
 
-**Solution:** Engineered a 5-key rotation pool across separate GCP projects (multiplying quota to 7,500/day), a 7-model cascade for model-level failures, exponential backoff, and a hardcoded rule-based fallback engine that covers common appliance failures without any API dependency.
+**Solution:** Engineered a multi-dimensional resilience system:
+1. **5-key rotation pool** across separate GCP projects (7,500 requests/day combined)
+2. **7-model cascade** for model-level 503 failures
+3. **Exponential backoff** with progressive delays (12s → 24s → 36s)
+4. **Offline rule-based engine** with 5 specialized diagnostic rulesets (fridge, AC, washing machine, noise, power) covering common appliance failures in bilingual output — no API dependency
 
 ### 4. OTP Delivery Reliability in India
 
-**Problem:** SMS delivery in India is unreliable due to DND registrations and network variability.
+**Problem:** SMS delivery in India is unreliable due to DND (Do Not Disturb) registrations and telecom network variability. A customer who can't receive OTP can't log in.
 
-**Solution:** Priority-chain delivery system: MSG91 WhatsApp (highest reliability, branded sender) &rarr; MSG91 SMS (immediate) &rarr; Dev console fallback. Each channel has a 10-second `AbortController` timeout.
+**Solution:** Built a 3-tier priority-chain delivery system in `otpService.ts`:
+
+| Priority | Channel | Why |
+|:---:|:---|:---|
+| 1 | MSG91 WhatsApp | Highest reliability, branded sender ("Golden Refrigeration") |
+| 2 | MSG91 SMS | Works immediately, bypasses DND for transactional messages |
+| 3 | Dev console fallback | OTP logged to stdout — zero config needed for development |
+
+Each channel has a 10-second `AbortController` timeout. In production, if both WhatsApp and SMS fail, the system throws a clear error. In development, it gracefully falls back to console logging with a formatted OTP display.
+
+### 5. Idempotent Database Schema Evolution
+
+**Problem:** Deploying schema changes to a live production database risks breaking running instances or causing downtime during migrations.
+
+**Solution:** The `runtime.ts` module runs defensive DDL queries at application startup (`ensurePhase1ProductSchema`, `ensurePhase2Schema`, `ensureDiagnosisLogSchema`, `ensureAuthSchema`) that add columns and tables only if they don't already exist — making every schema migration idempotent. This supplements Prisma's formal migration system and allows emergency schema fixes without downtime.
 
 ---
 
 ## Performance Optimizations
 
-- **Cloudinary URL transforms**: Product images are dynamically transformed to WebP format with quality optimization (`f_webp,q_auto:good,c_limit,w_900`) via URL parameter injection — no server-side processing needed.
-- **Connection pooling**: Neon pgBouncer prevents connection exhaustion in serverless environments.
-- **Indexed queries**: `DiagnosisLog` has composite indexes on `[customerId, createdAt]` and `[createdAt]` for efficient history lookups.
-- **Real-time polling**: Active service trackers and admin dashboards use 5-second polling intervals instead of WebSockets — a pragmatic choice that avoids the complexity of persistent connections in a serverless environment.
+- **Cloudinary URL transforms**: Product images are dynamically transformed to WebP format with quality optimization (`f_webp,q_auto:good,c_limit,w_900`) via URL parameter injection on the frontend — no server-side processing needed.
+- **Connection pooling**: Neon pgBouncer prevents connection exhaustion in serverless environments. The Prisma client is instantiated once per cold start.
+- **Indexed queries**: `DiagnosisLog` has composite indexes on `[customerId, createdAt]` and `[createdAt]` for efficient history lookups even as diagnosis volume grows.
+- **Real-time polling**: Active service trackers and admin dashboards use 5-second polling intervals instead of WebSockets — a pragmatic choice for serverless.
 - **Safe video unmounting**: Custom `SafeVideo` component catches `AbortError` and `NotAllowedError` during rapid DOM unmounts, eliminating memory leaks and console noise.
-- **LocalStorage hydration**: Auth state is cached in localStorage for instant UI rendering before the server-side session verification completes.
+- **LocalStorage hydration**: Auth state is cached in localStorage for instant UI rendering before the server-side session verification completes — no flash of unauthenticated content.
+- **Preconnect hints**: `<link rel="preconnect">` for Cloudinary, Google Fonts, and Unsplash domains in the root layout to reduce DNS lookup latency.
+- **Request body size limits**: `express.json({ limit: "100mb" })` is configured globally, with Multer enforcing per-route limits (25MB for diagnosis, 100MB for gallery) to prevent abuse.
 
 ---
 
@@ -569,13 +845,15 @@ The only global state is the authenticated user session. React Context handles t
 |:---|:---|
 | **Password theft** | Salted and hashed via `bcryptjs` — never stored in plaintext |
 | **XSS token theft** | JWT issued via `HttpOnly` cookies (inaccessible to JavaScript) with Bearer fallback for Safari |
-| **Payment spoofing** | Razorpay webhook signatures verified using `crypto.createHmac('sha256')` with `crypto.timingSafeEqual` to prevent timing attacks |
-| **CSRF / Open CORS** | Production CORS restricted to an explicit origin allowlist (not `origin: true`) |
+| **Payment spoofing** | Razorpay signatures verified using `crypto.createHmac('sha256')` with `crypto.timingSafeEqual` — prevents both forgery and timing attacks |
+| **CSRF / Open CORS** | Production CORS restricted to explicit origin allowlist with protocol auto-handling — not `origin: true` |
 | **Unauthorized access** | Two-tier middleware: `userAuth` (JWT verification) + `adminAuth` (role check against database) |
-| **Resource abuse** | Multer file size limits — 25MB for diagnosis uploads, 100MB for gallery media |
+| **Privilege escalation** | User identity (`req.userId`) is extracted exclusively from the verified JWT — never trusted from request body |
+| **Price manipulation** | Product prices and stock quantities for orders are fetched directly from the database — client-submitted prices are ignored |
+| **Resource abuse** | Multer file size limits — 25MB for diagnosis uploads, 100MB for gallery media. Global body limit of 100MB. |
 | **Session hijacking** | Silent session refresh every 10 minutes with 3-strike network failure invalidation |
-| **Request body tampering** | User identity (`userId`) and product prices are resolved from JWT and database — never trusted from request body |
 | **OTP brute force** | OTP validity restricted to 10 minutes with server-side expiry enforcement |
+| **Uncaught errors** | Global `uncaughtException` and `unhandledRejection` handlers prevent silent crashes in production |
 
 ---
 
@@ -583,11 +861,71 @@ The only global state is the authenticated user session. React Context handles t
 
 The architecture is designed to scale horizontally without infrastructure changes:
 
-- **Stateless backend**: Every Express function is independently deployable as a Vercel Serverless Function. No shared in-memory state between requests.
+- **Stateless backend**: Every Express function is independently deployable as a Vercel Serverless Function. No shared in-memory state between requests. The only stateful component is the PostgreSQL database.
 - **Connection pooling**: pgBouncer multiplexes database connections, allowing dozens of concurrent serverless instances without connection exhaustion.
-- **CDN-backed media**: Cloudinary handles image/video serving at the edge. The backend never serves static files in production.
-- **AI quota scaling**: The 5-key rotation pool can be extended by adding more GCP projects. The model cascade adds resilience without any code changes.
+- **CDN-backed media**: Cloudinary handles image/video serving at the edge. The backend never serves static files in production — `storeMediaFromTempFile()` uploads to Cloudinary first and falls back to local storage only in development.
+- **AI quota scaling**: The 5-key rotation pool can be extended by adding more GCP project keys to `.env`. The model cascade and offline fallback add resilience without any code changes.
 - **Database indexing**: Critical query paths (diagnosis history, user lookups) are indexed for consistent performance as data grows.
+- **Zero-downtime deploys**: Vercel's immutable deployments mean every push creates a new deployment. Rollback is instant via the Vercel dashboard.
+
+---
+
+## Error Handling and Resilience
+
+The system is designed with defense-in-depth — no single failure point can bring down the platform:
+
+| System | Failure Scenario | Resilience Strategy |
+|:---|:---|:---|
+| **AI Diagnosis** | All Gemini API keys exhausted (429) | 5-key rotation → 7-model cascade → Offline rule-based engine |
+| **AI Diagnosis** | Gemini returns malformed JSON | `extractJsonObject()` strips markdown fences, retries parse, falls back to structured error |
+| **OTP Delivery** | WhatsApp API down | Falls to SMS → Dev console. 10-second `AbortController` timeout per channel. |
+| **Media Upload** | Cloudinary API unavailable | `storeMediaFromTempFile()` falls back to local `/uploads` directory with auto-creation |
+| **Database** | Connection limit exceeded | pgBouncer connection pooler multiplexes connections from serverless instances |
+| **Payment** | Razorpay signature mismatch | `crypto.timingSafeEqual` + HMAC-SHA256 verification. Payment not marked as PAID unless signature is valid. |
+| **Server** | Uncaught exception in production | Global `uncaughtException` / `unhandledRejection` handlers log the error and prevent process crash |
+| **Server** | Port already in use (development) | Dev script auto-kills process on port 5001 with `EADDRINUSE` detection and helpful error message |
+| **Auth** | Safari drops cross-origin cookies | Dual-mode auth: cookie → Bearer token fallback |
+
+---
+
+## SEO Engineering
+
+This isn't just "add meta tags." I built a programmatic Local SEO system that outranks JustDial and IndiaMART for local intent searches:
+
+### 4 JSON-LD Schemas (injected in root `layout.tsx`)
+
+| Schema | Type | Purpose |
+|:---|:---|:---|
+| **LocalBusiness** | `LocalBusiness` + `HomeAndConstructionBusiness` | Business identity: name, address (geo-coordinates `25.2417, 87.0765`), phone, operating hours (8 AM–8 PM, 7 days), price range (₹349–₹8,000), aggregate rating (4.8/5, 127 reviews), payment methods, 8 service offerings in `OfferCatalog` |
+| **WebSite** | `WebSite` with `SearchAction` | Enables Google Sitelinks search box with `urlTemplate` pointing to the service page |
+| **FAQPage** | `FAQPage` with 12 Q&As | High-intent questions covering cost, brands, areas, same-day service — triggers Google FAQ rich snippets |
+| **Service** | `Service` with `Offer` | Standalone service catalog with ₹349 visiting charge, area served (6 localities), service type "Home Appliance Repair" |
+
+### Keyword Strategy
+
+- **60+ geo-targeted keywords** in the Next.js Metadata API covering:
+  - `brand × service × city` — "Samsung refrigerator repair Bhagalpur", "LG AC repair Bhagalpur"
+  - `service type × city` — "AC gas filling Bhagalpur", "compressor repair Bhagalpur"
+  - `area-specific` — "AC repair Sabour", "fridge repair Nathnagar", "appliance repair Adampur"
+- **13 `areaServed` places** with PIN codes for hyperlocal targeting (812001, 812002, 812005, 813108, 813210, 813222, 813223, 813213, 813214, 853204)
+- **Dynamic per-route metadata** — each page (service, products, AI diagnosis, gallery, sell) has its own title template, description, OpenGraph, and Twitter Cards
+- **Programmatic `sitemap.ts`** and **`robots.ts`** with admin/private route exclusions
+- **Google Search Console verified** with site verification token in metadata
+
+---
+
+## Database Migration Strategy
+
+Prisma manages schema changes through version-controlled migrations:
+
+| Migration | Date | Changes |
+|:---|:---|:---|
+| `init_refri_schema` | March 4, 2026 | Core schema — User, ServiceBooking, ServiceAssignment, Technician, ServiceEvent, ServiceOtp, Product, Gallery, Notification, DocumentLog |
+| `add_password_to_user` | March 7, 2026 | Added password field for email/password auth alongside OTP |
+| `phase1_hybrid_inventory` | March 10, 2026 | Added ProductOrder, SellRequest, SellOffer models + ProductType/WarrantyType enums for marketplace |
+| `add_diagnosis_log` | April 25, 2026 | Added DiagnosisLog model with composite indexes for AI diagnosis history |
+
+Additionally, `runtime.ts` runs idempotent DDL queries at startup to handle emergency schema additions without formal migration downtime.
 
 ---
 
@@ -596,11 +934,14 @@ The architecture is designed to scale horizontally without infrastructure change
 - [ ] WebSocket integration for real-time service status updates (replacing polling)
 - [ ] Push notifications via Firebase Cloud Messaging for technician alerts
 - [ ] Multi-tenant support for onboarding additional repair businesses
-- [ ] Automated testing suite (unit tests for controllers, integration tests for API endpoints)
+- [ ] Automated testing suite (unit tests for controllers, integration tests for API endpoints, E2E with Playwright)
 - [ ] Docker Compose setup for local development parity
-- [ ] Rate limiting middleware for public-facing endpoints
+- [ ] Rate limiting middleware (`express-rate-limit`) for public-facing endpoints
 - [ ] Caching layer (Redis) for frequently accessed product listings and dashboard stats
 - [ ] SaaS subscription tiers with feature gating via Razorpay Subscriptions API
+- [ ] Geolocation-based technician auto-assignment using lat/lng coordinates
+- [ ] WhatsApp Business API integration for order/booking status notifications
+- [ ] Image compression pipeline (Sharp) before Cloudinary upload for reduced bandwidth
 
 ---
 
@@ -609,11 +950,16 @@ The architecture is designed to scale horizontally without infrastructure change
 > **Current state:** The application has been validated through manual production testing with real customers and real payments. Automated test coverage is a planned improvement.
 
 **Verification approach used during development:**
-- Manual API testing via Postman/Thunder Client for all 74 endpoints
-- End-to-end payment flow verification with Razorpay test mode and live mode
-- Cross-browser testing (Chrome, Safari, Firefox, iOS Safari) for the dual-mode auth system
-- AI diagnosis testing across all 7 Gemini models and the offline fallback engine
-- OTP delivery testing across WhatsApp, SMS, and email channels
+
+| Test Type | Coverage |
+|:---|:---|
+| **API Testing** | All 74 endpoints tested via Postman/Thunder Client — happy path + error cases |
+| **Payment Flow** | End-to-end Razorpay checkout verified in both test mode and live mode (real INR transactions) |
+| **Cross-Browser** | Chrome, Safari, Firefox, iOS Safari — specifically validating the dual-mode auth system |
+| **AI Resilience** | All 7 Gemini models tested individually, plus key rotation under simulated 429 errors, plus offline fallback engine |
+| **OTP Delivery** | WhatsApp, SMS, and email channels tested across multiple Indian phone numbers and DND-registered numbers |
+| **SEO Validation** | JSON-LD schemas validated via Google's Rich Results Test and Schema.org validator |
+| **Mobile Responsiveness** | All pages tested on iPhone SE, iPhone 14, Samsung Galaxy, and various tablet viewports |
 
 ---
 
@@ -626,22 +972,33 @@ The application is deployed on Vercel with the following setup:
 | **Frontend** | Vercel | Next.js 16, auto-deployed on push to `main` |
 | **Backend** | Vercel Serverless | Express v5 via `@vercel/node`, configured in `vercel.json` |
 | **Database** | Neon | PostgreSQL 16 with pgBouncer connection pooling |
-| **Media** | Cloudinary | Image/video CDN with WebP transforms |
+| **Media** | Cloudinary | Image/video CDN with on-the-fly WebP transforms |
+| **Email** | Brevo SMTP | Transactional emails for OTP and invoices |
+| **OTP** | MSG91 | WhatsApp and SMS OTP delivery |
 | **Domain** | Custom | `www.goldenrefrigeration.in` |
 
-**CI/CD:** Every push to `main` triggers Vercel's automated build &rarr; type-check &rarr; deploy pipeline. Database migrations are version-controlled via Prisma (4 migration sets) and applied with `npx prisma migrate deploy`.
+### CI/CD Pipeline
 
----
+```
+Push to main → Vercel auto-build → TypeScript type-check → Deploy (zero-downtime)
+                                                          ↓
+                                              Immutable deployment URL generated
+                                              Previous version available for instant rollback
+```
 
-## SEO Engineering
+Database migrations are version-controlled via Prisma (4 migration sets) and applied with `npx prisma migrate deploy`.
 
-This isn't just "add meta tags." I built a programmatic Local SEO system:
+### Vercel Serverless Configuration (`backend/vercel.json`)
 
-- **4 JSON-LD schemas** injected into the DOM: `LocalBusiness`, `WebSite` (with `SearchAction` for sitelinks), `FAQPage` (12 high-intent Q&As), and `Service` (with `OfferCatalog`).
-- **60+ geo-targeted keywords** covering brand × service × area combinations.
-- **13 `areaServed` places** with PIN codes for hyperlocal targeting.
-- **Dynamic Metadata API** — per-route titles, descriptions, OpenGraph, and Twitter Cards.
-- **Programmatic `sitemap.xml`** and `robots.ts` with admin/private route exclusions.
+```json
+{
+  "version": 2,
+  "builds": [{ "src": "src/index.ts", "use": "@vercel/node" }],
+  "routes": [{ "src": "/(.*)", "dest": "src/index.ts" }]
+}
+```
+
+All incoming requests are routed to the Express server entry point, which handles routing internally via Express middleware.
 
 ---
 
@@ -651,17 +1008,36 @@ Contributions are welcome. Please follow these steps:
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Commit your changes (`git commit -m 'Add your feature'`)
+3. Commit your changes with clear messages (`git commit -m 'Add your feature'`)
 4. Push to the branch (`git push origin feature/your-feature`)
-5. Open a Pull Request
+5. Open a Pull Request with a description of what changed and why
 
-Please ensure your code follows the existing TypeScript conventions and passes `npm run lint`.
+**Code standards:**
+- Follow the existing TypeScript conventions
+- Run `npm run lint` before submitting
+- Keep controllers focused — if a new feature adds 500+ lines, consider splitting into a separate controller
+- Use Prisma migrations for any database schema changes
 
 ---
 
 ## License
 
 This project is licensed under the ISC License.
+
+---
+
+## Acknowledgments
+
+- [Next.js](https://nextjs.org/) — React framework for production
+- [Express.js](https://expressjs.com/) — Web framework for Node.js
+- [Prisma](https://www.prisma.io/) — Type-safe database access
+- [Neon](https://neon.tech/) — Serverless PostgreSQL
+- [Google Gemini](https://ai.google.dev/) — Multimodal AI
+- [Razorpay](https://razorpay.com/) — Payment gateway
+- [Cloudinary](https://cloudinary.com/) — Media management
+- [Vercel](https://vercel.com/) — Deployment platform
+- [Tailwind CSS](https://tailwindcss.com/) — Utility-first CSS
+- [MSG91](https://msg91.com/) — OTP delivery
 
 ---
 
