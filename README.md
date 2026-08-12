@@ -31,6 +31,48 @@
 
 ---
 
+## Table of Contents
+
+- [What This Project Is](#what-this-project-is)
+- [Quick Overview for Recruiters](#quick-overview-for-recruiters)
+- [Why I Built This](#why-i-built-this)
+- [Demo](#demo)
+- [Key Features](#key-features)
+- [Three User Portals](#three-user-portals)
+- [AI Features](#ai-features)
+- [Voice Input and Accessibility](#voice-input-and-accessibility)
+- [Invoice Engine](#invoice-engine)
+- [AI Price Suggestion Algorithm](#ai-price-suggestion-algorithm)
+- [UPI Payment Integration](#upi-payment-integration)
+- [System Architecture](#system-architecture)
+- [Tech Stack](#tech-stack)
+- [Folder Structure](#folder-structure)
+- [Installation](#installation)
+- [Environment Variables](#environment-variables)
+- [Running the Project](#running-the-project)
+- [API Overview](#api-overview)
+- [Database Schema Overview](#database-schema-overview)
+- [Project Workflow](#project-workflow)
+- [Frontend Architecture](#frontend-architecture)
+- [Design Decisions](#design-decisions)
+- [Challenges Faced](#challenges-faced)
+- [Performance Optimizations](#performance-optimizations)
+- [Security Features](#security-features)
+- [Scalability](#scalability)
+- [Error Handling and Resilience](#error-handling-and-resilience)
+- [SEO Engineering](#seo-engineering)
+- [Sitemap and Robots Configuration](#sitemap-and-robots-configuration)
+- [Database Migration Strategy](#database-migration-strategy)
+- [Business Context](#business-context)
+- [Future Improvements](#future-improvements)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+
+---
+
 ## What This Project Is
 
 RefriSmart AI is a full-stack SaaS platform I designed and built from scratch for a real appliance repair business in Bhagalpur, India. It handles the entire business lifecycle: customers book doorstep repairs, an AI engine diagnoses appliance faults from photos and videos before the technician arrives, the admin dispatches technicians by pincode, payments are processed through Razorpay, and the business owner tracks everything from a CRM dashboard.
@@ -94,6 +136,9 @@ A back-office suite with 8 dedicated views: Dashboard (live revenue and stats), 
 
 ### 5. Payment and Invoice System
 Razorpay integration with cryptographic HMAC-SHA256 signature verification using `crypto.timingSafeEqual` to prevent timing attacks. Supports both service booking payments and product order payments. Handles Cash, UPI QR code generation, and online payment modes. Auto-generates PDF invoices via Nodemailer.
+
+### 6. Voice-Powered AI Input
+The AI diagnosis page supports hands-free voice dictation via the Web Speech API (`SpeechRecognition` with `webkitSpeechRecognition` fallback). Configured for Indian English (`lang: "en-IN"`) with a live pulsing red indicator during recording. Spoken text is appended directly into the issue description field, enabling semi-literate users to describe faults in natural language.
 
 ---
 
@@ -160,6 +205,10 @@ User uploads photo/video + describes issue (text or voice via Web Speech API)
 - **Language detection** — the `detectInputLanguage()` function analyzes user input for Hindi/Hinglish patterns and adapts the response language automatically.
 - **Media persistence** — uploaded photos/videos are stored on Cloudinary (with local `/tmp` fallback) and linked to the `DiagnosisLog` for future reference.
 
+- **Retry orchestration**: `MAX_RETRIES_PER_MODEL = Math.max(6, keyCount * 2)` — ensures every key is cycled at least twice per model. Multi-pass recovery executes up to 2 retry passes with a 30-second cooldown between passes (`PASS_COOLDOWN_MS = 30_000`).
+- **Error classification**: `403` (project disabled) rotates key immediately. `429` (quota) rotates key and triggers 20-second cooldown if all keys exhausted. `503` (overload) triggers exponential backoff: `Math.min(15_000 * attempt, 60_000)`. `404` (model not found) skips to the next model immediately.
+- **Diagnosis history**: Up to 25 past diagnoses are cached in `localStorage` (key: `gr_ai_diagnosis_history`) for guest users. Logged-in users sync automatically with the backend `/ai/history` endpoint.
+
 <details>
 <summary><strong>Example: Offline rule-based diagnosis output</strong></summary>
 
@@ -179,6 +228,100 @@ When all API keys and models are exhausted, the system generates domain-specific
 The same output is available in Hinglish for Hindi-speaking customers — automatically selected based on the input language.
 
 </details>
+
+<details>
+<summary><strong>Offline fallback cost brackets by issue type</strong></summary>
+
+| Issue Category | Cost Range | Urgency | Matched Keywords |
+|:---|:---|:---:|:---|
+| Gas / Cooling failure | ₹1,200 – ₹4,500 | HIGH | `cool`, `thanda`, `cold`, `freez` |
+| Noise / Fan issues | ₹900 – ₹3,200 | MEDIUM | `noise`, `sound`, `awaz`, `vibrat` |
+| Water leak / Drain | ₹800 – ₹2,800 | MEDIUM | `drain`, `pani`, `water`, `leak` |
+| Spark / Burn | ₹1,500 – ₹6,000 | HIGH | `spark`, `burn`, `jal` |
+| General / Default | ₹700 – ₹2,500 | MEDIUM | _(no match)_ |
+
+All prices are Bhagalpur-local and include the ₹349 visiting charge.
+
+</details>
+
+---
+
+## Voice Input and Accessibility
+
+The AI diagnosis interface is designed for accessibility in a market where many users are more comfortable speaking than typing:
+
+- **Web Speech API** with `webkitSpeechRecognition` fallback for Safari compatibility
+- **Language**: Configured for Indian English (`lang: "en-IN"`)
+- **Behavior**: `interimResults: false`, `maxAlternatives: 1` — captures the final transcription only, avoiding noisy partial results
+- **UX**: Live pulsing red indicator during recording; spoken text is appended (not replaced) so users can dictate in multiple segments
+- **Graceful degradation**: Unsupported browsers receive a toast notification instead of a crash
+- **Pincode validation**: Doorstep service bookings from the AI diagnosis page are restricted to serviceable PIN codes (prefix `813210`) — out-of-area users are informed before they book
+
+---
+
+## Invoice Engine
+
+The platform generates PDF invoices from scratch — no `pdfkit`, `jsPDF`, or any external PDF library. The `makeProfessionalInvoicePdf()` function in `runtime.ts` constructs raw PDF 1.4 byte streams directly:
+
+| Detail | Value |
+|:---|:---|
+| **Page size** | A4 (595 × 842 pt) |
+| **Content width** | 495 pt |
+| **Header** | Navy band (`#212538`) with business name and tagline: *"Expert Appliance Repair & Service \| Since 2015"* |
+| **Accent** | Gold bar (`#DAA53E`) separating header from body |
+| **Body** | Customer details, itemized service/part table with alternating row shading, subtotal + GST breakdown |
+| **Footer** | Technician signature block + 4 terms & conditions (30-day service warranty, 7-day complaint window) |
+| **Currency** | `en-IN` locale formatting (₹) |
+| **Delivery** | Attached to transactional emails via Nodemailer or downloadable from the admin dashboard |
+
+This approach was chosen to eliminate a runtime dependency in the serverless environment — adding `pdfkit` or `puppeteer` to a Vercel function would significantly increase cold start times.
+
+---
+
+## AI Price Suggestion Algorithm
+
+The admin dashboard includes an AI-assisted pricing tool for refurbished appliances (`POST /admin/suggest-price`). The algorithm blends formula-based pricing with live inventory benchmarking:
+
+```
+For REFURBISHED items:
+  Base Price = Market Retail Price (MRP)
+  Age Penalty = min(ageInMonths × 0.012, 0.45)   → max 45% depreciation
+  Condition Boost = max((conditionScore - 5) × 0.03, -0.20)
+  Formula Price = Base × (1 - agePenalty + conditionBoost)
+
+For NEW items:
+  Formula Price = Base × 1.02   → 2% margin multiplier
+```
+
+**Live Inventory Benchmarking:**
+1. Fetches up to 140 available products from the database
+2. Tokenizes title and description of each product
+3. Matches the top 60 most similar items by keyword overlap
+4. Calculates the market median price from matches
+5. Blends market median with formula price (market weight: `0.35` – `0.78` depending on match quality)
+
+**Output includes:**
+- Suggested price with confidence score (`0.20` – `0.92`)
+- Price spread range (8%, 12%, or 18% depending on confidence)
+- Quick-sale price (85% of spread discount)
+- Premium listing price (90% of spread markup)
+- Market comparison data showing similar items
+
+---
+
+## UPI Payment Integration
+
+Alongside Razorpay online payments, the platform supports direct UPI payments for customers who prefer scanning a QR code:
+
+```
+UPI URL format:
+upi://pay?pa=7070494254-2@ybl&pn=Golden%20Refrigeration&am={amount}&cu=INR
+```
+
+- **Dynamic amount injection**: The `am` parameter is populated from the actual booking cost or order total (fetched from the database, never from the client)
+- **Payment confirmation**: Admin manually confirms UPI/Cash payments via `POST /bookings/:id/confirm-payment` or `PATCH /admin/orders/:id/confirm-payment`
+- **UPI ID**: `7070494254-2@ybl` (configured as `SHOP_UPI_ID` in `runtime.ts`)
+- **Supported modes**: Cash, UPI QR, Razorpay online — the customer selects during checkout
 
 ---
 
@@ -914,6 +1057,33 @@ This isn't just "add meta tags." I built a programmatic Local SEO system that ou
 
 ---
 
+## Sitemap and Robots Configuration
+
+Both files are generated programmatically via Next.js App Router conventions — no static XML files:
+
+### `robots.ts`
+
+| Directive | Value |
+|:---|:---|
+| User-Agent | `*` (all crawlers) |
+| **Allowed** | `/`, `/service`, `/products`, `/ai-diagnosis`, `/sell`, `/gallery` |
+| **Disallowed** | `/admin`, `/admin/`, `/orders`, `/verify-otp`, `/technician` |
+| Sitemap | `https://www.goldenrefrigeration.in/sitemap.xml` |
+
+### `sitemap.ts` (Priority Map)
+
+| Route | Priority | Change Frequency |
+|:---|:---:|:---|
+| `/` | `1.00` | Weekly |
+| `/service` | `0.95` | Weekly |
+| `/products` | `0.85` | Weekly |
+| `/ai-diagnosis` | `0.80` | Monthly |
+| `/sell` | `0.65` | Monthly |
+| `/gallery` | `0.60` | Monthly |
+| `/login` | `0.20` | Yearly |
+
+---
+
 ## Database Migration Strategy
 
 Prisma manages schema changes through version-controlled migrations:
@@ -926,6 +1096,68 @@ Prisma manages schema changes through version-controlled migrations:
 | `add_diagnosis_log` | April 25, 2026 | Added DiagnosisLog model with composite indexes for AI diagnosis history |
 
 Additionally, `runtime.ts` runs idempotent DDL queries at startup to handle emergency schema additions without formal migration downtime.
+
+---
+
+## Business Context
+
+This platform serves a real, registered business:
+
+| Detail | Value |
+|:---|:---|
+| **Business Name** | Golden Refrigeration |
+| **GSTIN** | `10EFRPM9155N1ZQ` |
+| **Address** | Sabour High School, Pani Tanki Sabour, Bhagalpur-813210, Bihar, India |
+| **Geo Coordinates** | `25.2417°N, 87.0765°E` |
+| **Operating Hours** | 8:00 AM – 8:00 PM, 7 days a week |
+| **Phone** | +91 7070494254 |
+| **Visiting Charge** | ₹349 (includes doorstep visit + on-site diagnosis + cost estimate) |
+| **Price Range** | ₹349 – ₹8,000 |
+| **Payment Accepted** | Cash, UPI (GPay, PhonePe), Razorpay Online |
+| **Founded** | 2019 |
+| **Google Maps** | [View on Maps](https://maps.app.goo.gl/vJ8CDd8nTpkZBG4EA) |
+| **JustDial** | [Verified Business Profile](https://www.justdial.com/Bhagalpur/Golden-Refrigeration--Sabour-High-School-Sabour/9999PX641-X641-190522080859-E5V9_BZDET) |
+| **Rating** | 4.8/5 (127 verified reviews) |
+| **Service Area** | 13 localities across Bhagalpur district (PIN codes: 812001, 812002, 812005, 813108, 813210, 813222, 813223, 813213, 813214, 853204) |
+
+---
+
+## Key Constants and Configuration
+
+These are the core configuration values hardcoded or defaulted across the platform:
+
+| Constant | Value | Location |
+|:---|:---|:---|
+| JWT token expiry | `30 days` | `authController.ts` |
+| Cookie `maxAge` | `30 days` (`30 × 24 × 60 × 60 × 1000` ms) | `runtime.ts` |
+| Cookie `sameSite` | `"none"` (prod) / `"lax"` (dev) | `authController.ts` |
+| OTP validity (login/verify) | `10 minutes` | `authController.ts` |
+| OTP validity (password reset) | `15 minutes` | `authController.ts` |
+| bcrypt salt rounds | `10` | `authController.ts` |
+| Session keepalive interval | `10 minutes` | `AuthContext.tsx` |
+| Max network failures before logout | `3` consecutive | `AuthContext.tsx` |
+| Gemini API timeout per request | `60 seconds` | `aiController.ts` |
+| OTP delivery timeout | `10 seconds` (AbortController) | `otpService.ts` |
+| File upload limit (diagnosis) | `25 MB` | Multer config |
+| File upload limit (gallery) | `100 MB` | Multer config |
+| Express body size limit | `100 MB` | `index.ts` |
+| Service tracker polling interval | `5 seconds` | `ServiceActiveTrackerCard.tsx` |
+| Cloudinary image transforms | `f_webp,q_auto:good,c_limit,w_900` | `ProductCard.tsx` |
+| Default backend port | `5001` | `runtime.ts` |
+| Default UPI ID | `7070494254-2@ybl` | `runtime.ts` |
+
+---
+
+## Supported Media Types
+
+The media storage service (`mediaStorageService.ts`) handles uploads with explicit MIME type validation:
+
+| Category | MIME Types | Extensions |
+|:---|:---|:---|
+| **Images** | `image/jpeg`, `image/jpg`, `image/png`, `image/webp`, `image/gif`, `image/heic` | `.jpg`, `.png`, `.webp`, `.gif`, `.heic` |
+| **Videos** | `video/mp4`, `video/webm`, `video/quicktime`, `video/x-matroska` | `.mp4`, `.webm`, `.mov`, `.mkv` |
+
+Files are stored with the pattern `{sanitizedBaseName}-{randomUUID()}.{ext}` — the UUID suffix prevents filename collisions across concurrent uploads.
 
 ---
 
