@@ -139,15 +139,17 @@ const buildSmartFallback = (
     isRelevant: true,
     problem: fallback.probableFault,
     technicalExplanation: isEn
-      ? `Step 1: Technician visits and performs a full diagnostic test on your ${appliance}. Step 2: ${fallback.partsList.join(", ")} are checked. Step 3: Faulty components identified and replaced. Step 4: Unit tested under load to confirm repair. ${fallback.actionPlan} Repair time: 1-3 hours.`
-      : `Step 1: Technician aapke ${appliance} ka full diagnostic test karega. Step 2: ${fallback.partsList.join(", ")} check kiye jaenge. Step 3: Kharab parts identify karke replace kiye jaenge. Step 4: Repair ke baad unit test hoga. ${fallback.actionPlan} Repair time: 1-3 ghante.`,
+      ? `Don't worry, this is a common issue with ${appliance}s. Usually, it's just a minor issue like a loose wire or a blown fuse, but sometimes a main part needs replacement. For now, please keep the appliance unplugged to be safe. Our technician will come and check it thoroughly.`
+      : `Ghabrayein nahi, ${appliance} mein yeh ek aam problem hai. Zyada tar cases mein yeh kisi loose wire ya chote fuse ki wajah se hota hai. Kabhi kabhi main part badalna padta hai. Abhi ke liye, kripya appliance ka plug nikal dein taki koi aur damage na ho. Humare technician aakar ache se check karenge.`,
     safetyAlert: isEn
-      ? "High voltage components inside — do not attempt DIY repair."
-      : "Andar high voltage parts hain — khud repair na karein.",
+      ? "Please keep the appliance unplugged and do not attempt to open it yourself due to high voltage."
+      : "Kripya appliance ka plug nikal dein aur ise khud kholne ki koshish na karein (high voltage ka khatra hai).",
     conclusion: isEn
-      ? `Book Golden Refrigeration for expert ${appliance} repair in Bhagalpur/Sabour — same-day or next-day slots available.`
-      : `Bhagalpur/Sabour mein ${appliance} repair ke liye Golden Refrigeration book karein — same-day ya next-day slot available hai.`,
-    estimatedCostRange: costRange + " (Visit Rs.300 + Labour + Parts — final amount after on-site inspection)",
+      ? `Book a checkup with our expert technicians in Bhagalpur/Sabour. We're here to help!`
+      : `Bhagalpur/Sabour mein humare expert technician ko checkup ke liye book karein. Hum aapki madad ke liye taiyar hain!`,
+    estimatedCostRange: isEn
+      ? `Visit: Rs.300 | Minor fix: Rs.500-800 | Major fix: ${costRange} (Final rate after inspection)`
+      : `Visit charge: Rs.300 | Minor repair: Rs.500-800 | Major repair: ${costRange} (Final rate check karne ke baad)`,
   };
 };
 
@@ -245,24 +247,30 @@ export const diagnose = async (req: Request, res: Response) => {
     const detectedLanguage = detectInputLanguage(resolvedIssue || "English");
     const replyLanguage = detectedLanguage === "ENGLISH" ? "ENGLISH" : "HINGLISH";
 
-    const prompt = `You are a SENIOR APPLIANCE REPAIR TECHNICIAN at Golden Refrigeration, Sabour, Bhagalpur — 15+ years experience repairing Indian home appliances.
+    const prompt = `You are an HONEST, FRIENDLY, and TRUSTED local appliance shop owner at Golden Refrigeration in Sabour, Bhagalpur.
 
 APPLIANCE: ${resolvedAppliance || "Not specified"}
 ISSUE: ${resolvedIssue || "See attached photo/video"}
-${file ? "MEDIA: Customer uploaded a photo/video — analyze it for visual clues." : ""}
+${file ? "MEDIA: Customer uploaded a photo/video — analyze it." : ""}
 
-Give a SPECIFIC, REAL diagnosis based on the exact appliance and issue described. Do NOT give generic answers.
+Your goal is to COMFORT the customer, build TRUST, and explain the issue in very simple terms (no engineering jargon).
+Reply in ${replyLanguage === "ENGLISH" ? "clear, simple English" : "friendly Hinglish (Roman script)"}.
 
-Reply in ${replyLanguage === "ENGLISH" ? "clear English" : "friendly Hinglish (Roman script)"}.
+RULES:
+1. EMPATHY FIRST: Always start your explanation by reassuring them (e.g., "Ghabrayein nahi...", "Don't worry, this is a very common issue...").
+2. HOPE FOR CHEAP FIX: Always mention a minor possibility first (e.g., a loose wire, a small blown fuse) before mentioning expensive parts.
+3. NO JARGON: Talk like a friendly mechanic, not a textbook. No complex engineering terms.
+4. IMMEDIATE SOLUTION: Give them 1 simple, immediate step they can take right now for safety or to prevent further damage (e.g., "For now, please unplug it", "Keep the door open").
+5. TRANSPARENT PRICING: Provide a tiered cost estimate (Minor vs Major fix).
 
-Return ONLY this JSON (no markdown, no explanation outside the JSON):
+Return ONLY this JSON (no markdown outside JSON):
 {
   "isRelevant": true,
-  "problem": "Name the exact failed component (e.g. compressor start relay, R-22 gas leak, drain pump filter clog, PCB capacitor blown)",
-  "technicalExplanation": "Step-by-step: what failed and why, what technician will check and do, which parts may be replaced, how long it takes",
-  "safetyAlert": "Real safety warning specific to this repair, or empty string if none",
-  "conclusion": "Warm recommendation to book Golden Refrigeration with same-day/next-day availability in Bhagalpur/Sabour",
-  "estimatedCostRange": "Realistic total cost for Bhagalpur 2024-25: visit Rs.300 + labour + parts breakdown, give a total range"
+  "problem": "Simple name of the issue",
+  "technicalExplanation": "Write a friendly paragraph here. 1. Empathy ('Ghabrayein nahi'). 2. Simple explanation (mention minor fix first, then major). 3. Immediate solution/advice for right now.",
+  "safetyAlert": "Friendly safety tip (e.g., Please don't open the back panel due to high voltage), or empty string",
+  "conclusion": "Warm, polite recommendation to book our technician for a checkup.",
+  "estimatedCostRange": "Format strictly like: Visit: Rs.300 | Minor fix: Rs.500-800 | Major fix: Rs.1500+ (Final rate after inspection)"
 }
 If completely unrelated to appliance repair: { "isRelevant": false, "problem": "", "technicalExplanation": "", "safetyAlert": "", "conclusion": "", "estimatedCostRange": "" }`;
 
@@ -588,9 +596,7 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
     const estimatedCostRange = parsed.isRelevant ? (parsed.estimatedCostRange || "") : "";
 
     const aiDiagnosis = parsed.isRelevant
-      ? replyLanguage === "ENGLISH"
-        ? `Problem identified: ${safeProblem}\n\n${technicalExplanation}${safetyAlert ? `\n\nSafety Alert: ${safetyAlert}` : ""}\n\nGolden Advice: ${conclusion}`
-        : `Identified problem: ${safeProblem}\n\n${technicalExplanation}${safetyAlert ? `\n\nSafety: ${safetyAlert}` : ""}\n\nGolden Advice: ${conclusion}`
+      ? `${technicalExplanation}\n\n${safetyAlert ? `⚠️ Safety Tip: ${safetyAlert}\n\n` : ""}👨‍🔧 Advice: ${conclusion}`
       : strictMessage;
 
     const requesterId = resolveUserIdFromRequest(req);
