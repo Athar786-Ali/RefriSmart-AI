@@ -247,32 +247,34 @@ export const diagnose = async (req: Request, res: Response) => {
     const detectedLanguage = detectInputLanguage(resolvedIssue || "English");
     const replyLanguage = detectedLanguage === "ENGLISH" ? "ENGLISH" : "HINGLISH";
 
-    const prompt = `You are an HONEST, FRIENDLY, and TRUSTED local appliance shop owner at Golden Refrigeration in Sabour, Bhagalpur.
+    const prompt = `You are Raju bhai, a warm and honest appliance repair shop owner at Golden Refrigeration, Sabour, Bhagalpur. You have 15+ years of hands-on experience. A customer has come to you with this problem:
 
 APPLIANCE: ${resolvedAppliance || "Not specified"}
-ISSUE: ${resolvedIssue || "See attached photo/video"}
-${file ? "MEDIA: Customer uploaded a photo/video — analyze it." : ""}
+CUSTOMER'S COMPLAINT: ${resolvedIssue || "See attached photo/video"}
+${file ? "The customer also shared a photo/video of the problem — look at it carefully." : ""}
 
-Your goal is to COMFORT the customer, build TRUST, and explain the issue in very simple terms (no engineering jargon).
-Reply in ${replyLanguage === "ENGLISH" ? "clear, simple English" : "friendly Hinglish (Roman script)"}.
+Now talk to this customer like they are standing in front of you in your shop. Reply in ${replyLanguage === "ENGLISH" ? "simple, everyday English" : "the same language the customer used (Hindi/Hinglish in Roman script)"}.
 
-RULES:
-1. EMPATHY FIRST: Always start your explanation by reassuring them (e.g., "Ghabrayein nahi...", "Don't worry, this is a very common issue...").
-2. HOPE FOR CHEAP FIX: Always mention a minor possibility first (e.g., a loose wire, a small blown fuse) before mentioning expensive parts.
-3. NO JARGON: Talk like a friendly mechanic, not a textbook. No complex engineering terms.
-4. IMMEDIATE SOLUTION: Give them 1 simple, immediate step they can take right now for safety or to prevent further damage (e.g., "For now, please unplug it", "Keep the door open").
-5. TRANSPARENT PRICING: Provide a tiered cost estimate (Minor vs Major fix).
+IMPORTANT RULES:
+- Give a SPECIFIC diagnosis for THIS EXACT problem. Do NOT give generic answers.
+- First, comfort the customer naturally (not a template like "Ghabrayein nahi" every time — be genuine and different each time).
+- Then explain EXACTLY what is likely wrong and WHY, using simple everyday words (no engineering terms like "magnetron", "capacitor", "compressor relay" — instead say "heating part", "small switch", "gas" etc).
+- Then give them 1 practical thing they can do RIGHT NOW at home (safety tip or temporary fix).
+- Then warmly suggest they book a checkup with Golden Refrigeration.
+- For cost: give a realistic TOTAL cost range for Bhagalpur/Sabour rural area (DO NOT show visiting charge separately — just give the full total range including everything).
 
-Return ONLY this JSON (no markdown outside JSON):
+Return ONLY this JSON (no markdown, no text outside):
 {
   "isRelevant": true,
-  "problem": "Simple name of the issue",
-  "technicalExplanation": "Write a friendly paragraph here. 1. Empathy ('Ghabrayein nahi'). 2. Simple explanation (mention minor fix first, then major). 3. Immediate solution/advice for right now.",
-  "safetyAlert": "Friendly safety tip (e.g., Please don't open the back panel due to high voltage), or empty string",
-  "conclusion": "Warm, polite recommendation to book our technician for a checkup.",
-  "estimatedCostRange": "Format strictly like: Visit: Rs.300 | Minor fix: Rs.500-800 | Major fix: Rs.1500+ (Final rate after inspection)"
+  "problem": "2-4 word simple name (e.g., 'Heating Part Kharab', 'Gas Leak', 'Drain Block')",
+  "technicalExplanation": "Your full friendly explanation — specific to this exact problem. What is wrong, why it happened, what can they do right now at home.",
+  "safetyAlert": "One practical safety tip for this specific situation, or empty string if not needed",
+  "conclusion": "A warm, personal suggestion to book Golden Refrigeration technician",
+  "estimatedCostRange": "Total realistic cost range for this repair in Bhagalpur area (e.g., 'Rs.800 - Rs.2,000')"
 }
-If completely unrelated to appliance repair: { "isRelevant": false, "problem": "", "technicalExplanation": "", "safetyAlert": "", "conclusion": "", "estimatedCostRange": "" }`;
+
+If the question is NOT about appliance repair at all:
+{ "isRelevant": false, "problem": "", "technicalExplanation": "", "safetyAlert": "", "conclusion": "", "estimatedCostRange": "" }`;
 
     let parsed: ConsultantPayload | null = null;
     let lastModelError = "";
@@ -586,8 +588,8 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
         ? "I am specialized in Golden Refrigeration appliance diagnostics. Please ask about your repair needs."
         : "Main Golden Refrigeration appliance diagnostics mein specialize karta hoon. Kripya apni repair problem batayein.";
 
-    const safeProblem = parsed.problem || resolvedAppliance || "an internal fault";
-    const technicalExplanation = parsed.technicalExplanation || "A technician will inspect and diagnose the exact fault on-site.";
+    const safeProblem = parsed.problem || resolvedAppliance || "Appliance Issue";
+    const technicalExplanation = parsed.technicalExplanation || "Our technician will inspect and find the exact issue on-site.";
     const safetyAlert = parsed.safetyAlert || "";
     let conclusion = parsed.conclusion || "Book Golden Refrigeration for expert service in Bhagalpur/Sabour.";
     if (!/golden refrigeration/i.test(conclusion)) {
@@ -595,9 +597,29 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
     }
     const estimatedCostRange = parsed.isRelevant ? (parsed.estimatedCostRange || "") : "";
 
-    const aiDiagnosis = parsed.isRelevant
-      ? `${technicalExplanation}\n\n${safetyAlert ? `⚠️ Safety Tip: ${safetyAlert}\n\n` : ""}👨‍🔧 Advice: ${conclusion}`
-      : strictMessage;
+    // Build a beautifully formatted diagnosis with clear visual sections
+    let aiDiagnosis: string;
+    if (parsed.isRelevant) {
+      const parts: string[] = [];
+
+      // Section 1: Problem Name (bold-style header)
+      parts.push(`🔍 ${safeProblem}`);
+
+      // Section 2: Full explanation from AI
+      parts.push(technicalExplanation);
+
+      // Section 3: Safety tip (only if present)
+      if (safetyAlert) {
+        parts.push(`⚠️ ${safetyAlert}`);
+      }
+
+      // Section 4: Technician suggestion
+      parts.push(`👨‍🔧 ${conclusion}`);
+
+      aiDiagnosis = parts.join("\n\n");
+    } else {
+      aiDiagnosis = strictMessage;
+    }
 
     const requesterId = resolveUserIdFromRequest(req);
     let diagnosisLogId: string | null = null;
