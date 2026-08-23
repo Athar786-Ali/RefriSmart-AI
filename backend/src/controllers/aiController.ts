@@ -13,6 +13,7 @@ type ConsultantPayload = {
   isRelevant: boolean;
   problem?: string;
   technicalExplanation?: string;
+  solution?: string;
   safetyAlert?: string;
   conclusion?: string;
   estimatedCostRange?: string;
@@ -203,6 +204,7 @@ function parseGeminiResponse(raw: string): ConsultantPayload | null {
       isRelevant: candidate.isRelevant,
       problem: String(candidate.problem || "").trim(),
       technicalExplanation: String(candidate.technicalExplanation || "").trim(),
+      solution: String(candidate.solution || "").trim(),
       safetyAlert: String(candidate.safetyAlert || "").trim(),
       conclusion: String(candidate.conclusion || "").trim(),
       estimatedCostRange: String(candidate.estimatedCostRange || "").trim(),
@@ -247,34 +249,37 @@ export const diagnose = async (req: Request, res: Response) => {
     const detectedLanguage = detectInputLanguage(resolvedIssue || "English");
     const replyLanguage = detectedLanguage === "ENGLISH" ? "ENGLISH" : "HINGLISH";
 
-    const prompt = `You are Raju bhai, a warm and honest appliance repair shop owner at Golden Refrigeration, Sabour, Bhagalpur. You have 15+ years of hands-on experience. A customer has come to you with this problem:
+    const prompt = `You are Raju bhai, a warm and honest appliance repair shop owner at Golden Refrigeration, Sabour, Bhagalpur. You have 15+ years of hands-on experience repairing refrigerators, ACs, washing machines, and microwaves in Indian homes. A customer has come to you:
 
 APPLIANCE: ${resolvedAppliance || "Not specified"}
 CUSTOMER'S COMPLAINT: ${resolvedIssue || "See attached photo/video"}
-${file ? "The customer also shared a photo/video of the problem — look at it carefully." : ""}
+${file ? "The customer also shared a photo/video — analyze it carefully for visual clues." : ""}
 
-Now talk to this customer like they are standing in front of you in your shop. Reply in ${replyLanguage === "ENGLISH" ? "simple, everyday English" : "the same language the customer used (Hindi/Hinglish in Roman script)"}.
+THINK like a real expert. Based on these EXACT symptoms, what is the MOST LIKELY root cause? Don't guess randomly — use your 15 years of experience to pinpoint the exact issue.
 
-IMPORTANT RULES:
-- Give a SPECIFIC diagnosis for THIS EXACT problem. Do NOT give generic answers.
-- First, comfort the customer naturally (not a template like "Ghabrayein nahi" every time — be genuine and different each time).
-- Then explain EXACTLY what is likely wrong and WHY, using simple everyday words (no engineering terms like "magnetron", "capacitor", "compressor relay" — instead say "heating part", "small switch", "gas" etc).
-- Then give them 1 practical thing they can do RIGHT NOW at home (safety tip or temporary fix).
-- Then warmly suggest they book a checkup with Golden Refrigeration.
-- For cost: give a realistic TOTAL cost range for Bhagalpur/Sabour rural area (DO NOT show visiting charge separately — just give the full total range including everything).
+Reply in ${replyLanguage === "ENGLISH" ? "simple, everyday English" : "the same language/script the customer used (Hindi/Hinglish in Roman script)"}.
 
-Return ONLY this JSON (no markdown, no text outside):
+RULES:
+- Be SPECIFIC to THIS problem. Every answer must be UNIQUE and DIFFERENT.
+- Comfort the customer naturally (vary your tone — don't repeat the same opening every time).
+- Explain what is EXACTLY wrong in simple words (no engineering jargon — say "heating part" not "magnetron", "gas" not "refrigerant R-134a", "small switch" not "capacitor").
+- Give a REAL, ACTIONABLE solution the customer can try at home before calling a technician.
+- Keep safety tip to ONE short line (max 15 words).
+- Suggest Golden Refrigeration technician warmly, like a friend.
+- Cost: realistic TOTAL for Bhagalpur rural area (everything included, no separate visiting charge).
+
+Return ONLY this JSON:
 {
   "isRelevant": true,
-  "problem": "2-4 word simple name (e.g., 'Heating Part Kharab', 'Gas Leak', 'Drain Block')",
-  "technicalExplanation": "Your full friendly explanation — specific to this exact problem. What is wrong, why it happened, what can they do right now at home.",
-  "safetyAlert": "One practical safety tip for this specific situation, or empty string if not needed",
-  "conclusion": "A warm, personal suggestion to book Golden Refrigeration technician",
-  "estimatedCostRange": "Total realistic cost range for this repair in Bhagalpur area (e.g., 'Rs.800 - Rs.2,000')"
+  "problem": "2-4 word name (e.g., 'Gas Khatam', 'Heating Part Fail', 'Naali Band')",
+  "technicalExplanation": "Friendly explanation of what exactly went wrong and why. Be specific to this appliance and this symptom.",
+  "solution": "A real, practical solution or step the customer can try right now at home (e.g., 'Check if the power plug is loose and try a different socket', 'Clean the back side dust with a dry cloth'). If nothing can be done at home, say so honestly.",
+  "safetyAlert": "One SHORT safety line (max 15 words), or empty string",
+  "conclusion": "Warm suggestion to book Golden Refrigeration technician — like a friend advising",
+  "estimatedCostRange": "Total cost range (e.g., 'Rs.800 - Rs.2,000')"
 }
 
-If the question is NOT about appliance repair at all:
-{ "isRelevant": false, "problem": "", "technicalExplanation": "", "safetyAlert": "", "conclusion": "", "estimatedCostRange": "" }`;
+If NOT about appliance repair: { "isRelevant": false, "problem": "", "technicalExplanation": "", "solution": "", "safetyAlert": "", "conclusion": "", "estimatedCostRange": "" }`;
 
     let parsed: ConsultantPayload | null = null;
     let lastModelError = "";
@@ -590,6 +595,7 @@ If the question is NOT about appliance repair at all:
 
     const safeProblem = parsed.problem || resolvedAppliance || "Appliance Issue";
     const technicalExplanation = parsed.technicalExplanation || "Our technician will inspect and find the exact issue on-site.";
+    const solution = parsed.solution || "";
     const safetyAlert = parsed.safetyAlert || "";
     let conclusion = parsed.conclusion || "Book Golden Refrigeration for expert service in Bhagalpur/Sabour.";
     if (!/golden refrigeration/i.test(conclusion)) {
@@ -598,22 +604,28 @@ If the question is NOT about appliance repair at all:
     const estimatedCostRange = parsed.isRelevant ? (parsed.estimatedCostRange || "") : "";
 
     // Build a beautifully formatted diagnosis with clear visual sections
+    // Flow: 🔍 Problem → Explanation → 🛠️ Solution → ⚠️ Safety → 👨‍🔧 Advice
     let aiDiagnosis: string;
     if (parsed.isRelevant) {
       const parts: string[] = [];
 
-      // Section 1: Problem Name (bold-style header)
+      // Section 1: Problem Name
       parts.push(`🔍 ${safeProblem}`);
 
-      // Section 2: Full explanation from AI
+      // Section 2: What went wrong and why
       parts.push(technicalExplanation);
 
-      // Section 3: Safety tip (only if present)
+      // Section 3: Solution (what you can try at home)
+      if (solution) {
+        parts.push(`🛠️ ${solution}`);
+      }
+
+      // Section 4: Safety (short one-liner)
       if (safetyAlert) {
         parts.push(`⚠️ ${safetyAlert}`);
       }
 
-      // Section 4: Technician suggestion
+      // Section 5: Technician suggestion
       parts.push(`👨‍🔧 ${conclusion}`);
 
       aiDiagnosis = parts.join("\n\n");
