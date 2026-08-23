@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import fs from "node:fs";
 import { getGeminiClient, rotateKey, totalKeys } from "../config/gemini.js";
+import { isNvidiaConfigured, NVIDIA_MODELS, callNvidia, fileToBase64DataUrl } from "../config/nvidia.js";
 import { resolveUserIdFromRequest, type AuthenticatedRequest } from "../middlewares/authMiddleware.js";
 import { TECHNICIAN_PHONE, detectInputLanguage, extractJsonObject, fallbackStructuredDiagnosis } from "../config/runtime.js";
 import { createDiagnosisLog, listDiagnosisLogs } from "../services/diagnosisService.js";
@@ -271,12 +272,77 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
     let storedMediaUrl: string | null = null;
     let storedMediaType: "image" | "video" | null = null;
     let geminiUsed = false;
+    let nvidiaUsed = false;
     let allQuotaExhausted = true;
 
-    // ── Upload media to Gemini File API ──────────────────────────────────────
-    if (file) {
+    // ── TIER 1: Try NVIDIA NIM API first (primary AI provider) ───────────────
+    if (isNvidiaConfigured()) {
+      // Convert file to base64 for NVIDIA's inline multimodal (simpler than Gemini's File API)
+      let nvidiaBase64Image: string | null = null;
+      if (file && file.mimetype?.startsWith("image/")) {
+        nvidiaBase64Image = fileToBase64DataUrl(file.path, file.mimetype);
+      }
+
+      for (const nvidiaModel of NVIDIA_MODELS) {
+        if (parsed) break;
+        try {
+          console.log(`\n[AI] >> NVIDIA Model: ${nvidiaModel} | Image: ${nvidiaBase64Image ? "yes" : "no"}`);
+          console.log(`[AI]    ${resolvedAppliance} — "${resolvedIssue.slice(0, 100)}"`);
+
+          const raw = await callNvidia(nvidiaModel, prompt, nvidiaBase64Image);
+
+          console.log(`[AI] NVIDIA raw response (${nvidiaModel}):\n${raw.slice(0, 600)}`);
+
+          if (!raw) {
+            lastModelError = `Empty response from NVIDIA ${nvidiaModel}`;
+            continue;
+          }
+
+          const candidate = parseGeminiResponse(raw); // Same JSON format — parser works for both
+          if (candidate) {
+            parsed = candidate;
+            nvidiaUsed = true;
+            allQuotaExhausted = false;
+            lastModelError = "";
+            console.log(`\n[AI] ✅ SUCCESS — NVIDIA model "${nvidiaModel}" gave a valid diagnosis!`);
+            break;
+          }
+
+          lastModelError = `NVIDIA ${nvidiaModel}: JSON parse failed. Raw: ${raw.slice(0, 120)}`;
+          allQuotaExhausted = false;
+          console.warn(`[AI] NVIDIA parse failed for ${nvidiaModel}. Trying next model...`);
+
+        } catch (err: any) {
+          lastModelError = String(err?.message || err || "Unknown NVIDIA error");
+          console.warn(`[AI] NVIDIA ${nvidiaModel} failed: ${lastModelError.slice(0, 200)}`);
+
+          if (lastModelError.includes("401")) {
+            console.error(`[AI] NVIDIA API key invalid — skipping all NVIDIA models`);
+            break; // Bad key — don't try other models
+          }
+          if (lastModelError.includes("429")) {
+            console.warn(`[AI] NVIDIA quota exhausted — falling through to Gemini`);
+            break; // Quota — fall through to Gemini
+          }
+          // 404 = model not found — try next model
+          // Other errors — try next model
+          continue;
+        }
+      }
+
+      if (parsed) {
+        console.log(`[AI] NVIDIA succeeded — skipping Gemini cascade.`);
+      } else {
+        console.warn(`[AI] All NVIDIA models failed — falling through to Gemini...`);
+      }
+    } else {
+      console.log(`[AI] NVIDIA not configured — using Gemini directly.`);
+    }
+
+    // ── Upload media to Gemini File API (only if NVIDIA didn't succeed) ───────
+    if (!parsed && file) {
       try {
-        console.log(`\n[AI] Uploading media: ${file.originalname} (${file.mimetype})`);
+        console.log(`\n[AI] Uploading media to Gemini File API: ${file.originalname} (${file.mimetype})`);
         const uploaded = await getGeminiClient().files.upload({ file: file.path, config: { mimeType: file.mimetype } });
         let fileInfo = uploaded;
         let polls = 0;
@@ -286,11 +352,14 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
           polls++;
         }
         uploadedFilePart = fileInfo;
-        console.log(`[AI] File ready — URI: ${(fileInfo as any).uri}, state: ${(fileInfo as any).state}`);
+        console.log(`[AI] Gemini file ready — URI: ${(fileInfo as any).uri}, state: ${(fileInfo as any).state}`);
       } catch (e: any) {
-        console.error("[AI] File upload failed:", e.message, "— continuing without file");
+        console.error("[AI] Gemini file upload failed:", e.message, "— continuing without file");
       }
     }
+
+    // ── TIER 2: Try Gemini models (backup — only if NVIDIA didn't succeed) ───
+    if (!parsed) {
 
     // ── Try every Gemini model, with per-model retry on quota errors ─────────
     // Ordered: best → lightest. All are valid free-tier model IDs.
@@ -465,6 +534,7 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
         }
       }
     }
+    } // end if (!parsed) — Gemini backup cascade
 
     // ── Persist uploaded media to Cloudinary ─────────────────────────────────
     if (file) {
@@ -499,7 +569,7 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
       const costRange = `Rs.${Number(fallback.estimatedCostMin).toLocaleString("en-IN")} - Rs.${Number(fallback.estimatedCostMax).toLocaleString("en-IN")}`;
       parsed = buildSmartFallback(resolvedAppliance, resolvedIssue, replyLanguage, fallback, costRange);
     } else {
-      console.log(`\n[AI] LIVE Gemini response used — NOT hardcoded fallback.`);
+      console.log(`\n[AI] LIVE AI response used (${nvidiaUsed ? "NVIDIA" : "Gemini"}) — NOT hardcoded fallback.`);
     }
 
     // ── Format final response ─────────────────────────────────────────────────
@@ -554,8 +624,10 @@ If completely unrelated to appliance repair: { "isRelevant": false, "problem": "
         sms: `sms:+91${TECHNICIAN_PHONE}`,
       },
       geminiUsed,
-      fallbackUsed: !geminiUsed,
-      quotaExhausted: allQuotaExhausted && !geminiUsed,
+      nvidiaUsed,
+      aiProvider: nvidiaUsed ? "nvidia" : geminiUsed ? "gemini" : "fallback",
+      fallbackUsed: !geminiUsed && !nvidiaUsed,
+      quotaExhausted: allQuotaExhausted && !geminiUsed && !nvidiaUsed,
       modelError: lastModelError || undefined,
     });
 
