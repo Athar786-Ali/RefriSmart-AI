@@ -158,75 +158,62 @@ The platform serves three distinct user roles, each with a tailored interface:
 
 ## AI Features
 
-The AI system is designed to **never fail silently**, even with zero API availability. Here's the fault diagnosis workflow:
+The AI system is designed to provide highly accurate, empathetic, and culturally aware diagnostics while **never failing silently**. It uses a multi-tier fallback architecture:
 
 ```
 User uploads photo/video + describes issue (text or voice via Web Speech API)
                 │
                 ▼
 ┌──────────────────────────────┐
-│  5-Key Rotation Pool         │  Each key maps to a separate Google Cloud
-│  (separate quota per key)    │  project = separate daily quota (1,500 req/day).
-│                              │  On 429 RESOURCE_EXHAUSTED, rotateKey() switches
-│                              │  to the next project's key and retries.
+│  Tier 1: NVIDIA NIM API      │  Primary Provider (integrate.api.nvidia.com)
+│  (Llama-3.2 Vision / Gemma)  │  Zero-dependency native fetch implementation.
+│                              │  Generates dynamic, highly empathetic responses
+│                              │  using a strict 15-rule reasoning prompt.
 └──────────┬───────────────────┘
            │
-           ▼
+           ▼ (If NVIDIA fails / rate limited)
 ┌──────────────────────────────┐
-│  7-Model Fallback Cascade    │  If a model returns 503, the system falls through:
-│                              │
-│  gemini-3.5-flash            │  1. Primary (latest, fastest)
-│  gemini-2.0-flash            │  2. Stable fallback
-│  gemini-2.0-flash-lite       │  3. Lightweight fallback
-│  gemini-2.5-flash-preview    │  4. Preview channel
-│  gemini-1.5-flash            │  5. Legacy stable
-│  gemini-1.5-flash-8b         │  6. Lightweight legacy
-│  gemini-1.5-pro              │  7. Last resort (highest quality)
+│  Tier 2: Google Gemini API   │  Backup Provider (5-Key Rotation Pool)
+│  (7-Model Cascade)           │  Automatically falls back to Gemini 1.5/2.0
+│                              │  flash models if NVIDIA is unreachable.
 └──────────┬───────────────────┘
            │
-           ▼ (all keys + models exhausted)
+           ▼ (If both AI providers exhaust quota)
 ┌──────────────────────────────┐
-│  Offline Rule-Based Engine   │  5 specialized diagnostic rulesets:
-│                              │  • Fridge not cooling (R-600a/R-134a diagnosis)
-│                              │  • AC not cooling (R-22/R-32/R-410A diagnosis)
-│                              │  • Washing machine drain/leak issues
-│                              │  • Noise/vibration diagnostics
-│                              │  • Power failure diagnostics
-│                              │
-│                              │  Each rule outputs bilingual (English + Hinglish)
-│                              │  responses with Bhagalpur-local pricing.
+│  Tier 3: Rule-Based Engine   │  Offline heuristic fallback.
+│                              │  Outputs hardcoded diagnostic responses
+│                              │  in both English and Hinglish.
 └──────────────────────────────┘
 ```
 
 **Key design decisions:**
-- **5 API keys across separate GCP projects** instead of a single key, to multiply free-tier quota from 1,500 to 7,500 requests/day.
-- **Exponential backoff** per model with progressive delays (12s &rarr; 24s &rarr; 36s) to avoid hammering overloaded endpoints.
-- **Structured JSON prompting** with explicit format requirements so Gemini responses can be reliably parsed without brittle regex. Responses are extracted via `extractJsonObject()` which strips markdown fences and handles malformed output.
-- **Language detection** — the `detectInputLanguage()` function analyzes user input for Hindi/Hinglish patterns and adapts the response language automatically.
-- **Media persistence** — uploaded photos/videos are stored on Cloudinary (with local `/tmp` fallback) and linked to the `DiagnosisLog` for future reference.
-
-- **Retry orchestration**: `MAX_RETRIES_PER_MODEL = Math.max(6, keyCount * 2)` — ensures every key is cycled at least twice per model. Multi-pass recovery executes up to 2 retry passes with a 30-second cooldown between passes (`PASS_COOLDOWN_MS = 30_000`).
-- **Error classification**: `403` (project disabled) rotates key immediately. `429` (quota) rotates key and triggers 20-second cooldown if all keys exhausted. `503` (overload) triggers exponential backoff: `Math.min(15_000 * attempt, 60_000)`. `404` (model not found) skips to the next model immediately.
-- **Diagnosis history**: Up to 25 past diagnoses are cached in `localStorage` (key: `gr_ai_diagnosis_history`) for guest users. Logged-in users sync automatically with the backend `/ai/history` endpoint.
+- **NVIDIA as Primary:** Uses Llama-3.2-90b-vision-instruct (and Gemma-3) via the NVIDIA NIM API for superior conversational tone and multimodal image analysis via inline base64 payloads.
+- **Advanced 15-Rule Prompt Engineering:** The AI behaves as a warm, local shop owner ("Raju bhai"). It is strictly instructed to:
+  - Think step-by-step (symptom &rarr; root cause &rarr; fix) before answering.
+  - Dynamically match the customer's language (English, Hindi, or Hinglish).
+  - Avoid making absolute claims ("definitely broken") without inspection.
+  - Provide actionable, safe home fixes if applicable.
+  - Output transparent, realistic rural-area pricing without separate/hidden visiting charges.
+- **5-Key Gemini Rotation Pool:** Used as a robust backup. 5 separate keys multiply the free-tier quota from 1,500 to 7,500 requests/day.
+- **Structured JSON output:** AI responses strictly adhere to a JSON schema (`problem`, `technicalExplanation`, `solution`, `safetyAlert`, `conclusion`, `estimatedCostRange`) for reliable frontend rendering.
+- **Media persistence:** Uploaded photos/videos are stored on Cloudinary and linked to the `DiagnosisLog` for technician reference.
 
 <details>
-<summary><strong>Example: Offline rule-based diagnosis output</strong></summary>
+<summary><strong>Example: AI Diagnosis Output Flow</strong></summary>
 
-When all API keys and models are exhausted, the system generates domain-specific diagnoses. For example, a fridge cooling issue produces:
+The output is presented to the user in a beautiful, conversational format:
 
-```json
-{
-  "isRelevant": true,
-  "problem": "Low refrigerant gas (R-600a/R-134a) or faulty compressor start relay",
-  "technicalExplanation": "Step 1: Technician checks gas pressure with manifold gauge. Step 2: If gas is low, evaporator coil inspected for leaks. Step 3: Leak sealed with brazing/welding. Step 4: Vacuum pulled and fresh refrigerant recharged. Step 5: If gas OK, PTC relay tested and replaced. Step 6: Condenser coils cleaned.",
-  "safetyAlert": "Refrigerant gas under pressure — do not attempt DIY.",
-  "conclusion": "Book Golden Refrigeration for same-day service in Sabour/Bhagalpur.",
-  "estimatedCostRange": "Rs.1,200 - Rs.3,500 total"
-}
-```
+**🔍 Gas Leak (R-600a)**
+Based on what you've described—your fridge is running but not cooling—this is a very common issue. It usually means the cooling gas has leaked from a tiny hole in the pipe.
 
-The same output is available in Hinglish for Hindi-speaking customers — automatically selected based on the input language.
+**🛠️ Solution**
+For now, please unplug the fridge and keep the doors open to let it defrost. There isn't a safe way to refill the gas at home.
 
+**⚠️ Safety**
+Do not try to scrape ice off the freezer with a knife, as this causes further leaks.
+
+**👨‍🔧 Advice**
+The best next step would be to have a technician inspect and seal the leak. We can easily check this for you.
 </details>
 
 <details>
